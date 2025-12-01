@@ -126,7 +126,9 @@ def main():
     args = parser.parse_args()
 
     # Check if input file exists
-    hooktheory_path = Path(args.hooktheory_path)
+    # hooktheory_path = Path(args.hooktheory_path)
+    hooktheory_path = Path(args.data_path)
+
     if not hooktheory_path.exists():
         print(f"Error: Hooktheory dataset not found at {hooktheory_path}")
         print(f"Please download it from:")
