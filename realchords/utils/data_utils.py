@@ -52,7 +52,7 @@ def to_chord_name(
             pitches = pitches[1:] + [pitches[0] + 12]
         while pitches[0] > 11:
             pitches = [pitch - 12 for pitch in pitches]
-    return pitch_name
+    return pitch_name   # Inversion not considered in chord name?
 
 
 # ============================================================================
