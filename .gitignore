@@ -88,5 +88,6 @@ checkpoints/
 # OS
 .DS_Store
 
-# Personal journal
+# Misc
 coding_journal.md
+scripts/dataset_experiments/midis/
