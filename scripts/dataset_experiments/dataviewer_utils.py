@@ -6,9 +6,11 @@ from typing import Any
 """Convert a Hooktheory song to midi and write to file.
         Args:
             example: The dictionary containing one Hooktheory song.
+        Returns:
+            str: The name of the MIDI file that was written.
              
 """
-def hooktheory_to_midi(example: dict[str, Any], chord_octave: int = 4, melody_octave: int = 5) -> None: 
+def hooktheory_to_midi(example: dict[str, Any], chord_octave: int = 4, melody_octave: int = 5) -> str: 
 
     # map a given beat to the absolute time
     beat_to_time_fn = interp1d(
@@ -63,7 +65,9 @@ def hooktheory_to_midi(example: dict[str, Any], chord_octave: int = 4, melody_oc
             beat_to_time_fn(n['offset'])
         ))
 
-    midi.write(f"midis/annotations_{example['hooktheory']['song']}_{example['hooktheory']['id']}.midi")
+    filename = f"midis/annotations_{example['hooktheory']['song']}_{example['hooktheory']['id']}.midi"
+    midi.write(filename)
+    return filename
 
 
     # Synthesize aligned preview
