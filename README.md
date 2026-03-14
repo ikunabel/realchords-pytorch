@@ -2,6 +2,11 @@
 
 PyTorch implementation of ReaLchords, ReaLJam and GAPT: real-time music accompaniment systems with generative models trained via reinforcement learning.
 
+Paper:
+- [Adaptive Accompaniment with ReaLchords](https://arxiv.org/abs/2506.14723)
+- [ReaLJam: Real-Time Human-AI Music Jamming with Reinforcement Learning-Tuned Transformers](https://arxiv.org/abs/2502.21267)
+- [Generative Adversarial Post-Training Mitigates Reward Hacking in Live Human-AI Music Interaction](https://arxiv.org/abs/2511.17879)
+
 ## Table of Contents
 
 - [Setup and Play ReaLJam](#setup-and-play-realjam)
@@ -333,7 +338,7 @@ If you find this work useful, consider citing the following papers:
 @inproceedings{wu2025generative,
   title={Generative Adversarial Post-Training Mitigates Reward Hacking in Live Human-{AI} Music Interaction},
   author={Wu, Yusong and Brade, Stephen and Ma, Teng and Fowler, Tia-Jane and Yang, Enning and Banar, Berker and Courville, Aaron and Jaques, Natasha and Huang, Cheng-Zhi Anna},
-  booktitle={arXiv preprint},
+  booktitle={arXiv preprint arXiv:2511.17879},
   year={2025},
 }
 
