@@ -52,10 +52,11 @@ from realchords.utils.train_utils import AttrDict
 
 
 @argbind.bind(without_prefix=True)
-def main(args, save_dir: str = ""):
+def main(args, save_dir: str = "", num_steps: int = 1000):
     if not save_dir:
         raise ValueError("save_dir must be provided.")
     args.save_dir = save_dir
+    args.num_steps = num_steps
     args.wandb_run_name = Path(save_dir).name
     # configure strategy
     strategy = get_strategy(args)
@@ -78,6 +79,7 @@ def main(args, save_dir: str = ""):
         tokenizer=tokenizer,
         model_part=args.model_part,
         max_seq_len=model.max_seq_len - 2,  # -2 for bos and eos
+        bf16=getattr(args, "bf16", False),
     )
 
     if args.actor_init_on_gpu:
@@ -106,6 +108,7 @@ def main(args, save_dir: str = ""):
         eos_token_id=tokenizer.eos_token,
         pad_token_id=tokenizer.pad_token,
         max_seq_len=model.max_seq_len // 2 + 1,  # doesn't matter
+        bf16=getattr(args, "bf16", False),
     )
 
     # configure optimizer

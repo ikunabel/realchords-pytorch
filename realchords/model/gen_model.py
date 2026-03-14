@@ -77,7 +77,11 @@ class DecoderTransformer(AutoregressiveWrapper):
         return self.decoder
 
     def forward(self, x, mask=None, **kwargs):
-        return self.decoder(x, mask=mask, **kwargs)
+        config = getattr(self, "config", None)
+        is_bf16 = getattr(config, "bf16", False) if config else False
+        target_dtype = torch.bfloat16 if is_bf16 else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            return self.decoder(x, mask=mask, **kwargs)
 
     @torch.no_grad()
     @torch.jit.export
@@ -470,29 +474,33 @@ class EncoderDecoderTransformer(nn.Module):
         dec_mask=None,
         return_attn_z_loss=False,
     ):
-        if return_attn_z_loss:
-            enc, cache = self.encoder(
-                x_enc,
-                mask=enc_mask,
-                return_embeddings=True,
-                return_attn_z_loss=True,
-            )
-            z_loss_enc = cache.attn_z_loss
-            dec, cache = self.decoder(
-                x_dec,
-                context=enc,
-                context_mask=enc_mask,
-                mask=dec_mask,
-                return_attn_z_loss=True,
-            )
-            z_loss_dec = cache.attn_z_loss
-            return dec, z_loss_enc + z_loss_dec
-        else:
-            enc = self.encoder(x_enc, mask=enc_mask, return_embeddings=True)
-            dec = self.decoder(
-                x_dec, context=enc, context_mask=enc_mask, mask=dec_mask
-            )
-            return dec
+        config = getattr(self, "config", None)
+        is_bf16 = getattr(config, "bf16", False) if config else False
+        target_dtype = torch.bfloat16 if is_bf16 else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            if return_attn_z_loss:
+                enc, cache = self.encoder(
+                    x_enc,
+                    mask=enc_mask,
+                    return_embeddings=True,
+                    return_attn_z_loss=True,
+                )
+                z_loss_enc = cache.attn_z_loss
+                dec, cache = self.decoder(
+                    x_dec,
+                    context=enc,
+                    context_mask=enc_mask,
+                    mask=dec_mask,
+                    return_attn_z_loss=True,
+                )
+                z_loss_dec = cache.attn_z_loss
+                return dec, z_loss_enc + z_loss_dec
+            else:
+                enc = self.encoder(x_enc, mask=enc_mask, return_embeddings=True)
+                dec = self.decoder(
+                    x_dec, context=enc, context_mask=enc_mask, mask=dec_mask
+                )
+                return dec
 
     @torch.no_grad()
     def generate(

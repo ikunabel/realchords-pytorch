@@ -87,9 +87,13 @@ class ContrastiveReward(Module):
         melody_mask: Tensor = None,
     ) -> Tensor:
         """Forward pass."""
-        chord_embed = self.get_chord_embed(chord, chord_mask)
-        melody_embed = self.get_melody_embed(melody, melody_mask)
-        return chord_embed, melody_embed, self.logit_scale.exp()
+        config = getattr(self, "config", None)
+        is_bf16 = getattr(config, "bf16", False) if config else False
+        target_dtype = torch.bfloat16 if is_bf16 else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            chord_embed = self.get_chord_embed(chord, chord_mask)
+            melody_embed = self.get_melody_embed(melody, melody_mask)
+            return chord_embed, melody_embed, self.logit_scale.exp()
 
 
 class DiscriminativeReward(Module):
@@ -124,7 +128,11 @@ class DiscriminativeReward(Module):
         input_mask: Tensor = None,
     ) -> Tensor:
         """Forward pass."""
-        logits = self.out_proj(self.encoder(input, mask=input_mask))
-        # use the first token as output
-        logits = logits[:, 0]
-        return logits
+        config = getattr(self, "config", None)
+        is_bf16 = getattr(config, "bf16", False) if config else False
+        target_dtype = torch.bfloat16 if is_bf16 else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            logits = self.out_proj(self.encoder(input, mask=input_mask))
+            # use the first token as output
+            logits = logits[:, 0]
+            return logits

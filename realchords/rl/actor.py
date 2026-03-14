@@ -32,6 +32,7 @@ class ReaLchordsActor(Actor):
         eos_token_id: int,
         pad_token_id: int,
         max_seq_len: int,
+        bf16: bool = False,
     ) -> None:
         """Compared to openrlhf Actor class, we remove the following supports and features:
 
@@ -49,6 +50,7 @@ class ReaLchordsActor(Actor):
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.max_seq_len = max_seq_len
+        self.bf16 = bf16
 
     @torch.no_grad()
     def generate(
@@ -89,7 +91,9 @@ class ReaLchordsActor(Actor):
         Compared to the original forward, remove the creation of position_ids.
         """
 
-        logits = self.model(sequences, mask=attention_mask)
+        target_dtype = torch.bfloat16 if getattr(self, "bf16", False) else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            logits = self.model(sequences, mask=attention_mask)
 
         if num_actions is None:
             assert return_output
@@ -183,6 +187,7 @@ class DecoderSingleAgentActor(ReaLchordsActor):
         tokenizer: HooktheoryTokenizer,
         max_seq_len: int,
         model_part: str,
+        bf16: bool = False,
     ) -> None:
         """Compared to the base class, we add the tokenizer."""
         # skip the super call, directly call the Actor class's __init__
@@ -196,6 +201,7 @@ class DecoderSingleAgentActor(ReaLchordsActor):
         self.pad_token_id = tokenizer.pad_token
         self.silence_token_id = tokenizer.silence_token
         self.model_part = model_part
+        self.bf16 = bf16
         self.init_filter_fn()
 
     def init_filter_fn(self):
@@ -356,13 +362,15 @@ class EncoderDecoderOfflineAnchor(ReaLchordsActor):
             self.get_inputs_from_sequence(sequences)
         )
 
-        # In x-transformers, mask is True for unmasked tokens
-        model_part_logits = self.model(
-            context_tokens,
-            model_tokens,
-            enc_mask=context_mask,
-            dec_mask=model_mask,
-        )
+        target_dtype = torch.bfloat16 if getattr(self, "bf16", False) else torch.float16
+        with torch.autocast(device_type="cuda", dtype=target_dtype):
+            # In x-transformers, mask is True for unmasked tokens
+            model_part_logits = self.model(
+                context_tokens,
+                model_tokens,
+                enc_mask=context_mask,
+                dec_mask=model_mask,
+            )
 
         # remove the EOS token logits
         model_part_logits = model_part_logits[:, :-1, :]

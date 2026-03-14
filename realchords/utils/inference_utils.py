@@ -45,8 +45,22 @@ def load_lit_model(
         model_path, weights_only=True, map_location=torch.device("cpu")
     )["state_dict"]
 
-    if not args["compile"]:
-        state_dict = {k.replace("._orig_mod", ""): v for k, v in state_dict.items()}
+    clean_state_dict = {
+        k.replace("_orig_mod.", "").replace("._orig_mod", ""): v for k, v in state_dict.items()
+    }
+
+    if getattr(lit_module, "compile", False) or args.get("compile", False):
+        target_keys = lit_module.state_dict().keys()
+        final_state_dict = {}
+        for k in target_keys:
+            clean_k = k.replace("_orig_mod.", "").replace("._orig_mod", "")
+            if clean_k in clean_state_dict:
+                final_state_dict[k] = clean_state_dict[clean_k]
+            elif k in state_dict:
+                final_state_dict[k] = state_dict[k]
+        state_dict = final_state_dict
+    else:
+        state_dict = clean_state_dict
 
     lit_module.load_state_dict(state_dict)
     model = lit_module.model
@@ -81,7 +95,7 @@ def load_rl_model(
     state_dict = torch.load(
         model_path, weights_only=True, map_location=torch.device("cpu")
     )
-    state_dict = {k.replace("._orig_mod", ""): v for k, v in state_dict.items()}
+    state_dict = {k.replace("_orig_mod.", "").replace("._orig_mod", ""): v for k, v in state_dict.items()}
     state_dict_model = {}
     for k, v in state_dict.items():
         if k.startswith("model.module."):
@@ -102,7 +116,7 @@ def load_model_state_dict_from_lit_checkpoint(
     state_dict = torch.load(
         model_path, weights_only=True, map_location=torch.device("cpu")
     )
-    state_dict = {k.replace("._orig_mod", ""): v for k, v in state_dict.items()}
+    state_dict = {k.replace("_orig_mod.", "").replace("._orig_mod", ""): v for k, v in state_dict.items()}
     return state_dict
 
 
