@@ -26,7 +26,7 @@ from realchords.lit_module.contrastive_reward_rhythm import (
 from realchords.lit_module.discriminative_reward_rhythm import (
     LitDiscriminativeRewardRhythm,
 )
-from realchords.utils.inference_utils import load_lit_model
+from realchords.utils.inference_utils import load_lit_model, prepare_model_for_deepspeed
 from realchords.rl.utils import ModelPreparer
 from realchords.rl.actor import (
     DecoderSingleAgentActor,
@@ -63,10 +63,16 @@ def main(args, save_dir: str = ""):
     strategy = get_strategy(args)
     strategy.setup_distributed()
 
+    # Load without compile to avoid torch.compile + DeepSpeed dtype mismatches.
+    # x_transformers internally upcasts to float32 (e.g. in LayerNorm/softmax),
+    # which conflicts with torch.compile's strict dtype kernels when weights are bf16.
+    target_dtype = torch.bfloat16 if getattr(args, "bf16", False) else None
+
     model, tokenizer, dataloaders = load_lit_model(
         model_path=args.pretrain_model_path,
         lit_module_cls=LitDecoder,
         batch_size=args.rollout_batch_size,
+        compile=False,
         # Disable dropout in RL fine-tuning
         override_args={
             "DecoderTransformer.dropout": 0.0,
@@ -74,6 +80,9 @@ def main(args, save_dir: str = ""):
         },
     )
     train_dataloader, val_dataloader = dataloaders
+
+    # Convert dtype before wrapping in actor/critic
+    model = prepare_model_for_deepspeed(model, target_dtype)
 
     actor = DecoderSingleAgentActor(
         model,
@@ -96,12 +105,14 @@ def main(args, save_dir: str = ""):
         model_path=args.anchor_model_path,
         lit_module_cls=LitEncoderDecoder,
         batch_size=args.rollout_batch_size,
+        compile=False,
         # Disable dropout in RL fine-tuning
         override_args={
             "EncoderDecoderTransformer.dropout": 0.0,
             **args.lit_module_override_args,
         },
     )
+    anchor_model = prepare_model_for_deepspeed(anchor_model, target_dtype)
     initial_model = EncoderDecoderOfflineAnchor(
         anchor_model,
         bos_token_id=tokenizer.bos_token,
@@ -171,35 +182,51 @@ def main(args, save_dir: str = ""):
     )
 
     contrastive_reward_models = [
-        load_lit_model(
-            model_path,
-            lit_module_cls=LitContrastiveReward,
-            return_only_model=True,
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitContrastiveReward,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
         )
         for model_path in args.contrastive_reward_model_path
     ]
     discriminative_reward_models = [
-        load_lit_model(
-            model_path,
-            lit_module_cls=LitDiscriminativeReward,
-            return_only_model=True,
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitDiscriminativeReward,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
         )
         for model_path in args.discriminative_reward_model_path
     ]
 
     contrastive_reward_rhythm_models = [
-        load_lit_model(
-            model_path,
-            lit_module_cls=LitContrastiveRewardRhythm,
-            return_only_model=True,
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitContrastiveRewardRhythm,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
         )
         for model_path in args.contrastive_reward_rhythm_model_path
     ]
     discriminative_reward_rhythm_models = [
-        load_lit_model(
-            model_path,
-            lit_module_cls=LitDiscriminativeRewardRhythm,
-            return_only_model=True,
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitDiscriminativeRewardRhythm,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
         )
         for model_path in args.discriminative_reward_rhythm_model_path
     ]

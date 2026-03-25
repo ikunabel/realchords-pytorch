@@ -120,6 +120,22 @@ def load_model_state_dict_from_lit_checkpoint(
     return state_dict
 
 
+def prepare_model_for_deepspeed(model, target_dtype=None):
+    """Convert model dtype before DeepSpeed prepare.
+
+    DeepSpeed converts weights at initialize() time, but torch.compile may
+    trace the graph before that conversion, causing dtype mismatches in
+    compiled kernels. Converting dtype explicitly before DeepSpeed avoids this.
+
+    Args:
+        model: The model to prepare.
+        target_dtype: Target dtype (e.g., torch.bfloat16). None keeps original.
+    """
+    if target_dtype is not None:
+        model = model.to(target_dtype)
+    return model
+
+
 def load_gen_model_from_state_dict(
     state_dict_path: str,
     model_cls: torch.nn.Module,
