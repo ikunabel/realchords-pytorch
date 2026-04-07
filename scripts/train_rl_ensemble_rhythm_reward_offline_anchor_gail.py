@@ -415,6 +415,7 @@ def main(args, save_dir: str = ""):
         strategy=strategy,
         reward_vram_swap=args.reward_vram_swap,
         logits_vram_swap=args.logits_vram_swap,
+        trainable_reward_names=["gail_reward"],
     )
 
     ema_model = None

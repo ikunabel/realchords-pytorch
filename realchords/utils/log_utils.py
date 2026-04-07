@@ -26,13 +26,13 @@ def play_midi_with_soundfont(pretty_midi_obj, sf2_path=SF2_PATH):
     # Command to invoke fluidsynth and generate audio from MIDI with the specified SoundFont
     fluidsynth_cmd = [
         "fluidsynth",
-        "-ni",  # Non-interactive mode
-        sf2_path,  # Path to the SoundFont
-        midi_path,  # Path to the MIDI file
+        "-ni",
         "-F",
-        audio_path,  # Output audio file path
+        audio_path,
         "-r",
-        f"{MIDI_SYNTH_SR}",  # Sample rate (can adjust if needed)
+        f"{MIDI_SYNTH_SR}",
+        sf2_path,
+        midi_path,
     ]
 
     # Run the FluidSynth command

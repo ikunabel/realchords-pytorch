@@ -1,6 +1,6 @@
 """Experience maker modified from openrlhf."""
 
-from typing import Dict, Any, Union, Tuple, List
+from typing import Dict, Any, Union, Tuple, List, Iterable
 import random
 
 import torch
@@ -209,6 +209,7 @@ class ExperienceMaker(NaiveExperienceMaker):
         strategy=None,
         reward_vram_swap: bool = False,
         logits_vram_swap: bool = False,
+        trainable_reward_names: Optional[Iterable[str]] = None,
         **kwargs,
     ):
 
@@ -224,6 +225,8 @@ class ExperienceMaker(NaiveExperienceMaker):
         #   dedicated device for inference when initializing.
         self.reward_vram_swap = reward_vram_swap
         self.logits_vram_swap = logits_vram_swap
+        # Names of reward functions that are trainable (should stay on device)
+        self.reward_trainable_set = set(trainable_reward_names or [])
         self.init_rewards(reward_configs)
 
     def init_rewards(self, reward_configs: List[Dict[str, Any]]):
@@ -267,7 +270,13 @@ class ExperienceMaker(NaiveExperienceMaker):
         for reward_fn, name in zip(self.reward_fns, self.reward_names):
             if isinstance(reward_fn, nn.Module):
                 reward_fn.eval()
-                if self.reward_vram_swap:
+                # IMPORTANT: Trainable rewards must remain on their original device
+                # (usually the GPU assigned by DeepSpeed/PyTorch). Swapping them
+                # breaks the optimizer's parameter references and training state.
+                if (
+                    self.reward_vram_swap
+                    and name not in self.reward_trainable_set
+                ):
                     self.reward_device_dict[name] = next(
                         reward_fn.parameters()
                     ).device
@@ -286,11 +295,19 @@ class ExperienceMaker(NaiveExperienceMaker):
         for i, reward_fn in enumerate(self.reward_fns):
             name = self.reward_names[i]
 
-            if self.reward_vram_swap and isinstance(reward_fn, nn.Module):
+            if (
+                self.reward_vram_swap
+                and isinstance(reward_fn, nn.Module)
+                and name not in self.reward_trainable_set
+            ):
                 reward_fn.to(self.reward_device_dict[name])
             with torch.no_grad():
                 reward_metrics = reward_fn(samples)
-            if self.reward_vram_swap and isinstance(reward_fn, nn.Module):
+            if (
+                self.reward_vram_swap
+                and isinstance(reward_fn, nn.Module)
+                and name not in self.reward_trainable_set
+            ):
                 reward_fn.cpu()
 
             r = reward_metrics.pop("reward")
