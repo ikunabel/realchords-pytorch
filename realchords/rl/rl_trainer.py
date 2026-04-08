@@ -840,6 +840,17 @@ class GAILMixin:
         self.reward_current_step = []
         self.current_step = None
         super().__init__(*args, **kwargs)
+        # The trainable reward must be excluded from VRAM swap when the
+        # ExperienceMaker is constructed, before init_rewards runs.
+        if self.reward_fn_name is not None and hasattr(self, "experience_maker"):
+            em = self.experience_maker
+            em.reward_trainable_set.add(self.reward_fn_name)
+            if self.reward_fn_name in em.reward_device_dict:
+                raise RuntimeError(
+                    "Trainable reward was VRAM-swapped during ExperienceMaker "
+                    "initialization. Pass trainable_reward_names=[reward_fn_name] "
+                    "when constructing ExperienceMaker."
+                )
 
     def train_reward_this_step(self, global_steps):
         if self.reward_update_strategy == "steps":
@@ -896,13 +907,6 @@ class GAILMixin:
         reward_fn = self.experience_maker.reward_fns[reward_fn_idx]
         reward_model = reward_fn.model
 
-        # Handle VRAM swap: move model to correct device if needed
-        if self.experience_maker.reward_vram_swap and isinstance(reward_fn, nn.Module):
-            original_device = self.experience_maker.reward_device_dict[
-                self.reward_fn_name
-            ]
-            reward_model.to(original_device)
-
         reward_model.train()
 
         sequences = experience.sequences
@@ -952,9 +956,8 @@ class GAILMixin:
 
         reward_model.eval()
 
-        # Handle VRAM swap: move model back to CPU to save memory
-        if self.experience_maker.reward_vram_swap and isinstance(reward_fn, nn.Module):
-            reward_model.cpu()
+        # No explicit VRAM swap here: ExperienceMaker controls swapping and
+        # trainable rewards are registered so they remain on the device.
 
         return status
 

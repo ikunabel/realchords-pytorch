@@ -87,8 +87,10 @@ class ContrastiveReward(Module):
         melody_mask: Tensor = None,
     ) -> Tensor:
         """Forward pass."""
-        chord_embed = self.get_chord_embed(chord, chord_mask)
-        melody_embed = self.get_melody_embed(melody, melody_mask)
+        param_dtype = next(self.parameters()).dtype
+        with torch.autocast('cuda', dtype=param_dtype, enabled=param_dtype != torch.float32):
+            chord_embed = self.get_chord_embed(chord, chord_mask)
+            melody_embed = self.get_melody_embed(melody, melody_mask)
         return chord_embed, melody_embed, self.logit_scale.exp()
 
 
@@ -124,7 +126,9 @@ class DiscriminativeReward(Module):
         input_mask: Tensor = None,
     ) -> Tensor:
         """Forward pass."""
-        logits = self.out_proj(self.encoder(input, mask=input_mask))
+        param_dtype = next(self.parameters()).dtype
+        with torch.autocast('cuda', dtype=param_dtype, enabled=param_dtype != torch.float32):
+            logits = self.out_proj(self.encoder(input, mask=input_mask))
         # use the first token as output
         logits = logits[:, 0]
         return logits
