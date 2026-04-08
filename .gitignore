@@ -87,3 +87,6 @@ checkpoints/
 
 # OS
 .DS_Store
+
+# Cluster related stuff
+jobscripts/
