@@ -10,7 +10,7 @@ import numpy as np
 from bokeh.io.export import export_png
 from PIL import Image
 
-from realchords.constants import SF2_PATH, MIDI_SYNTH_SR
+from realchords.constants import LOG_WANDB_MIDI_AUDIO, SF2_PATH, MIDI_SYNTH_SR
 
 
 def play_midi_with_soundfont(pretty_midi_obj, sf2_path=SF2_PATH):
@@ -46,6 +46,10 @@ def play_midi_with_soundfont(pretty_midi_obj, sf2_path=SF2_PATH):
         audio, _ = librosa.load(audio_path, sr=None)
     except Exception:
         return None
+    # wandb.Audio -> soundfile expects (frames, channels), not 1D mono.
+    audio = np.asarray(audio)
+    if audio.ndim == 1:
+        audio = np.expand_dims(audio, axis=1)
     return audio
 
 
@@ -72,7 +76,10 @@ def midi_to_image(midi):
 
 def midi_to_audio_image(midi, sf2_path=SF2_PATH):
     """Render a pretty MIDI object as audio and pianoroll for logging."""
-    # Play the MIDI file
-    audio = play_midi_with_soundfont(midi, sf2_path=sf2_path)
+    if LOG_WANDB_MIDI_AUDIO:
+        # Play the MIDI file
+        audio = play_midi_with_soundfont(midi, sf2_path=sf2_path)
+    else:
+        audio = None
     image = midi_to_image(midi)
     return audio, image

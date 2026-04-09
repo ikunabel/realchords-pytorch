@@ -40,3 +40,6 @@ BASS_VELOCITY = 56
 CHORD_OCTAVE = 4
 BASS_OCTAVE = CHORD_OCTAVE - 1
 MIDI_SYNTH_SR = 44100
+
+# If False, skip FluidSynth and do not log audio to W&B (pianoroll images are still logged).
+LOG_WANDB_MIDI_AUDIO = False
