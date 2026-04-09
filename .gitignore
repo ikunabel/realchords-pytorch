@@ -90,3 +90,4 @@ checkpoints/
 
 # Cluster related stuff
 jobscripts/
+core.*
