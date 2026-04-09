@@ -36,10 +36,16 @@ def play_midi_with_soundfont(pretty_midi_obj, sf2_path=SF2_PATH):
     ]
 
     # Run the FluidSynth command
-    subprocess.run(fluidsynth_cmd, check=True)
+    try:
+        subprocess.run(fluidsynth_cmd, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
 
     # Load and play the audio in Jupyter Notebook
-    audio, _ = librosa.load(audio_path, sr=None)
+    try:
+        audio, _ = librosa.load(audio_path, sr=None)
+    except Exception:
+        return None
     return audio
 
 
