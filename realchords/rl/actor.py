@@ -14,7 +14,7 @@ from realchords.utils.sequence_utils import (
     add_bos_to_sequence,
     add_eos_to_sequence,
 )
-from realchords.rl.marl_interaction import generate_marl
+
 from realchords.model.sampling import (
     filter_special_token,
     top_k,
