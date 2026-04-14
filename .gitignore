@@ -92,8 +92,3 @@ checkpoints/
 jobscripts/
 core.*
 tmp/
-
-# Author original 
-configs/gen_models/
-configs/reward_models/
-configs/single_agent_rl/
