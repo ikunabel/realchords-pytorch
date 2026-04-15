@@ -92,3 +92,6 @@ checkpoints/
 jobscripts/
 core.*
 tmp/
+
+# Debug configs
+configs/thesis/debug/
