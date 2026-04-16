@@ -41,9 +41,11 @@ def load_lit_model(
         lit_module = lit_module_cls()
         train_dataloader, val_dataloader = lit_module.get_dataloaders()
 
+    logger.info(f"Loading checkpoint weights (torch.load) from {model_path}")
     state_dict = torch.load(
         model_path, weights_only=True, map_location=torch.device("cpu")
     )["state_dict"]
+    logger.info(f"Finished torch.load for {model_path}")
 
     clean_state_dict = {
         k.replace("_orig_mod.", "").replace("._orig_mod", ""): v for k, v in state_dict.items()
