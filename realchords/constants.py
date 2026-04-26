@@ -41,5 +41,8 @@ CHORD_OCTAVE = 4
 BASS_OCTAVE = CHORD_OCTAVE - 1
 MIDI_SYNTH_SR = 44100
 
-# If False, skip FluidSynth and do not log audio to W&B (pianoroll images are still logged).
+# If False, skip FluidSynth and do not log audio to W&B
 LOG_WANDB_MIDI_AUDIO = False
+
+# If False, skip Bokeh/Selenium export_png entirely (because Selenium crashed on some HPC nodes)
+LOG_WANDB_MIDI_IMAGE = False

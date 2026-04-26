@@ -34,6 +34,7 @@ class LitDecoder(BaseLightningModel):
         compile: bool = True,
         sample_interval: int = 1000,
         max_log_examples: int = 8,
+        disable_midi_logging: bool = False,
     ):
         super(LitDecoder, self).__init__()
 
@@ -45,6 +46,7 @@ class LitDecoder(BaseLightningModel):
 
         self.sample_interval = sample_interval
         self.max_log_examples = max_log_examples
+        self.disable_midi_logging = disable_midi_logging
         tokenizer = train_dataset.tokenizer
         self.pad_token = tokenizer.pad_token
         self.num_tokens = tokenizer.num_tokens

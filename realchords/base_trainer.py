@@ -21,7 +21,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.utilities import grad_norm
 
 from realchords.utils.log_utils import midi_to_audio_image
-from realchords.constants import MIDI_SYNTH_SR
+from realchords.constants import MIDI_SYNTH_SR, LOG_WANDB_MIDI_IMAGE
 
 
 class Trainer:
@@ -209,15 +209,16 @@ class BaseLightningModel(L.LightningModule):
 
     def log_midi(self, midi, suffix=""):
         audio, image = midi_to_audio_image(midi)
-        # Convert audio and image to W&B format
-        payload = {f"image/{suffix}": wandb.Image(image)}
+        payload = {}
+        if image is not None:
+            payload[f"image/{suffix}"] = wandb.Image(image)
         if audio is not None:
             payload[f"audio/{suffix}"] = wandb.Audio(
                 audio,
                 sample_rate=MIDI_SYNTH_SR,
             )
-        # Log the audio and image to W&B
-        self.logger.experiment.log(payload)
+        if payload:
+            self.logger.experiment.log(payload)
 
     def on_before_optimizer_step(self, optimizer):
         """

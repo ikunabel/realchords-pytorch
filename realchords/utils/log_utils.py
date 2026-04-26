@@ -10,7 +10,12 @@ import numpy as np
 from bokeh.io.export import export_png
 from PIL import Image
 
-from realchords.constants import LOG_WANDB_MIDI_AUDIO, SF2_PATH, MIDI_SYNTH_SR
+from realchords.constants import (
+    LOG_WANDB_MIDI_AUDIO,
+    LOG_WANDB_MIDI_IMAGE,
+    SF2_PATH,
+    MIDI_SYNTH_SR,
+)
 
 
 def play_midi_with_soundfont(pretty_midi_obj, sf2_path=SF2_PATH):
@@ -81,5 +86,8 @@ def midi_to_audio_image(midi, sf2_path=SF2_PATH):
         audio = play_midi_with_soundfont(midi, sf2_path=sf2_path)
     else:
         audio = None
-    image = midi_to_image(midi)
+    if LOG_WANDB_MIDI_IMAGE:
+        image = midi_to_image(midi)
+    else:
+        image = None
     return audio, image
