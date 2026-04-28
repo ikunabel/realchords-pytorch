@@ -673,15 +673,16 @@ class SingleMelodyPPOTrainer(ReaLchordsBasePPOTrainer):
 
     def log_midi(self, midi, suffix=""):
         audio, image = midi_to_audio_image(midi)
-        # Convert audio and image to W&B format
-        payload = {f"image/{suffix}": self._wandb.Image(image)}
+        payload = {}
+        if image is not None:
+            payload[f"image/{suffix}"] = self._wandb.Image(image)
         if audio is not None:
             payload[f"audio/{suffix}"] = self._wandb.Audio(
                 audio,
                 sample_rate=MIDI_SYNTH_SR,
             )
-        # Log the audio and image to W&B
-        self._wandb.log(payload)
+        if payload:
+            self._wandb.log(payload)
 
 
 class ReaLchordsPPOTrainer(ReaLchordsBasePPOTrainer):
@@ -782,15 +783,16 @@ class ReaLchordsPPOTrainer(ReaLchordsBasePPOTrainer):
 
     def log_midi(self, midi, suffix=""):
         audio, image = midi_to_audio_image(midi)
-        # Convert audio and image to W&B format
-        payload = {f"image/{suffix}": self._wandb.Image(image)}
+        payload = {}
+        if image is not None:
+            payload[f"image/{suffix}"] = self._wandb.Image(image)
         if audio is not None:
             payload[f"audio/{suffix}"] = self._wandb.Audio(
                 audio,
                 sample_rate=MIDI_SYNTH_SR,
             )
-        # Log the audio and image to W&B
-        self._wandb.log(payload)
+        if payload:
+            self._wandb.log(payload)
 
 
 class GAILMixin:
