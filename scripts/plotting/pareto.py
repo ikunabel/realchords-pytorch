@@ -121,12 +121,17 @@ def plot_harmony_vs_diversity_one(
     ax.set_ylabel("Harmony (note-in-chord ratio)")
     ax.set_facecolor("#e3e3e3")
     ax.grid(True, color="white", alpha=0.9, linewidth=1.0)
+
     xs = [x for *_, x, __ in points]
     ys = [y for *_, __, y in points]
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
+
     if xlim is None:
-        ax.set_xlim(max(0.0, min_x * (1.0 - x_frac_pad)), max_x * (1.0 + x_frac_pad))
+        ax.set_xlim(
+            max(0.0, min_x * (1.0 - x_frac_pad)),
+            max_x * (1.0 + x_frac_pad),
+        )
     else:
         ax.set_xlim(*xlim)
     if ylim is None:
@@ -161,7 +166,9 @@ def plot_harmony_vs_diversity_one(
         ax.text(
             x,
             y,
-            f" {style.label} ({ds})" if include_dataset_in_label else f" {style.label}",
+            f" {style.label} ({ds})"
+            if include_dataset_in_label
+            else f" {style.label}",
             fontsize=9,
             va="center",
             ha="left",
@@ -195,7 +202,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         required=True,
         help=(
             "Variant suffix after '<dataset>_melody_vs_'. Repeat for multiple. "
-            "Example: --variant realchords --variant gapt"
+            "Also accepts full system keys, e.g. 'hooktheory_melody_vs_gapt'."
         ),
     )
     parser.add_argument(

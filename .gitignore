@@ -95,3 +95,6 @@ tmp/
 
 # Debug configs
 configs/thesis/debug/
+
+# My stuff
+paper/
