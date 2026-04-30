@@ -348,6 +348,12 @@ def main() -> None:
         device,
     )
 
+    existing_systems: Dict[str, object] = {}
+    if args.summary_path.exists():
+        with args.summary_path.open("r", encoding="utf-8") as _fh:
+            _existing = json.load(_fh)
+            existing_systems = _existing.get("systems", {})
+
     summary: Dict[str, object] = {
         "analysis_root": str(args.analysis_root.resolve()),
         "config": str(Path(args.config).resolve()),
@@ -355,7 +361,7 @@ def main() -> None:
         "contrastive_checkpoint": checkpoint,
         "model_part": args.model_part,
         "sequence_order": args.sequence_order,
-        "systems": {},
+        "systems": existing_systems,
     }
 
     for system in systems:

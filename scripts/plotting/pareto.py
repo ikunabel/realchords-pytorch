@@ -13,7 +13,36 @@ class PointStyle:
     color: str
 
 
+@dataclass(frozen=True)
+class VariantSpec:
+    """Parsed from a ``--variant`` CLI argument.
+
+    Plain form   ``gapt``                  → style_key="gapt",  system_key="gapt"
+    Mapped form  ``gapt=wikifonia_..._gapt_paper_authentic``
+                                           → style_key="gapt",  system_key="wikifonia_..."
+    """
+
+    style_key: str   # key into DEFAULT_STYLES (and label source)
+    system_key: str  # key/suffix used to look up data in summary.json
+
+
+def _parse_variant_arg(arg: str) -> VariantSpec:
+    """Parse a single ``--variant`` argument into a :class:`VariantSpec`."""
+    if "=" in arg:
+        style_key, system_key = arg.split("=", 1)
+        return VariantSpec(style_key=style_key.strip(), system_key=system_key.strip())
+    return VariantSpec(style_key=arg, system_key=arg)
+
+
 DEFAULT_STYLES: Dict[str, PointStyle] = {
+    # Human-readable keys (used when style_key= is a label in --variant args)
+    "Online MLE": PointStyle(label="Online MLE", marker="^", color="#1f77b4"),
+    "Online MLE (3 datasets)": PointStyle(
+        label="Online MLE (3 datasets)", marker="^", color="#4aa3df"
+    ),
+    "ReaLchords": PointStyle(label="ReaLchords", marker="s", color="#d62728"),
+    "GAPT": PointStyle(label="GAPT", marker="*", color="#2ca02c"),
+    # Technical-suffix aliases (backward compatibility / plain --variant form)
     "decoder_only_online_chord": PointStyle(
         label="Online MLE", marker="^", color="#1f77b4"
     ),
@@ -52,11 +81,23 @@ def collect_system_metrics(
     summary: dict,
     *,
     dataset: Optional[str] = None,
-    variants: Optional[Sequence[str]] = None,
-) -> List[Tuple[str, str, str, float, float]]:
-    """Return (system_name, dataset, variant, vendi, harmony) rows from a summary.json dict."""
-    wanted = set(variants) if variants is not None else None
-    rows: List[Tuple[str, str, str, float, float]] = []
+    variant_specs: Optional[Sequence[VariantSpec]] = None,
+) -> List[Tuple[str, str, str, str, float, float]]:
+    """Return (system_name, dataset, variant_suffix, style_key, vendi, harmony) rows.
+
+    ``variant_specs`` is a list of :class:`VariantSpec`.  Each spec's ``system_key``
+    is matched against either the variant suffix *or* the full system name in the
+    summary; its ``style_key`` is carried through so the caller can look up the
+    right :class:`PointStyle`.
+    """
+    # Build lookup: system_key (suffix or full name) → style_key
+    key_to_style: Optional[Dict[str, str]] = None
+    if variant_specs is not None:
+        key_to_style = {}
+        for spec in variant_specs:
+            key_to_style[spec.system_key] = spec.style_key
+
+    rows: List[Tuple[str, str, str, str, float, float]] = []
     for sys_name, payload in _iter_points(summary):
         vendi = payload.get("overall_vendi_score")
         harmony = payload.get("overall_note_in_chord_ratio")
@@ -65,13 +106,20 @@ def collect_system_metrics(
         sys_dataset, variant = _parse_dataset_and_variant(sys_name)
         if dataset is not None and sys_dataset != dataset:
             continue
-        if wanted is not None:
-            # `--variant` can be either:
-            # - the suffix after "<dataset>_melody_vs_" (e.g. "realchords"), OR
-            # - the full system key (e.g. "hooktheory_melody_vs_realchords").
-            if (variant not in wanted) and (sys_name not in wanted):
+        if key_to_style is not None:
+            # Match by variant suffix first, then full system name.
+            if variant in key_to_style:
+                style_key = key_to_style[variant]
+            elif sys_name in key_to_style:
+                mapped = key_to_style[sys_name]
+                # Plain spec (no '='): style_key == system_key == full name.
+                # Prefer the short variant suffix so DEFAULT_STYLES is found.
+                style_key = variant if mapped == sys_name else mapped
+            else:
                 continue
-        rows.append((sys_name, sys_dataset, variant, float(vendi), float(harmony)))
+        else:
+            style_key = variant
+        rows.append((sys_name, sys_dataset, variant, style_key, float(vendi), float(harmony)))
     return rows
 
 
@@ -79,7 +127,7 @@ def plot_harmony_vs_diversity_one(
     *,
     summary_path: str | Path,
     dataset: Optional[str] = None,
-    variants: Sequence[str],
+    variant_specs: Sequence[VariantSpec],
     output_path: Optional[str | Path] = None,
     styles: Optional[Dict[str, PointStyle]] = None,
     title: Optional[str] = None,
@@ -104,13 +152,14 @@ def plot_harmony_vs_diversity_one(
 
     fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
-    points = collect_system_metrics(summary, dataset=dataset, variants=variants)
+    points = collect_system_metrics(summary, dataset=dataset, variant_specs=variant_specs)
     if not points:
         raise ValueError(
-            f"No matching systems found for dataset={dataset!r} and variants={list(variants)}."
+            f"No matching systems found for dataset={dataset!r} "
+            f"and variants={[s.system_key for s in variant_specs]}."
         )
 
-    datasets_present = {ds for _, ds, _, _, _ in points}
+    datasets_present = {ds for _, ds, _, _, _, _ in points}
     if dataset is None:
         title_default = " / ".join(sorted(datasets_present))
     else:
@@ -147,10 +196,10 @@ def plot_harmony_vs_diversity_one(
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
     include_dataset_in_label = len(datasets_present) > 1
-    for _, ds, variant, x, y in points:
+    for _, ds, _variant, style_key, x, y in points:
         style = styles.get(
-            variant,
-            PointStyle(label=variant, marker="o", color="#7f7f7f"),
+            style_key,
+            PointStyle(label=style_key, marker="o", color="#7f7f7f"),
         )
         size = 180 if style.marker == "*" else 90
         ax.scatter(
@@ -201,8 +250,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         action="append",
         required=True,
         help=(
-            "Variant suffix after '<dataset>_melody_vs_'. Repeat for multiple. "
-            "Also accepts full system keys, e.g. 'hooktheory_melody_vs_gapt'."
+            "Variant to plot. Two forms are accepted:\n"
+            "  Plain:  '<system_key>'  — style is looked up by the same key.\n"
+            "  Mapped: '<style_key>=<system_key>'  — use the style of <style_key>\n"
+            "          for the data of <system_key>.  Example:\n"
+            "          --variant gapt=wikifonia_melody_vs_gapt_paper_authentic\n"
+            "Repeat for multiple variants."
         ),
     )
     parser.add_argument(
@@ -213,10 +266,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    variant_specs = [_parse_variant_arg(v) for v in args.variant]
+
     plot_harmony_vs_diversity_one(
         summary_path=args.summary,
         dataset=None,
-        variants=args.variant,
+        variant_specs=variant_specs,
         output_path=args.out,
     )
 
