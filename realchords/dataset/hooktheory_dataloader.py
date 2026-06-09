@@ -18,7 +18,7 @@ from copy import deepcopy
 from realchords.constants import DATA_PATH, FRAME_PER_BEAT
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.sequence_utils import pad_and_get_mask
-from realchords.utils.io_utils import save_jsonl, JSONLIndexer
+from realchords.utils.io_utils import CombinedJSONLIndexer, JSONLIndexer, save_jsonl
 from realchords.utils.logging_utils import logger
 
 
@@ -48,7 +48,8 @@ class HooktheoryDataset(Dataset):
             frame_per_beat (int, optional): Number of frames per beat. Defaults to FRAME_PER_BEAT.
             chord_names_path (str, optional): Path to the chord names. Defaults to CHORD_NAMES_PATH.
             model_part (str, optional): Model part to use. Defaults to "chord".
-            split (str, optional): Split to use. Defaults to "train".
+            split (str, optional): Split to use. Use "all" for train+valid+test combined.
+                Defaults to "train".
             max_len (int, optional): Maximum length of the sequence. Defaults to 512.
             model_type (str, optional): Model type. Defaults to "decoder_only".
             cache_dir (str, optional): Directory to load the cache from. Defaults to "".
@@ -59,12 +60,12 @@ class HooktheoryDataset(Dataset):
             num_workers (int, optional): Number of workers for parallel data processing. Defaults to 4.
 
         Raises:
-            ValueError: If the split is not in ["train", "valid", "test"].
+            ValueError: If the split is not in ["train", "valid", "test", "all"].
             ValueError: If the model type is not in ["decoder_only", "encoder_decoder", "decoder_only_single"].
             ValueError: If the model part is not in ["chord", "melody"].
             FileNotFoundError: If cache files are not found at cache_dir.
         """
-        assert split in ["train", "valid", "test"]
+        assert split in ["train", "valid", "test", "all"]
         # decoder_only: ReaLchords, online representation
         # encoder_decoder: ReaLchords, offline representation
         # decoder_only_single: only one part, unconditional generation
@@ -121,7 +122,17 @@ class HooktheoryDataset(Dataset):
                 Path(self.cache_dir)
                 / f"chord_names{self.chord_names_cache_postfix}.json"
             )
-        return self.cache_path.exists() and self.chord_names_cache_path.exists()
+        if self.split == "all":
+            cache_files_exist = all(
+                (
+                    Path(self.cache_dir)
+                    / f"{split_name}{self.cache_postfix}.jsonl"
+                ).exists()
+                for split_name in ("train", "valid", "test")
+            )
+        else:
+            cache_files_exist = self.cache_path.exists()
+        return cache_files_exist and self.chord_names_cache_path.exists()
 
     def try_load_data_from_cache(self):
         """Attempt to load the dataset and chord names from cache files.
@@ -136,7 +147,16 @@ class HooktheoryDataset(Dataset):
                 import time
 
                 start_time = time.time()
-                self.data = JSONLIndexer(self.cache_path)
+                if self.split == "all":
+                    cache_paths = [
+                        Path(self.cache_dir)
+                        / f"{split_name}{self.cache_postfix}.jsonl"
+                        for split_name in ("train", "valid", "test")
+                    ]
+                    self.data = CombinedJSONLIndexer(cache_paths)
+                    logger.info(f"Loaded full dataset ({len(self.data)} items)")
+                else:
+                    self.data = JSONLIndexer(self.cache_path)
                 end_time = time.time()
                 logger.info(
                     f"Time taken to load dataset: {end_time - start_time:.2f} seconds"

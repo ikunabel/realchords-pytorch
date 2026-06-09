@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, List, Sequence
 
 
 class JSONLIndexer:
@@ -30,6 +30,37 @@ class JSONLIndexer:
             f.seek(self.offsets[idx])
             line = f.readline()
             return json.loads(line)
+
+
+class CombinedJSONLIndexer:
+    """Index multiple JSONL files as one contiguous dataset."""
+
+    def __init__(self, filepaths: Sequence[str]):
+        self.indexers = [JSONLIndexer(str(path)) for path in filepaths]
+        self._sizes = [len(indexer) for indexer in self.indexers]
+        self._starts: List[int] = []
+        start = 0
+        for size in self._sizes:
+            self._starts.append(start)
+            start += size
+
+    def __len__(self) -> int:
+        return sum(self._sizes)
+
+    def __getitem__(self, idx: int) -> Any:
+        return self(idx)
+
+    def __call__(self, idx: int) -> Any:
+        if idx < 0 or idx >= len(self):
+            raise IndexError(
+                f"Index {idx} out of range for combined dataset with {len(self)} lines"
+            )
+        for start, size, indexer in zip(self._starts, self._sizes, self.indexers):
+            if idx < start + size:
+                return indexer(idx - start)
+        raise IndexError(
+            f"Index {idx} out of range for combined dataset with {len(self)} lines"
+        )
 
 
 def save_jsonl(data: Any, filepath: str):
