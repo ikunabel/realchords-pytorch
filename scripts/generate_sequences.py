@@ -18,7 +18,7 @@ This CLI supports three generation regimes:
            --mode melody_data_vs_rl_chord \
            --rl_chord_model_path logs/chord_rl/actor.pth \
            --dataset_name wikifonia \
-           --dataset_split test \
+           --dataset_split all \
            --data_perturbation multiple_transpose \
            --save_dir logs/generated/ood \
            --num_batches -1
@@ -29,7 +29,7 @@ This CLI supports three generation regimes:
            --mode rl_chord_vs_switching_melody \
            --rl_chord_model_path logs/chord_rl/actor.pth \
            --rl_melody_model_paths logs/melody_a/actor.pth logs/melody_b/actor.pth \
-           --agent_switch_frames 64 64 \
+           --agent_switch_frames 64 \
            --target_seq_len 257 \
            --save_dir logs/generated/switching \
            --num_batches 8
@@ -121,7 +121,8 @@ def get_args() -> argparse.Namespace:
         type=int,
         default=1,
         help=(
-            "Number of batches to process. Use -1 only for data-conditioned modes to process the full validation split."
+            "Number of batches to process. Use -1 only for data-conditioned modes "
+            "to process the entire selected split."
         ),
     )
     parser.add_argument(
@@ -196,9 +197,12 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset_split",
         type=str,
-        choices=["train", "valid", "test"],
+        choices=["train", "valid", "test", "all"],
         default="valid",
-        help="Dataset split used for conditioning examples.",
+        help=(
+            "Dataset split used for conditioning examples. "
+            "Use 'all' to load train+valid+test combined."
+        ),
     )
 
     return parser.parse_args()

@@ -28,7 +28,8 @@ silence_penalty_weight: 1.0
 long_note_penalty_weight: 0.0
 repetition_penalty_weight: 1.0
 
-anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_melody_4_datasets/step=10000.ckpt"
+# Paper-correct offline anchor (13K steps per GAPT paper C.1)
+anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_melody_4_datasets/step=13000.ckpt"
 
 # realchords specific
 model_part: "melody"
@@ -39,10 +40,12 @@ micro_train_batch_size: 48
 train_batch_size: 48
 limit_eval_batches: 4
 
-entropy_loss_coef: 0.002
+# Paper-correct RL learning rates (10x lower than rl_realchords_base.yml)
+actor_learning_rate: !!float 5e-7
+critic_learning_rate: !!float 9e-6
 
-save_steps: 100 # save actor every 100 steps
-eval_steps: 100 # evaluate every 100 steps
+# Paper-correct entropy coeff (same as chord policy, γ=0.01 per GAPT paper C.5)
+entropy_loss_coef: 0.01
 
 num_steps: 1000
 
