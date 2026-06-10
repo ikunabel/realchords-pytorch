@@ -41,7 +41,9 @@ DEFAULT_STYLES: Dict[str, PointStyle] = {
         label="Online MLE (3 datasets)", marker="^", color="#4aa3df"
     ),
     "ReaLchords": PointStyle(label="ReaLchords", marker="s", color="#d62728"),
+    "RLPT": PointStyle(label="RLPT", marker="s", color="#d62728"),
     "GAPT": PointStyle(label="GAPT", marker="*", color="#2ca02c"),
+    "GT": PointStyle(label="GT", marker="o", color="#333333"),
     # Technical-suffix aliases (backward compatibility / plain --variant form)
     "decoder_only_online_chord": PointStyle(
         label="Online MLE", marker="^", color="#1f77b4"
@@ -51,6 +53,16 @@ DEFAULT_STYLES: Dict[str, PointStyle] = {
     ),
     "realchords": PointStyle(label="ReaLchords", marker="s", color="#d62728"),
     "gapt": PointStyle(label="GAPT", marker="*", color="#2ca02c"),
+    # Model-vs-model: marker = melody model, color = chord model
+    "MLE_vs_MLE": PointStyle(label="MLE_vs_MLE", marker="^", color="#1f77b4"),
+    "MLE_vs_RLPT": PointStyle(label="MLE_vs_RLPT", marker="^", color="#d62728"),
+    "MLE_vs_GAPT": PointStyle(label="MLE_vs_GAPT", marker="^", color="#2ca02c"),
+    "RLPT_vs_MLE": PointStyle(label="RLPT_vs_MLE", marker="s", color="#1f77b4"),
+    "RLPT_vs_RLPT": PointStyle(label="RLPT_vs_RLPT", marker="s", color="#d62728"),
+    "RLPT_vs_GAPT": PointStyle(label="RLPT_vs_GAPT", marker="s", color="#2ca02c"),
+    "GAPT_vs_MLE": PointStyle(label="GAPT_vs_MLE", marker="*", color="#1f77b4"),
+    "GAPT_vs_RLPT": PointStyle(label="GAPT_vs_RLPT", marker="*", color="#d62728"),
+    "GAPT_vs_GAPT": PointStyle(label="GAPT_vs_GAPT", marker="*", color="#2ca02c"),
 }
 
 
@@ -69,12 +81,15 @@ def _iter_points(summary: dict) -> Iterable[Tuple[str, dict]]:
 
 
 def _parse_dataset_and_variant(system_name: str) -> Tuple[str, str]:
-    # Expected name pattern from your scripts:
+    # Expected patterns from generation scripts:
     #   "<dataset>_melody_vs_<variant>"
-    if "_melody_vs_" not in system_name:
-        return "unknown", system_name
-    dataset, variant = system_name.split("_melody_vs_", 1)
-    return dataset, variant
+    #   "<dataset>_gt"
+    if "_melody_vs_" in system_name:
+        dataset, variant = system_name.split("_melody_vs_", 1)
+        return dataset, variant
+    if system_name.endswith("_gt"):
+        return system_name[:-3], "gt"
+    return "unknown", system_name
 
 
 def collect_system_metrics(
@@ -159,11 +174,15 @@ def plot_harmony_vs_diversity_one(
             f"and variants={[s.system_key for s in variant_specs]}."
         )
 
-    datasets_present = {ds for _, ds, _, _, _, _ in points}
-    if dataset is None:
+    datasets_present = {ds for _, ds, _, _, _, _ in points if ds != "unknown"}
+    if dataset is not None:
+        title_default = dataset
+    elif len(datasets_present) == 1:
+        title_default = next(iter(datasets_present))
+    elif datasets_present:
         title_default = " / ".join(sorted(datasets_present))
     else:
-        title_default = dataset
+        title_default = ""
 
     ax.set_title(title or title_default)
     ax.set_xlabel("Diversity (Vendi score)")
@@ -191,12 +210,11 @@ def plot_harmony_vs_diversity_one(
     else:
         ax.set_ylim(*ylim)
 
-    # Harmony axis formatting: 0.38, 0.40, ... (avoid 0.375-style ticks)
-    ax.yaxis.set_major_locator(MultipleLocator(0.02))
+    # Harmony axis: 0.05 steps (e.g. 0.40, 0.45) — avoids dense 0.02 grids
+    ax.yaxis.set_major_locator(MultipleLocator(0.05))
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
-    include_dataset_in_label = len(datasets_present) > 1
-    for _, ds, _variant, style_key, x, y in points:
+    for _, _ds, _variant, style_key, x, y in points:
         style = styles.get(
             style_key,
             PointStyle(label=style_key, marker="o", color="#7f7f7f"),
@@ -215,9 +233,7 @@ def plot_harmony_vs_diversity_one(
         ax.text(
             x,
             y,
-            f" {style.label} ({ds})"
-            if include_dataset_in_label
-            else f" {style.label}",
+            f" {style.label}",
             fontsize=9,
             va="center",
             ha="left",
@@ -264,6 +280,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         required=True,
         help="Output path (prefer .pdf for vector).",
     )
+    parser.add_argument(
+        "--title",
+        type=str,
+        default=None,
+        help="Figure title. If omitted, inferred from dataset folder names.",
+    )
     args = parser.parse_args(argv)
 
     variant_specs = [_parse_variant_arg(v) for v in args.variant]
@@ -273,6 +295,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         dataset=None,
         variant_specs=variant_specs,
         output_path=args.out,
+        title=args.title,
     )
 
 
