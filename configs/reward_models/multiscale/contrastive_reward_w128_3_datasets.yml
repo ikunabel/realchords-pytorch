@@ -1,0 +1,42 @@
+# Multiscale contrastive reward — fixed 128-frame segments (1/2 of 256).
+
+seed: 42
+train_steps: 30000
+val_interval: 100
+early_stopping_patience: 10
+sample_interval: 1000
+max_log_examples: 8
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 500
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: -1
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+mask_same_song_negatives: false
+
+batch_size: 196
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "chord"
+model_type: "encoder_decoder"
+max_len: 256
+datasets: ["hooktheory", "pop909", "nottingham"]
+weights: [0.6, 0.3, 0.1]
+data_augmentation: true
+
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+ContrastiveReward.dim: 512
+ContrastiveReward.depth: 6
+ContrastiveReward.heads: 6
+ContrastiveReward.max_seq_len: 130
+EncoderDecoderTransformer.dropout: 0.1

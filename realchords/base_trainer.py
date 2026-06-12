@@ -15,7 +15,11 @@ from typing import Optional
 
 from pathlib import Path
 from lightning.fabric.strategies import FSDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch import seed_everything
 from lightning.pytorch.utilities import grad_norm
@@ -54,6 +58,8 @@ class Trainer:
         checkpoint_metric: str = "val/loss",
         checkpoint_mode: str = "min",
         checkpoint_top_k: int = 2,
+        early_stopping_patience: Optional[int] = None,
+        early_stopping_min_delta: float = 0.0,
         # Fabric/distribution training args
         use_fabric: bool = False,
         accelerator: str = "auto",
@@ -111,6 +117,18 @@ class Trainer:
         # Log learning rate
         lr_monitor = LearningRateMonitor(logging_interval="step")
 
+        callbacks = [checkpoint_callback, lr_monitor]
+        if early_stopping_patience is not None and early_stopping_patience > 0:
+            callbacks.append(
+                EarlyStopping(
+                    monitor=checkpoint_metric,
+                    mode=checkpoint_mode,
+                    patience=early_stopping_patience,
+                    min_delta=early_stopping_min_delta,
+                    check_on_train_epoch_end=False,
+                )
+            )
+
         # No wandb logging for processes other than rank 0
         logger = WandbLogger(
             name=self.save_dir.name,
@@ -126,10 +144,7 @@ class Trainer:
             val_check_interval=val_interval,
             logger=logger,
             log_every_n_steps=log_every_n_steps,
-            callbacks=[
-                checkpoint_callback,
-                lr_monitor,
-            ],
+            callbacks=callbacks,
             limit_val_batches=limit_val_batches,
             overfit_batches=overfit_batches,
             check_val_every_n_epoch=None,
