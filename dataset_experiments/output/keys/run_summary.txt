@@ -1,0 +1,4 @@
+Wrote /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/dataset_experiments/output/keys/keys_overview.json
+Songs: 23462
+Key regions: 24426
+Songs with key changes: 496

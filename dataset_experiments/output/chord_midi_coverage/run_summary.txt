@@ -1,0 +1,3 @@
+Wrote /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/dataset_experiments/output/chord_midi_coverage/chord_midi_coverage.json
+Structural chords: 2272
+Piano coverage: 24/88

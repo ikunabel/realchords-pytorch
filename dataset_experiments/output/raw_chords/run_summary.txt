@@ -1,0 +1,7 @@
+Wrote /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/dataset_experiments/output/raw_chords/raw_chords_overview.json
+Eligible songs: 23462
+In raw: 23462
+Raw chord events: 383985
+Processed harmony events: 383985
+Unique raw shapes: 3606
+Inverted raw events: 56108

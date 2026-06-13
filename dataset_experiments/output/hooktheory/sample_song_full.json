@@ -1,0 +1,902 @@
+{
+  "tags": [
+    "NO_SWING",
+    "AUDIO_AVAILABLE",
+    "USER_ALIGNMENT",
+    "REFINED_ALIGNMENT",
+    "MELODY",
+    "HARMONY"
+  ],
+  "split": "TRAIN",
+  "hooktheory": {
+    "id": "AnLgaealgYp",
+    "artist": "jennifer-lopez",
+    "song": "on-the-floor",
+    "annotators": [
+      "Hooktheory"
+    ],
+    "urls": {
+      "artist": "https://www.hooktheory.com/theorytab/artists/j/jennifer-lopez",
+      "song": "https://www.hooktheory.com/theorytab/view/jennifer-lopez/on-the-floor",
+      "clip": "https://hookpad.hooktheory.com/?idOfSong=AnLgaealgYp"
+    }
+  },
+  "youtube": {
+    "id": "t4H_Zoh7G5A",
+    "url": "https://www.youtube.com/watch?v=t4H_Zoh7G5A",
+    "duration": 266.36773242630386
+  },
+  "alignment": {
+    "swing": "STRAIGHT",
+    "user": {
+      "beats": [
+        0,
+        72
+      ],
+      "times": [
+        106.96,
+        140.19
+      ]
+    },
+    "refined": {
+      "beats": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72
+      ],
+      "times": [
+        107.1,
+        107.57,
+        108.02,
+        108.49,
+        108.94999999999999,
+        109.41999999999999,
+        109.88,
+        110.33999999999999,
+        110.8,
+        111.25,
+        111.71,
+        112.16999999999999,
+        112.63999999999999,
+        113.1,
+        113.57,
+        114.03,
+        114.47999999999999,
+        114.94999999999999,
+        115.41,
+        115.86999999999999,
+        116.33999999999999,
+        116.80999999999999,
+        117.25,
+        117.72,
+        118.16999999999999,
+        118.63999999999999,
+        119.1,
+        119.55,
+        120.02,
+        120.5,
+        120.96,
+        121.41,
+        121.86999999999999,
+        122.33999999999999,
+        122.8,
+        123.25,
+        123.72,
+        124.17999999999999,
+        124.63999999999999,
+        125.1,
+        125.56,
+        126.03,
+        126.49,
+        126.94999999999999,
+        127.41,
+        127.86999999999999,
+        128.32999999999998,
+        128.79999999999998,
+        129.26,
+        129.72,
+        130.18,
+        130.64,
+        131.1,
+        131.57,
+        132.03,
+        132.49,
+        132.95,
+        133.41,
+        133.87,
+        134.34,
+        134.79999999999998,
+        135.26,
+        135.72,
+        136.18,
+        136.64,
+        137.1,
+        137.57,
+        138.03,
+        138.49,
+        138.95,
+        139.41,
+        139.87,
+        140.32999999999998
+      ]
+    }
+  },
+  "annotations": {
+    "num_beats": 72,
+    "meters": [
+      {
+        "beat": 0,
+        "beats_per_bar": 4,
+        "beat_unit": 4
+      }
+    ],
+    "keys": [
+      {
+        "beat": 0,
+        "tonic_pitch_class": 6,
+        "scale_degree_intervals": [
+          2,
+          2,
+          1,
+          2,
+          2,
+          2
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "onset": 0,
+        "offset": 1.5,
+        "octave": 0,
+        "pitch_class": 10
+      },
+      {
+        "onset": 1.5,
+        "offset": 2.0,
+        "octave": 0,
+        "pitch_class": 8
+      },
+      {
+        "onset": 2,
+        "offset": 2.5,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 2.5,
+        "offset": 3.0,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 3,
+        "offset": 4,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 4,
+        "offset": 4.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 4.5,
+        "offset": 5.0,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 5,
+        "offset": 5.5,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 5.5,
+        "offset": 6.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 6,
+        "offset": 6.5,
+        "octave": 0,
+        "pitch_class": 1
+      },
+      {
+        "onset": 6.5,
+        "offset": 7.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 7,
+        "offset": 7.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 7.5,
+        "offset": 8.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 8,
+        "offset": 8.75,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 8.75,
+        "offset": 9.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 9,
+        "offset": 11,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 16,
+        "offset": 17.5,
+        "octave": 0,
+        "pitch_class": 10
+      },
+      {
+        "onset": 17.5,
+        "offset": 18.0,
+        "octave": 0,
+        "pitch_class": 8
+      },
+      {
+        "onset": 18,
+        "offset": 18.5,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 18.5,
+        "offset": 19.0,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 19,
+        "offset": 20,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 20,
+        "offset": 20.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 20.5,
+        "offset": 21.0,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 21,
+        "offset": 21.5,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 21.5,
+        "offset": 22.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 22,
+        "offset": 22.5,
+        "octave": 0,
+        "pitch_class": 1
+      },
+      {
+        "onset": 22.5,
+        "offset": 23.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 23,
+        "offset": 23.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 23.5,
+        "offset": 24.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 24,
+        "offset": 24.75,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 24.75,
+        "offset": 25.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 25,
+        "offset": 27,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 40,
+        "offset": 41.5,
+        "octave": 0,
+        "pitch_class": 10
+      },
+      {
+        "onset": 41.5,
+        "offset": 42.0,
+        "octave": 0,
+        "pitch_class": 8
+      },
+      {
+        "onset": 42,
+        "offset": 42.5,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 42.5,
+        "offset": 43.0,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 43,
+        "offset": 44,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 44,
+        "offset": 44.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 44.5,
+        "offset": 45.0,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 45,
+        "offset": 45.5,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 45.5,
+        "offset": 46.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 46,
+        "offset": 46.5,
+        "octave": 0,
+        "pitch_class": 1
+      },
+      {
+        "onset": 46.5,
+        "offset": 47.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 47,
+        "offset": 47.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 47.5,
+        "offset": 48.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 48,
+        "offset": 48.75,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 48.75,
+        "offset": 49.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 49,
+        "offset": 49.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 49.5,
+        "offset": 50.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 50,
+        "offset": 50.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 50.5,
+        "offset": 51.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 51,
+        "offset": 51.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 51.5,
+        "offset": 52.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 52,
+        "offset": 53,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 53,
+        "offset": 53.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 53.5,
+        "offset": 54.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 54,
+        "offset": 55,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 56,
+        "offset": 57.5,
+        "octave": 0,
+        "pitch_class": 10
+      },
+      {
+        "onset": 57.5,
+        "offset": 58.0,
+        "octave": 0,
+        "pitch_class": 8
+      },
+      {
+        "onset": 58,
+        "offset": 58.5,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 58.5,
+        "offset": 59.0,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 59,
+        "offset": 60,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 60,
+        "offset": 60.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 60.5,
+        "offset": 61.0,
+        "octave": 0,
+        "pitch_class": 6
+      },
+      {
+        "onset": 61,
+        "offset": 61.5,
+        "octave": 0,
+        "pitch_class": 5
+      },
+      {
+        "onset": 61.5,
+        "offset": 62.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 62,
+        "offset": 62.5,
+        "octave": 0,
+        "pitch_class": 1
+      },
+      {
+        "onset": 62.5,
+        "offset": 63.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 63,
+        "offset": 63.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 63.5,
+        "offset": 64.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 64,
+        "offset": 64.75,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 64.75,
+        "offset": 65.0,
+        "octave": -1,
+        "pitch_class": 8
+      },
+      {
+        "onset": 65,
+        "offset": 65.5,
+        "octave": -1,
+        "pitch_class": 10
+      },
+      {
+        "onset": 65.5,
+        "offset": 66.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 66,
+        "offset": 66.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 66.5,
+        "offset": 67.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 67,
+        "offset": 67.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 67.5,
+        "offset": 68.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 68,
+        "offset": 69,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 69,
+        "offset": 69.5,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 69.5,
+        "offset": 70.0,
+        "octave": 0,
+        "pitch_class": 3
+      },
+      {
+        "onset": 70,
+        "offset": 71,
+        "octave": 0,
+        "pitch_class": 3
+      }
+    ],
+    "harmony": [
+      {
+        "onset": 0,
+        "offset": 4,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 4,
+        "offset": 8,
+        "root_pitch_class": 11,
+        "root_position_intervals": [
+          4,
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 8,
+        "offset": 12,
+        "root_pitch_class": 6,
+        "root_position_intervals": [
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 12,
+        "offset": 16,
+        "root_pitch_class": 10,
+        "root_position_intervals": [
+          3,
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 16,
+        "offset": 20,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 20,
+        "offset": 24,
+        "root_pitch_class": 11,
+        "root_position_intervals": [
+          4,
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 24,
+        "offset": 28,
+        "root_pitch_class": 6,
+        "root_position_intervals": [
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 28,
+        "offset": 32,
+        "root_pitch_class": 10,
+        "root_position_intervals": [
+          3,
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 32,
+        "offset": 36,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 36,
+        "offset": 40,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 40,
+        "offset": 44,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 44,
+        "offset": 48,
+        "root_pitch_class": 11,
+        "root_position_intervals": [
+          4,
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 48,
+        "offset": 52,
+        "root_pitch_class": 6,
+        "root_position_intervals": [
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 52,
+        "offset": 56,
+        "root_pitch_class": 10,
+        "root_position_intervals": [
+          3,
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 56,
+        "offset": 60,
+        "root_pitch_class": 3,
+        "root_position_intervals": [
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 60,
+        "offset": 64,
+        "root_pitch_class": 11,
+        "root_position_intervals": [
+          4,
+          3,
+          4
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 64,
+        "offset": 68,
+        "root_pitch_class": 6,
+        "root_position_intervals": [
+          4,
+          3
+        ],
+        "inversion": 0
+      },
+      {
+        "onset": 68,
+        "offset": 72,
+        "root_pitch_class": 10,
+        "root_position_intervals": [
+          3,
+          4,
+          3
+        ],
+        "inversion": 0
+      }
+    ]
+  }
+}

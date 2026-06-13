@@ -1,0 +1,20 @@
+{
+  "split": "train",
+  "song_index": 7,
+  "num_songs_in_split": 19052,
+  "data_path": "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/hooktheory/Hooktheory.json.gz",
+  "artist": "jennifer-lopez",
+  "song": "on-the-floor",
+  "id": "AnLgaealgYp",
+  "tags": [
+    "NO_SWING",
+    "AUDIO_AVAILABLE",
+    "USER_ALIGNMENT",
+    "REFINED_ALIGNMENT",
+    "MELODY",
+    "HARMONY"
+  ],
+  "num_harmony_events": 18,
+  "num_melody_events": 82,
+  "num_beats": 72
+}

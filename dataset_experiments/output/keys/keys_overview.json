@@ -1,0 +1,696 @@
+{
+  "source": {
+    "description": "Hooktheory annotations.keys for cache-eligible songs",
+    "cache_filter": "MELODY + HARMONY tags, no TEMPO_CHANGES",
+    "songs_included": 23462,
+    "data_path": "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/hooktheory/Hooktheory.json.gz"
+  },
+  "mode_reference": {
+    "aeolian": {
+      "scale_degree_intervals": [
+        2,
+        1,
+        2,
+        2,
+        1,
+        2
+      ],
+      "mode": "aeolian",
+      "common_name": "natural minor",
+      "step_pattern": "W H W W H W W"
+    },
+    "dorian": {
+      "scale_degree_intervals": [
+        2,
+        1,
+        2,
+        2,
+        2,
+        1
+      ],
+      "mode": "dorian",
+      "common_name": "dorian",
+      "step_pattern": "W H W W W H W"
+    },
+    "ionian": {
+      "scale_degree_intervals": [
+        2,
+        2,
+        1,
+        2,
+        2,
+        2
+      ],
+      "mode": "ionian",
+      "common_name": "major",
+      "step_pattern": "W W H W W W W"
+    },
+    "locrian": {
+      "scale_degree_intervals": [
+        1,
+        2,
+        2,
+        1,
+        2,
+        2
+      ],
+      "mode": "locrian",
+      "common_name": "locrian",
+      "step_pattern": "H W W H W W W"
+    },
+    "lydian": {
+      "scale_degree_intervals": [
+        2,
+        2,
+        2,
+        1,
+        2,
+        2
+      ],
+      "mode": "lydian",
+      "common_name": "lydian",
+      "step_pattern": "W W W H W W W"
+    },
+    "mixolydian": {
+      "scale_degree_intervals": [
+        2,
+        2,
+        1,
+        2,
+        2,
+        1
+      ],
+      "mode": "mixolydian",
+      "common_name": "mixolydian",
+      "step_pattern": "W W H W W H W"
+    },
+    "phrygian": {
+      "scale_degree_intervals": [
+        1,
+        2,
+        2,
+        2,
+        1,
+        2
+      ],
+      "mode": "phrygian",
+      "common_name": "phrygian",
+      "step_pattern": "H W W W H W W"
+    }
+  },
+  "summary": {
+    "total_key_regions": 24426,
+    "songs_with_single_key": 22966,
+    "songs_with_key_changes": 496,
+    "unique_key_labels": 96,
+    "unique_interval_patterns": 9
+  },
+  "counts_by_mode": {
+    "major": 11866,
+    "natural minor": 10018,
+    "mixolydian": 957,
+    "dorian": 933,
+    "lydian": 262,
+    "phrygian": 255,
+    "unknown": 74,
+    "locrian": 61
+  },
+  "counts_by_tonic": {
+    "C": 3503,
+    "D": 2771,
+    "A": 2673,
+    "G": 2519,
+    "E": 2433,
+    "F": 2036,
+    "D#": 1649,
+    "B": 1546,
+    "F#": 1411,
+    "C#": 1380,
+    "A#": 1354,
+    "G#": 1151
+  },
+  "counts_by_interval_pattern": {
+    "[2, 2, 1, 2, 2, 2]": {
+      "count": 11866,
+      "mode": "ionian",
+      "common_name": "major",
+      "step_pattern": "W W H W W W W"
+    },
+    "[2, 1, 2, 2, 1, 2]": {
+      "count": 10018,
+      "mode": "aeolian",
+      "common_name": "natural minor",
+      "step_pattern": "W H W W H W W"
+    },
+    "[2, 2, 1, 2, 2, 1]": {
+      "count": 957,
+      "mode": "mixolydian",
+      "common_name": "mixolydian",
+      "step_pattern": "W W H W W H W"
+    },
+    "[2, 1, 2, 2, 2, 1]": {
+      "count": 933,
+      "mode": "dorian",
+      "common_name": "dorian",
+      "step_pattern": "W H W W W H W"
+    },
+    "[2, 2, 2, 1, 2, 2]": {
+      "count": 262,
+      "mode": "lydian",
+      "common_name": "lydian",
+      "step_pattern": "W W W H W W W"
+    },
+    "[1, 2, 2, 2, 1, 2]": {
+      "count": 255,
+      "mode": "phrygian",
+      "common_name": "phrygian",
+      "step_pattern": "H W W W H W W"
+    },
+    "[1, 2, 2, 1, 2, 2]": {
+      "count": 61,
+      "mode": "locrian",
+      "common_name": "locrian",
+      "step_pattern": "H W W H W W W"
+    },
+    "[2, 1, 2, 2, 1, 3]": {
+      "count": 42,
+      "mode": null,
+      "common_name": "unknown",
+      "step_pattern": null
+    },
+    "[1, 3, 1, 2, 1, 2]": {
+      "count": 32,
+      "mode": null,
+      "common_name": "unknown",
+      "step_pattern": null
+    }
+  },
+  "counts_by_key_label": {
+    "C major": 2020,
+    "D major": 1394,
+    "G major": 1388,
+    "A natural minor": 1230,
+    "C natural minor": 1206,
+    "A major": 1143,
+    "E natural minor": 1084,
+    "E major": 1061,
+    "D natural minor": 1042,
+    "F major": 1040,
+    "D# major": 890,
+    "G natural minor": 836,
+    "B natural minor": 809,
+    "F natural minor": 772,
+    "A# major": 707,
+    "F# natural minor": 692,
+    "C# natural minor": 678,
+    "D# natural minor": 624,
+    "F# major": 578,
+    "B major": 574,
+    "C# major": 563,
+    "A# natural minor": 537,
+    "G# major": 508,
+    "G# natural minor": 508,
+    "D dorian": 155,
+    "E mixolydian": 125,
+    "A mixolydian": 124,
+    "D mixolydian": 122,
+    "G mixolydian": 122,
+    "C mixolydian": 115,
+    "A dorian": 105,
+    "E dorian": 100,
+    "F dorian": 99,
+    "G dorian": 92,
+    "C dorian": 82,
+    "B mixolydian": 64,
+    "B dorian": 62,
+    "G# dorian": 58,
+    "F# dorian": 57,
+    "F mixolydian": 57
+  },
+  "tonics_by_mode": {
+    "dorian": {
+      "D": 155,
+      "A": 105,
+      "E": 100,
+      "F": 99,
+      "G": 92,
+      "C": 82,
+      "B": 62,
+      "G#": 58,
+      "F#": 57,
+      "D#": 43,
+      "C#": 43,
+      "A#": 37
+    },
+    "locrian": {
+      "D": 10,
+      "D#": 8,
+      "C": 8,
+      "A": 7,
+      "B": 7,
+      "G": 5,
+      "F#": 4,
+      "F": 4,
+      "C#": 3,
+      "E": 2,
+      "G#": 2,
+      "A#": 1
+    },
+    "lydian": {
+      "F": 42,
+      "C": 36,
+      "A": 30,
+      "G": 28,
+      "D": 21,
+      "G#": 20,
+      "C#": 19,
+      "A#": 15,
+      "D#": 14,
+      "B": 14,
+      "E": 13,
+      "F#": 10
+    },
+    "major": {
+      "C": 2020,
+      "D": 1394,
+      "G": 1388,
+      "A": 1143,
+      "E": 1061,
+      "F": 1040,
+      "D#": 890,
+      "A#": 707,
+      "F#": 578,
+      "B": 574,
+      "C#": 563,
+      "G#": 508
+    },
+    "mixolydian": {
+      "E": 125,
+      "A": 124,
+      "D": 122,
+      "G": 122,
+      "C": 115,
+      "B": 64,
+      "F": 57,
+      "C#": 52,
+      "F#": 48,
+      "G#": 44,
+      "D#": 44,
+      "A#": 40
+    },
+    "natural minor": {
+      "A": 1230,
+      "C": 1206,
+      "E": 1084,
+      "D": 1042,
+      "G": 836,
+      "B": 809,
+      "F": 772,
+      "F#": 692,
+      "C#": 678,
+      "D#": 624,
+      "A#": 537,
+      "G#": 508
+    },
+    "phrygian": {
+      "E": 42,
+      "G": 37,
+      "A": 28,
+      "C": 24,
+      "D#": 22,
+      "D": 21,
+      "F#": 20,
+      "F": 18,
+      "C#": 13,
+      "A#": 13,
+      "B": 11,
+      "G#": 6
+    },
+    "unknown": {
+      "C": 12,
+      "G": 11,
+      "C#": 9,
+      "E": 6,
+      "D": 6,
+      "A": 6,
+      "G#": 5,
+      "B": 5,
+      "A#": 4,
+      "D#": 4,
+      "F": 4,
+      "F#": 2
+    }
+  },
+  "keys_per_song": {
+    "1": 22966,
+    "2": 261,
+    "3": 134,
+    "4": 44,
+    "5": 29,
+    "6": 9,
+    "7": 6,
+    "8": 7,
+    "9": 3,
+    "11": 1,
+    "12": 1,
+    "13": 1
+  },
+  "unknown_interval_patterns": {
+    "[2, 1, 2, 2, 1, 3]": 42,
+    "[1, 3, 1, 2, 1, 2]": 32
+  },
+  "examples_songs_with_key_changes": [
+    {
+      "id": "nJmBkqjkgAV",
+      "artist": "aqours",
+      "song": "love-live-sunshine-s2---water-blue-new-world",
+      "urls": {
+        "artist": "https://www.hooktheory.com/theorytab/artists/a/aqours",
+        "song": "https://www.hooktheory.com/theorytab/view/aqours/love-live-sunshine-s2---water-blue-new-world",
+        "clip": "https://hookpad.hooktheory.com/?idOfSong=nJmBkqjkgAV"
+      },
+      "keys": [
+        {
+          "beat": 0,
+          "tonic_pitch_class": 10,
+          "tonic_name": "A#",
+          "scale_degree_intervals": [
+            2,
+            2,
+            1,
+            2,
+            2,
+            2
+          ],
+          "mode": "ionian",
+          "common_name": "major",
+          "step_pattern": "W W H W W W W",
+          "key_label": "A# major"
+        },
+        {
+          "beat": 34,
+          "tonic_pitch_class": 7,
+          "tonic_name": "G",
+          "scale_degree_intervals": [
+            2,
+            2,
+            1,
+            2,
+            2,
+            2
+          ],
+          "mode": "ionian",
+          "common_name": "major",
+          "step_pattern": "W W H W W W W",
+          "key_label": "G major"
+        },
+        {
+          "beat": 68,
+          "tonic_pitch_class": 2,
+          "tonic_name": "D",
+          "scale_degree_intervals": [
+            2,
+            2,
+            1,
+            2,
+            2,
+            2
+          ],
+          "mode": "ionian",
+          "common_name": "major",
+          "step_pattern": "W W H W W W W",
+          "key_label": "D major"
+        }
+      ]
+    },
+    {
+      "id": "nZgWrlJwmry",
+      "artist": "cobu",
+      "song": "fantasy-maiden-wars-dream---face-to-heart-ii",
+      "urls": {
+        "artist": "https://www.hooktheory.com/theorytab/artists/c/cobu",
+        "song": "https://www.hooktheory.com/theorytab/view/cobu/fantasy-maiden-wars-dream---face-to-heart-ii",
+        "clip": "https://hookpad.hooktheory.com/?idOfSong=nZgWrlJwmry"
+      },
+      "keys": [
+        {
+          "beat": 0,
+          "tonic_pitch_class": 3,
+          "tonic_name": "D#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "D# natural minor"
+        },
+        {
+          "beat": 32,
+          "tonic_pitch_class": 10,
+          "tonic_name": "A#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "A# natural minor"
+        }
+      ]
+    },
+    {
+      "id": "KexEQzOVx_B",
+      "artist": "zun",
+      "song": "crimson-in-the-black-sea---legendary-fish",
+      "urls": {
+        "artist": "https://www.hooktheory.com/theorytab/artists/z/zun",
+        "song": "https://www.hooktheory.com/theorytab/view/zun/crimson-in-the-black-sea---legendary-fish",
+        "clip": "https://hookpad.hooktheory.com/?idOfSong=KexEQzOVx_B"
+      },
+      "keys": [
+        {
+          "beat": 0,
+          "tonic_pitch_class": 9,
+          "tonic_name": "A",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "A natural minor"
+        },
+        {
+          "beat": 8,
+          "tonic_pitch_class": 1,
+          "tonic_name": "C#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "C# natural minor"
+        },
+        {
+          "beat": 16,
+          "tonic_pitch_class": 10,
+          "tonic_name": "A#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "A# natural minor"
+        },
+        {
+          "beat": 24,
+          "tonic_pitch_class": 2,
+          "tonic_name": "D",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "D natural minor"
+        }
+      ]
+    },
+    {
+      "id": "RPxe_JANmb_",
+      "artist": "zun",
+      "song": "crimson-in-the-black-sea---legendary-fish",
+      "urls": {
+        "artist": "https://www.hooktheory.com/theorytab/artists/z/zun",
+        "song": "https://www.hooktheory.com/theorytab/view/zun/crimson-in-the-black-sea---legendary-fish",
+        "clip": "https://hookpad.hooktheory.com/?idOfSong=RPxe_JANmb_"
+      },
+      "keys": [
+        {
+          "beat": 0,
+          "tonic_pitch_class": 2,
+          "tonic_name": "D",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "D natural minor"
+        },
+        {
+          "beat": 16,
+          "tonic_pitch_class": 11,
+          "tonic_name": "B",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "B natural minor"
+        },
+        {
+          "beat": 32,
+          "tonic_pitch_class": 6,
+          "tonic_name": "F#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "F# natural minor"
+        }
+      ]
+    },
+    {
+      "id": "YAg-_JyVole",
+      "artist": "mari-yamaguchi",
+      "song": "mega-man-5---crystal-man-stage",
+      "urls": {
+        "artist": "https://www.hooktheory.com/theorytab/artists/m/mari-yamaguchi",
+        "song": "https://www.hooktheory.com/theorytab/view/mari-yamaguchi/mega-man-5---crystal-man-stage",
+        "clip": "https://hookpad.hooktheory.com/?idOfSong=YAg-_JyVole"
+      },
+      "keys": [
+        {
+          "beat": 0,
+          "tonic_pitch_class": 11,
+          "tonic_name": "B",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "B natural minor"
+        },
+        {
+          "beat": 8,
+          "tonic_pitch_class": 2,
+          "tonic_name": "D",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "D natural minor"
+        },
+        {
+          "beat": 16,
+          "tonic_pitch_class": 1,
+          "tonic_name": "C#",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "C# natural minor"
+        },
+        {
+          "beat": 24,
+          "tonic_pitch_class": 5,
+          "tonic_name": "F",
+          "scale_degree_intervals": [
+            2,
+            1,
+            2,
+            2,
+            1,
+            2
+          ],
+          "mode": "aeolian",
+          "common_name": "natural minor",
+          "step_pattern": "W H W W H W W",
+          "key_label": "F natural minor"
+        }
+      ]
+    }
+  ]
+}

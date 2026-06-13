@@ -38,6 +38,9 @@ def load_all_splits(
 
     dataset_split_all = {}
     for split in ["train", "valid", "test"]:
+        # Same inclusion rules as dataset_experiments/scripts/hooktheory_cache_filter.py:
+        # require MELODY + HARMONY tags; drop songs with TEMPO_CHANGES.
+        # Alignment tags (USER_ALIGNMENT, REFINED_ALIGNMENT) are not checked here.
         dataset_split = {
             k: v
             for k, v in dataset.items()

@@ -1,0 +1,38 @@
+{
+    "hooktheory": {
+      "root_pitch_class": 6,
+      "root_name": "F#",
+      "root_position_intervals": [
+        4,
+        3,
+        3,
+        4,
+        3
+      ],
+      "inversion": 0
+    },
+    "hooktheory_pitch_count": 6,
+    "chord_name": "Gb11",
+    "chord_token_id": 2811,
+    "chord_token_id_hold": 1460,
+    "chord_pitches": [
+      6,
+      10,
+      1,
+      4,
+      8,
+      11
+    ],
+    "bass_pitch_class": 6,
+    "midi_pitches": [
+      42,
+      49,
+      52,
+      54,
+      56,
+      58,
+      59
+    ],
+    "in_token_vocab": true,
+    "occurrence_count": 45
+  }
