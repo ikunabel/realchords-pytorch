@@ -2,5 +2,6 @@ Wrote /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/dataset_experiments/ou
 Songs: 23462
 Harmony events: 383985
 Unique chords (structural): 2272
+Unique chords (no inversion): 1477
 Pitches per chord: 1-7
 Inverted events: 56108

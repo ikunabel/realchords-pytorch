@@ -9,6 +9,7 @@
   "summary": {
     "total_harmony_events": 383985,
     "unique_chords": 2272,
+    "unique_chords_without_inversion": 1477,
     "unique_interval_patterns": 312,
     "unique_roots": 12,
     "inverted_events": 56108,

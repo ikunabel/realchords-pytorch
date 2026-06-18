@@ -162,6 +162,7 @@ def build_output(
     chords = []
     midi_pitch_unique: Counter = Counter()
     midi_pitch_weighted: Counter = Counter()
+    unique_midi_patterns: set[tuple[int, ...]] = set()
     missing_vocab = 0
     decode_errors = 0
     hooktheory_pitch_counts: set[int] = set()
@@ -180,6 +181,7 @@ def build_output(
         if record.get("error"):
             decode_errors += 1
             continue
+        unique_midi_patterns.add(tuple(record["midi_pitches"]))
         for pitch in record["midi_pitches"]:
             midi_pitch_unique[pitch] += 1
             midi_pitch_weighted[pitch] += count
@@ -207,6 +209,7 @@ def build_output(
         },
         "summary": {
             "unique_structural_chords": len(chords),
+            "unique_midi_patterns": len(unique_midi_patterns),
             "total_harmony_events": sum(structural_counts.values()),
             "missing_from_token_vocab": missing_vocab,
             "decode_errors": decode_errors,
@@ -249,6 +252,7 @@ def main() -> None:
         "run_summary.txt",
         f"Wrote {out_path}\n"
         f"Structural chords: {output['summary']['unique_structural_chords']}\n"
+        f"Unique MIDI patterns: {output['summary']['unique_midi_patterns']}\n"
         f"Piano coverage: {output['summary']['piano_keys_covered']}/"
         f"{output['summary']['piano_keys_total']}\n",
     )

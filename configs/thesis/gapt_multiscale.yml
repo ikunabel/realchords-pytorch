@@ -1,0 +1,11 @@
+$include:
+  - configs/thesis/gapt.yml
+
+multiscale_contrastive_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_w16_sliding_3_datasets/step=10000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_w32_sliding_3_datasets/step=19000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_w64_sliding_3_datasets/step=18500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_w128_sliding_3_datasets/step=18500.ckpt"
+multiscale_contrastive_window_lens: [16, 32, 64, 128]
+
+save_dir: "/hpcwork/thes2192/realchords/logs/my_logs/gapt_multiscale"

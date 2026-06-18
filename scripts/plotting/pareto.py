@@ -43,6 +43,7 @@ DEFAULT_STYLES: Dict[str, PointStyle] = {
     "ReaLchords": PointStyle(label="ReaLchords", marker="s", color="#d62728"),
     "RLPT": PointStyle(label="RLPT", marker="s", color="#d62728"),
     "GAPT": PointStyle(label="GAPT", marker="*", color="#2ca02c"),
+    "GAPT-M": PointStyle(label="GAPT-M", marker="D", color="#9467bd"),
     "GT": PointStyle(label="GT", marker="o", color="#333333"),
     # Technical-suffix aliases (backward compatibility / plain --variant form)
     "decoder_only_online_chord": PointStyle(
@@ -63,6 +64,9 @@ DEFAULT_STYLES: Dict[str, PointStyle] = {
     "GAPT_vs_MLE": PointStyle(label="GAPT_vs_MLE", marker="*", color="#1f77b4"),
     "GAPT_vs_RLPT": PointStyle(label="GAPT_vs_RLPT", marker="*", color="#d62728"),
     "GAPT_vs_GAPT": PointStyle(label="GAPT_vs_GAPT", marker="*", color="#2ca02c"),
+    "GAPT_vs_GAPT-M": PointStyle(label="GAPT_vs_GAPT-M", marker="*", color="#9467bd"),
+    "MLE_vs_GAPT-M": PointStyle(label="MLE_vs_GAPT-M", marker="^", color="#9467bd"),
+    "RLPT_vs_GAPT-M": PointStyle(label="RLPT_vs_GAPT-M", marker="s", color="#9467bd"),
 }
 
 
@@ -138,6 +142,58 @@ def collect_system_metrics(
     return rows
 
 
+def _label_placement(
+    ax: "object",
+    labeled_points: Sequence[Tuple[float, float, str]],
+    index: int,
+    *,
+    close_display_pt: float = 25.0,
+    offset_x_pt: float = 6.0,
+    offset_y_pt: float = 5.0,
+) -> Tuple[float, float, str, str]:
+    """Default: label to the right. Close pairs: upper up, lower down, left further left."""
+    import math
+
+    x, y, _label = labeled_points[index]
+    px, py = ax.transData.transform((x, y))
+    close_indices = [index]
+    for j, (x0, y0, _) in enumerate(labeled_points):
+        if j == index:
+            continue
+        px0, py0 = ax.transData.transform((x0, y0))
+        if math.hypot(px - px0, py - py0) <= close_display_pt:
+            close_indices.append(j)
+
+    if len(close_indices) < 2:
+        return offset_x_pt, 0.0, "center", "left"
+
+    xs = [labeled_points[i][0] for i in close_indices]
+    ys = [labeled_points[i][1] for i in close_indices]
+    x_mean = sum(xs) / len(xs)
+    y_mean = sum(ys) / len(ys)
+
+    dx = offset_x_pt
+    dy = 0.0
+    va = "center"
+    ha = "left"
+
+    if y > y_mean:
+        dy = offset_y_pt
+        va = "bottom"
+    elif y < y_mean:
+        dy = -offset_y_pt
+        va = "top"
+
+    if x < x_mean:
+        dx = -offset_x_pt
+        ha = "right"
+    elif x > x_mean:
+        dx = offset_x_pt
+        ha = "left"
+
+    return dx, dy, va, ha
+
+
 def plot_harmony_vs_diversity_one(
     *,
     summary_path: str | Path,
@@ -168,6 +224,20 @@ def plot_harmony_vs_diversity_one(
     fig, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
 
     points = collect_system_metrics(summary, dataset=dataset, variant_specs=variant_specs)
+
+    requested = {spec.system_key for spec in variant_specs}
+    found = {sys_name for sys_name, *_ in points}
+    missing = sorted(requested - found)
+    if missing:
+        import warnings
+
+        warnings.warn(
+            "No metrics in summary for requested variant(s): "
+            + ", ".join(missing)
+            + ". Re-run evaluate_generated_sequences.py for those systems.",
+            stacklevel=1,
+        )
+
     if not points:
         raise ValueError(
             f"No matching systems found for dataset={dataset!r} "
@@ -214,12 +284,23 @@ def plot_harmony_vs_diversity_one(
     ax.yaxis.set_major_locator(MultipleLocator(0.05))
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
-    for _, _ds, _variant, style_key, x, y in points:
+    labeled_points = [
+        (
+            x,
+            y,
+            styles.get(
+                style_key, PointStyle(label=style_key, marker="o", color="#7f7f7f")
+            ).label,
+        )
+        for _, _ds, _variant, style_key, x, y in points
+    ]
+
+    for index, (_, _ds, _variant, style_key, x, y) in enumerate(points):
         style = styles.get(
             style_key,
             PointStyle(label=style_key, marker="o", color="#7f7f7f"),
         )
-        size = 180 if style.marker == "*" else 90
+        size = 100 if style.marker == "*" else 50
         ax.scatter(
             [x],
             [y],
@@ -230,13 +311,16 @@ def plot_harmony_vs_diversity_one(
             linewidths=0.6,
             zorder=3,
         )
-        ax.text(
-            x,
-            y,
-            f" {style.label}",
+        dx_pt, dy_pt, va, ha = _label_placement(ax, labeled_points, index)
+        ax.annotate(
+            style.label,
+            (x, y),
+            xytext=(dx_pt, dy_pt),
+            textcoords="offset points",
             fontsize=9,
-            va="center",
-            ha="left",
+            va=va,
+            ha=ha,
+            color=style.color,
         )
 
     fig.tight_layout()

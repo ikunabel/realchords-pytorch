@@ -64,5 +64,3 @@ reward_update_threshold: 1.0
 reward_apply_threshold_after_steps: 200
 
 repetition_penalty_threshold: 4
-
-logits_vram_swap: true

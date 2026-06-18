@@ -14,6 +14,7 @@
   },
   "summary": {
     "unique_structural_chords": 2272,
+    "unique_midi_patterns": 1301,
     "total_harmony_events": 383985,
     "missing_from_token_vocab": 0,
     "decode_errors": 0,

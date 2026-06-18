@@ -62,6 +62,13 @@ def chord_key(event: dict) -> tuple[int, tuple[int, ...], int]:
     )
 
 
+def chord_key_without_inversion(event: dict) -> tuple[int, tuple[int, ...]]:
+    return (
+        event["root_pitch_class"],
+        tuple(event["root_position_intervals"]),
+    )
+
+
 def pitch_count(intervals: tuple[int, ...]) -> int:
     """Number of pitch classes: root + one per interval."""
     return 1 + len(intervals)
@@ -77,6 +84,7 @@ def build_overview(dataset: dict) -> dict:
     kept_songs = [v for v in dataset.values() if passes_hooktheory_cache_filter(v)]
 
     chord_counts: Counter = Counter()
+    chord_counts_without_inversion: Counter = Counter()
     interval_pattern_counts: Counter = Counter()
     root_pc_counts: Counter = Counter()
     inversion_counts: Counter = Counter()
@@ -94,6 +102,7 @@ def build_overview(dataset: dict) -> dict:
             root_pc, intervals, inversion = key
 
             chord_counts[key] += 1
+            chord_counts_without_inversion[chord_key_without_inversion(event)] += 1
             interval_pattern_counts[intervals] += 1
             root_pc_counts[PITCH_CLASS_NAMES.get(root_pc, str(root_pc))] += 1
             inversion_counts[inversion] += 1
@@ -137,6 +146,7 @@ def build_overview(dataset: dict) -> dict:
         "summary": {
             "total_harmony_events": total_events,
             "unique_chords": len(chord_counts),
+            "unique_chords_without_inversion": len(chord_counts_without_inversion),
             "unique_interval_patterns": len(interval_pattern_counts),
             "unique_roots": len(root_pc_counts),
             "inverted_events": sum(
@@ -198,6 +208,8 @@ def main() -> None:
         f"Songs: {overview['source']['songs_included']}\n"
         f"Harmony events: {overview['summary']['total_harmony_events']}\n"
         f"Unique chords (structural): {overview['summary']['unique_chords']}\n"
+        f"Unique chords (no inversion): "
+        f"{overview['summary']['unique_chords_without_inversion']}\n"
         f"Pitches per chord: {overview['summary']['min_pitches_per_chord']}"
         f"-{overview['summary']['max_pitches_per_chord']}\n"
         f"Inverted events: {overview['summary']['inverted_events']}\n",
