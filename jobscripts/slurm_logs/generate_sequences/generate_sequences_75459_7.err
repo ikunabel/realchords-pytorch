@@ -1,0 +1,4 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [00:05<00:00,  5.40s/it]100%|██████████| 1/1 [00:05<00:00,  5.40s/it]

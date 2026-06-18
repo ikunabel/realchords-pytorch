@@ -1,0 +1,117 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[INFO] Module CUDA/12.8.0 loaded.
+[rank0]:W0428 15:15:25.559000 433480 .venv/lib/python3.12/site-packages/torch/utils/cpp_extension.py:2425] TORCH_CUDA_ARCH_LIST is not set, all archs for visible cards are included for compilation. 
+[rank0]:W0428 15:15:25.559000 433480 .venv/lib/python3.12/site-packages/torch/utils/cpp_extension.py:2425] If this is not desired, please set os.environ['TORCH_CUDA_ARCH_LIST'] to specific architectures.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: setting up run h5xywwk0
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/rl_melody_gail_4_datasets/wandb/run-20260428_151624-h5xywwk0
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run rl_melody_gail_4_datasets
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/h5xywwk0
+Training:   0%|          | 0/1000 [00:00<?, ?it/s]
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A
+make_experience: 100%|██████████| 1/1 [00:08<00:00,  8.72s/it][Amake_experience: 100%|██████████| 1/1 [00:08<00:00,  8.72s/it]
+
+Train epoch [1/1]:   0%|          | 0/8 [00:00<?, ?it/s][A/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+
+Train epoch [1/1]:   0%|          | 0/8 [00:05<?, ?it/s, pg=-0.0894, rm=-3.46, ret=-3.53, glen=221, tlen=443, kl=0.32, act_lr=1.25e-8, cri=0.895, vals=-0.0962, cri_lr=2.25e-7][A
+Train epoch [1/1]:  12%|█▎        | 1/8 [00:05<00:35,  5.06s/it, pg=-0.0894, rm=-3.46, ret=-3.53, glen=221, tlen=443, kl=0.32, act_lr=1.25e-8, cri=0.895, vals=-0.0962, cri_lr=2.25e-7][A
+Train epoch [1/1]:  12%|█▎        | 1/8 [00:05<00:35,  5.06s/it, pg=-0.0811, rm=-3.86, ret=-3.94, glen=216, tlen=433, kl=0.358, act_lr=1.88e-8, cri=0.883, vals=-0.0688, cri_lr=3.38e-7][A
+Train epoch [1/1]:  25%|██▌       | 2/8 [00:05<00:13,  2.27s/it, pg=-0.0811, rm=-3.86, ret=-3.94, glen=216, tlen=433, kl=0.358, act_lr=1.88e-8, cri=0.883, vals=-0.0688, cri_lr=3.38e-7][A
+Train epoch [1/1]:  25%|██▌       | 2/8 [00:05<00:13,  2.27s/it, pg=-0.0242, rm=-4.04, ret=-4.12, glen=213, tlen=427, kl=0.379, act_lr=2.5e-8, cri=0.957, vals=-0.0889, cri_lr=4.5e-7]  [A
+Train epoch [1/1]:  38%|███▊      | 3/8 [00:05<00:06,  1.38s/it, pg=-0.0242, rm=-4.04, ret=-4.12, glen=213, tlen=427, kl=0.379, act_lr=2.5e-8, cri=0.957, vals=-0.0889, cri_lr=4.5e-7][A
+Train epoch [1/1]:  38%|███▊      | 3/8 [00:06<00:06,  1.38s/it, pg=-0.114, rm=-3.02, ret=-3.12, glen=218, tlen=437, kl=0.491, act_lr=3.12e-8, cri=0.852, vals=-0.0957, cri_lr=5.63e-7][A
+Train epoch [1/1]:  50%|█████     | 4/8 [00:06<00:03,  1.04it/s, pg=-0.114, rm=-3.02, ret=-3.12, glen=218, tlen=437, kl=0.491, act_lr=3.12e-8, cri=0.852, vals=-0.0957, cri_lr=5.63e-7][A
+Train epoch [1/1]:  50%|█████     | 4/8 [00:06<00:03,  1.04it/s, pg=-0.0593, rm=-4.4, ret=-4.48, glen=214, tlen=429, kl=0.361, act_lr=3.75e-8, cri=0.961, vals=-0.113, cri_lr=6.75e-7] [A
+Train epoch [1/1]:  62%|██████▎   | 5/8 [00:06<00:02,  1.37it/s, pg=-0.0593, rm=-4.4, ret=-4.48, glen=214, tlen=429, kl=0.361, act_lr=3.75e-8, cri=0.961, vals=-0.113, cri_lr=6.75e-7][A
+Train epoch [1/1]:  62%|██████▎   | 5/8 [00:06<00:02,  1.37it/s, pg=0.083, rm=-5.4, ret=-5.48, glen=215, tlen=432, kl=0.39, act_lr=4.37e-8, cri=1.12, vals=-0.137, cri_lr=7.88e-7]    [A
+Train epoch [1/1]:  75%|███████▌  | 6/8 [00:06<00:01,  1.69it/s, pg=0.083, rm=-5.4, ret=-5.48, glen=215, tlen=432, kl=0.39, act_lr=4.37e-8, cri=1.12, vals=-0.137, cri_lr=7.88e-7][A
+Train epoch [1/1]:  75%|███████▌  | 6/8 [00:06<00:01,  1.69it/s, pg=-0.103, rm=-3.11, ret=-3.19, glen=217, tlen=435, kl=0.369, act_lr=5e-8, cri=0.934, vals=-0.115, cri_lr=9e-7]  [A
+Train epoch [1/1]:  88%|████████▊ | 7/8 [00:06<00:00,  1.99it/s, pg=-0.103, rm=-3.11, ret=-3.19, glen=217, tlen=435, kl=0.369, act_lr=5e-8, cri=0.934, vals=-0.115, cri_lr=9e-7][A
+Train epoch [1/1]:  88%|████████▊ | 7/8 [00:07<00:00,  1.99it/s, pg=-0.199, rm=-2.21, ret=-2.3, glen=212, tlen=425, kl=0.392, act_lr=5.62e-8, cri=1.06, vals=-0.0903, cri_lr=1.01e-6][A
+Train epoch [1/1]: 100%|██████████| 8/8 [00:07<00:00,  2.24it/s, pg=-0.199, rm=-2.21, ret=-2.3, glen=212, tlen=425, kl=0.392, act_lr=5.62e-8, cri=1.06, vals=-0.0903, cri_lr=1.01e-6][ATrain epoch [1/1]: 100%|██████████| 8/8 [00:07<00:00,  1.10it/s, pg=-0.199, rm=-2.21, ret=-2.3, glen=212, tlen=425, kl=0.392, act_lr=5.62e-8, cri=1.06, vals=-0.0903, cri_lr=1.01e-6]
+Training:   0%|          | 0/1000 [00:29<?, ?it/s, policy_loss=-0.0733, actor_lr=3.44e-8, entropy=0.699, counterpart_prediction_loss=0, counterpart_prediction_acc=0, grad_norm=tensor(0.5391, dtype=torch.bfloat16), kl=0.383, reward=-3.69, response_length=216, total_length=433, reward_contrastive_reward_0=0.459, reward_contrastive_reward_1=0.524, reward_discriminative_reward_0=0.605, reward_discriminative_reward_1=0.556, reward_contrastive_reward_rhythm_0=0.434, reward_contrastive_reward_rhythm_1=0.372, reward_discriminative_reward_rhythm_0=0.477, reward_discriminative_reward_rhythm_1=0.413, num_early_stop_tokens=0, reward_early_stop_penalty=0, invalid_ratio=0.208, reward_invalid_output_penalty=-2.08, num_silence_tokens=55.6, reward_silence_penalty=-5.53, num_long_note_tokens=38, reward_long_note_penalty=-3.8, num_repetitive_generations=0.442, reward_repetition_penalty=-0.442, reward_gail_reward=0.531, return=-3.77, critic_loss=0.958, values=-0.101, critic_lr=6.19e-7, reward_loss=0.769, reward_lr=6.19e-7, reward_acc=0.503]
+Eval at step 1:   0%|          | 0/4 [00:00<?, ?it/s][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:05<00:00,  5.11s/it][A[Amake_experience: 100%|██████████| 1/1 [00:05<00:00,  5.11s/it]
+
+Eval at step 1:  25%|██▌       | 1/4 [00:14<00:42, 14.28s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:05<00:00,  5.12s/it][A[Amake_experience: 100%|██████████| 1/1 [00:05<00:00,  5.12s/it]
+
+Eval at step 1:  50%|█████     | 2/4 [00:25<00:24, 12.27s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:05<00:00,  5.09s/it][A[Amake_experience: 100%|██████████| 1/1 [00:05<00:00,  5.09s/it]
+
+Eval at step 1:  75%|███████▌  | 3/4 [00:36<00:11, 11.62s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:05<00:00,  5.10s/it][A[Amake_experience: 100%|██████████| 1/1 [00:05<00:00,  5.10s/it]
+
+Eval at step 1: 100%|██████████| 4/4 [00:46<00:00, 11.31s/it][ATraceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py", line 499, in <module>
+    main(args)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+    return func(*cmd_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py", line 481, in main
+    trainer.fit(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 592, in fit
+    self.save_logs_and_checkpoints(args, steps, pbar, status, client_states)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 286, in save_logs_and_checkpoints
+    self.evaluate(self.eval_dataloader, global_step)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 248, in evaluate
+    self.log_eval(experience_to_log, batch_to_log, info_to_log, global_step)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 719, in log_eval
+    self.log_midi(midi_gt, suffix=f"gt_{i}")
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 786, in log_midi
+    payload = {f"image/{suffix}": self._wandb.Image(image)}
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 280, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 431, in _initialize_from_data
+    if data.ndim > 2:  # type: ignore [union-attr]
+       ^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'ndim'
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py", line 499, in <module>
+[rank0]:     main(args)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+[rank0]:     return func(*cmd_args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py", line 481, in main
+[rank0]:     trainer.fit(
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 592, in fit
+[rank0]:     self.save_logs_and_checkpoints(args, steps, pbar, status, client_states)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 286, in save_logs_and_checkpoints
+[rank0]:     self.evaluate(self.eval_dataloader, global_step)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 248, in evaluate
+[rank0]:     self.log_eval(experience_to_log, batch_to_log, info_to_log, global_step)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 719, in log_eval
+[rank0]:     self.log_midi(midi_gt, suffix=f"gt_{i}")
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 786, in log_midi
+[rank0]:     payload = {f"image/{suffix}": self._wandb.Image(image)}
+[rank0]:                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 280, in __init__
+[rank0]:     self._initialize_from_data(data_or_path, mode, file_type, normalize)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 431, in _initialize_from_data
+[rank0]:     if data.ndim > 2:  # type: ignore [union-attr]
+[rank0]:        ^^^^^^^^^
+[rank0]: AttributeError: 'NoneType' object has no attribute 'ndim'
+[rank0]:[W428 15:17:53.921185134 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+srun: error: n23g0011: task 0: Exited with exit code 1

@@ -1,0 +1,131 @@
+=== running: pop909_melody_vs_gapt_multiscale_chord ===
+[rank: 0] Seed set to 42
+Mode: melody_data_vs_rl_chord
+Switching mode: False
+Mel source: melody_data
+Chord source: rl_chord
+2026-06-15 02:10:23 - realchords - INFO - Loading model from /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/step=11000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-06-15 02:10:23 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:29 - realchords - INFO - Time taken to load dataset: 5.83 seconds
+2026-06-15 02:10:29 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:29 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (5.8s)
+Loading wikifonia (weight: 20.0%)...
+2026-06-15 02:10:29 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-06-15 02:10:29 - realchords - INFO - Time taken to load dataset: 0.13 seconds
+2026-06-15 02:10:29 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:29 - realchords - INFO - Loaded 5213 items
+  wikifonia: 5,213 items (0.1s)
+Loading pop909 (weight: 20.0%)...
+2026-06-15 02:10:29 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.80 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 9451 items
+  pop909: 9,451 items (0.8s)
+Loading nottingham (weight: 10.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.16 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 10595 items
+  nottingham: 10,595 items (0.2s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 272,935
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.03 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Loading wikifonia (weight: 20.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.00 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 50 items
+  wikifonia: 50 items (0.0s)
+Loading pop909 (weight: 20.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.03 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 90 items
+  pop909: 90 items (0.0s)
+Loading nottingham (weight: 10.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.02 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 101 items
+  nottingham: 101 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 2,184
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+Note: 'shuffle' is ignored for train since a sampler is used.
+2026-06-15 02:10:37 - realchords - INFO - Loading model from /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_chord/step=11000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-06-15 02:10:37 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:40 - realchords - INFO - Time taken to load dataset: 3.05 seconds
+2026-06-15 02:10:40 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-06-15 02:10:40 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (3.0s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 247,676
+   Sampling weights: {'hooktheory': 1.0}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-06-15 02:10:40 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:40 - realchords - INFO - Time taken to load dataset: 0.01 seconds
+2026-06-15 02:10:40 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-06-15 02:10:40 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 1,943
+   Sampling weights: {'hooktheory': 1.0}
+Note: 'shuffle' is ignored for train since a sampler is used.
+2026-06-15 02:10:47 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:47 - realchords - INFO - Time taken to load dataset: 0.05 seconds
+2026-06-15 02:10:47 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/chord_names_augmented.json
+2026-06-15 02:10:47 - realchords - INFO - Loaded 92 items
+2026-06-15 02:10:47 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:47 - realchords - INFO - Time taken to load dataset: 0.01 seconds
+2026-06-15 02:10:47 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/chord_names_augmented.json
+2026-06-15 02:10:47 - realchords - INFO - Loaded 92 items
+Validation dataloader has 2 batches.
+Processing all 2 batches from validation dataloader
+Generating rl_chord conditioned on melody data
+  0%|          | 0/2 [00:00<?, ?it/s] 50%|█████     | 1/2 [00:39<00:39, 39.14s/it]100%|██████████| 2/2 [01:00<00:00, 28.72s/it]100%|██████████| 2/2 [01:00<00:00, 30.28s/it]
+Saved generated sequences to logs/generated/pop909_melody_vs_gapt_multiscale_chord/melody_data_vs_rl_chord_generated.pt
+Generated sequences shape: torch.Size([92, 513])
+Saved KL values to logs/generated/pop909_melody_vs_gapt_multiscale_chord/melody_data_vs_rl_chord_kl.pt
+KL values shape: torch.Size([92, 256])
+=== finished: pop909_melody_vs_gapt_multiscale_chord ===

@@ -1,0 +1,12 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/generate_sequences.py", line 401, in <module>
+    main()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/generate_sequences.py", line 351, in main
+    ) = load_models(args, mel_source, chord_source, device)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/experiment_utils.py", line 275, in load_models
+    raise ValueError(
+ValueError: rl_melody_model_path must be provided for rl_melody mode

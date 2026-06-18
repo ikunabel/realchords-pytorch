@@ -1,0 +1,744 @@
+=== toolchain check ===
+PATH=/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SDL2/2.30.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FriBidi/1.0.15-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/X11/20240607-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/fontconfig/2.15.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/sbin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/freetype/2.13.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Brotli/1.1.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/libpng/1.6.43-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/expat/2.6.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x265/3.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/LAME/3.100-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x264/20240513-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/NASM/2.16.03-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Python/3.12.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenSSL/3/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/XZ/5.4.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SQLite/3.45.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Tcl/8.6.14-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/ncurses/6.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/bzip2/1.0.8-GCCcore-13.3.0/bin:/home/yh522379/.local/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/libfabric/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/intel-compilers/2024.2.0/compiler/2024.2/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/binutils/2.42-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/GCCcore/13.3.0/bin:/usr/local_host/bin:/usr/local_host/sbin:/usr/local_rwth/bin:/usr/local_rwth/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/opt/singularity/bin:/usr/local/bin:/usr/local/sbin:/opt/slurm/current/sbin:/opt/slurm/current/bin
+ffmpeg: /cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin/ffmpeg
+fluidsynth: /home/yh522379/.local/bin/fluidsynth
+ffmpeg version 7.0.2 Copyright (c) 2000-2024 the FFmpeg developers
+FluidSynth runtime version 2.5.3
+audioread backends: [<class 'audioread.rawread.RawAudioFile'>, <class 'audioread.ffdec.FFmpegAudioFile'>]
+=== end toolchain check ===
+=== nvidia-smi (job 66795950) ===
+Thu Apr 16 02:14:23 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.211.01             Driver Version: 570.211.01     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100                    On  |   00000000:2C:00.0 Off |                    0 |
+| N/A   45C    P0             74W /  700W |       0MiB /  95830MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+=== end nvidia-smi ===
+[2026-04-16 02:14:32,040] [INFO] [real_accelerator.py:222:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2026-04-16 02:15:57,047] [INFO] [comm.py:658:init_distributed] cdb=None
+[2026-04-16 02:15:57,047] [INFO] [comm.py:673:init_distributed] Not using the DeepSpeed or dist launchers, attempting to detect MPI environment...
+[2026-04-16 02:15:57,633] [INFO] [comm.py:728:mpi_discovery] Discovered MPI settings of world_rank=0, local_rank=0, world_size=1, master_addr=134.61.46.189, master_port=29500
+[2026-04-16 02:15:57,633] [INFO] [comm.py:689:init_distributed] Initializing TorchBackend in DeepSpeed with backend nccl
+2026-04-16 02:15:57 - realchords - INFO - Loading model from logs/decoder_only_online_chord/step=11000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-16 02:15:57 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-16 02:15:59 - realchords - INFO - Time taken to load dataset: 1.53 seconds
+2026-04-16 02:15:59 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-16 02:15:59 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (1.6s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 247,676
+   Sampling weights: {'hooktheory': 1.0}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-16 02:15:59 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-16 02:15:59 - realchords - INFO - Time taken to load dataset: 0.04 seconds
+2026-04-16 02:15:59 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-16 02:15:59 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 1,943
+   Sampling weights: {'hooktheory': 1.0}
+Note: 'shuffle' is ignored for train since a sampler is used.
+DecoderSingleAgentActor(
+  (model): DecoderTransformer(
+    (decoder): TransformerWrapper(
+      (token_emb): TokenEmbedding(
+        (emb): Embedding(5902, 512)
+      )
+      (post_emb_norm): Identity()
+      (emb_dropout): Dropout(p=0.0, inplace=False)
+      (project_emb): Identity()
+      (attn_layers): Decoder(
+        (layers): ModuleList(
+          (0): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (1): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (2): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (3): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (4): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (5): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (6): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (7): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (8): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (9): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (10): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (11): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (12): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (13): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (14): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (15): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+        )
+        (layer_integrators): ModuleList(
+          (0-15): 16 x None
+        )
+        (rotary_pos_emb): RotaryEmbedding()
+        (adaptive_mlp): Identity()
+        (final_norm): SimpleRMSNorm()
+        (skip_combines): ModuleList(
+          (0-15): 16 x None
+        )
+      )
+      (to_logits): Linear(in_features=512, out_features=5902, bias=False)
+    )
+  )
+)
+Critic(
+  (model): DecoderTransformer(
+    (decoder): TransformerWrapper(
+      (token_emb): TokenEmbedding(
+        (emb): Embedding(5902, 512)
+      )
+      (post_emb_norm): Identity()
+      (emb_dropout): Dropout(p=0.0, inplace=False)
+      (project_emb): Identity()
+      (attn_layers): Decoder(
+        (layers): ModuleList(
+          (0): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (1): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (2): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (3): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (4): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (5): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (6): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (7): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (8): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (9): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (10): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (11): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (12): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (13): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+          (14): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): Attention(
+              (to_q): Linear(in_features=512, out_features=512, bias=False)
+              (to_k): Linear(in_features=512, out_features=512, bias=False)
+              (to_v): Linear(in_features=512, out_features=512, bias=False)
+              (split_q_heads): Rearrange('b n (h d) -> b h n d', h=8)
+              (split_k_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (split_v_heads): Rearrange('b n (h d) -> b h n d', d=64)
+              (merge_heads): Rearrange('b h n d -> b n (h d)')
+              (attend): Attend(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Linear(in_features=512, out_features=512, bias=False)
+            )
+            (2): Residual()
+          )
+          (15): ModuleList(
+            (0): ModuleList(
+              (0): SimpleRMSNorm()
+              (1-2): 2 x None
+            )
+            (1): FeedForward(
+              (ff): Sequential(
+                (0): GLU(
+                  (act): SiLU()
+                  (proj): Linear(in_features=512, out_features=4096, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=2048, out_features=512, bias=True)
+              )
+            )
+            (2): Residual()
+          )
+        )
+        (layer_integrators): ModuleList(
+          (0-15): 16 x None
+        )
+        (rotary_pos_emb): RotaryEmbedding()
+        (adaptive_mlp): Identity()
+        (final_norm): SimpleRMSNorm()
+        (skip_combines): ModuleList(
+          (0-15): 16 x None
+        )
+      )
+      (to_logits): Linear(in_features=512, out_features=1, bias=False)
+    )
+  )
+)
+2026-04-16 02:16:01 - realchords - INFO - Loading model from logs/enc_dec_base_chord/step=10000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-16 02:16:01 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-16 02:16:02 - realchords - INFO - Time taken to load dataset: 1.49 seconds
+2026-04-16 02:16:02 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-16 02:16:02 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (1.5s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 247,676
+   Sampling weights: {'hooktheory': 1.0}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-16 02:16:02 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-16 02:16:02 - realchords - INFO - Time taken to load dataset: 0.01 seconds
+2026-04-16 02:16:02 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-16 02:16:02 - realchords - INFO - Loaded 1943 items

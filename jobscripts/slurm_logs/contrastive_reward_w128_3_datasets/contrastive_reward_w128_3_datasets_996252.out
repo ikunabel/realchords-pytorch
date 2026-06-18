@@ -1,0 +1,123 @@
+TORCH_EXTENSIONS_DIR=/hpcwork/thes2192/realchords/.cache/torch_extensions
+=== toolchain check ===
+PATH=/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SDL2/2.30.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FriBidi/1.0.15-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/X11/20240607-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/fontconfig/2.15.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/sbin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/freetype/2.13.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Brotli/1.1.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/libpng/1.6.43-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/expat/2.6.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x265/3.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/LAME/3.100-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x264/20240513-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/NASM/2.16.03-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Python/3.12.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenSSL/3/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/XZ/5.4.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SQLite/3.45.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Tcl/8.6.14-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/ncurses/6.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/bzip2/1.0.8-GCCcore-13.3.0/bin:/home/yh522379/.local/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/libfabric/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/intel-compilers/2024.2.0/compiler/2024.2/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/binutils/2.42-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/GCCcore/13.3.0/bin:/usr/local_host/bin:/usr/local_host/sbin:/usr/local_rwth/bin:/usr/local_rwth/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/opt/singularity/bin:/usr/local/bin:/usr/local/sbin:/opt/slurm/current/sbin:/opt/slurm/current/bin
+ffmpeg: /cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin/ffmpeg
+fluidsynth: /home/yh522379/.local/bin/fluidsynth
+ffmpeg version 7.0.2 Copyright (c) 2000-2024 the FFmpeg developers
+FluidSynth runtime version 2.5.3
+audioread backends: [<class 'audioread.rawread.RawAudioFile'>, <class 'audioread.ffdec.FFmpegAudioFile'>]
+=== end toolchain check ===
+=== nvidia-smi (job 996252) ===
+Thu Jun 11 14:41:10 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.211.01             Driver Version: 570.211.01     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100                    On  |   00000000:2C:00.0 Off |                    0 |
+| N/A   43C    P0             71W /  700W |       0MiB /  95830MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+=== end nvidia-smi ===
+=== Loading Segment Weighted Joint Dataset ===
+Datasets: hooktheory, pop909, nottingham
+Weights: [0.6, 0.3, 0.1]
+Split: train
+Augmentation: True
+Segment stride: non-overlapping
+
+Loading hooktheory (weight: 60.0%)...
+2026-06-11 14:42:16 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-11 14:42:18 - realchords - INFO - Time taken to load dataset: 2.07 seconds
+2026-06-11 14:42:18 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:42:18 - realchords - INFO - Loaded 247676 items
+2026-06-11 14:42:18 - realchords - INFO - Building segment index for 247676 songs (window_len=128, stride=128)...
+2026-06-11 14:42:52 - realchords - INFO - Built segment index: 344682 segments from 247676 songs
+  hooktheory: 344,682 items (35.9s)
+Loading pop909 (weight: 30.0%)...
+2026-06-11 14:42:52 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-11 14:42:52 - realchords - INFO - Time taken to load dataset: 0.44 seconds
+2026-06-11 14:42:52 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:42:52 - realchords - INFO - Loaded 9451 items
+2026-06-11 14:42:52 - realchords - INFO - Building segment index for 9451 songs (window_len=128, stride=128)...
+2026-06-11 14:42:58 - realchords - INFO - Built segment index: 84838 segments from 9451 songs
+  pop909: 84,838 items (5.6s)
+Loading nottingham (weight: 10.0%)...
+2026-06-11 14:42:58 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-11 14:42:58 - realchords - INFO - Time taken to load dataset: 0.20 seconds
+2026-06-11 14:42:58 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:42:58 - realchords - INFO - Loaded 10595 items
+2026-06-11 14:42:58 - realchords - INFO - Building segment index for 10595 songs (window_len=128, stride=128)...
+2026-06-11 14:42:59 - realchords - INFO - Built segment index: 21788 segments from 10595 songs
+  nottingham: 21,788 items (1.6s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 451,308
+   Sampling weights: {'hooktheory': 0.6, 'pop909': 0.3, 'nottingham': 0.1}
+=== Loading Segment Weighted Joint Dataset ===
+Datasets: hooktheory, pop909, nottingham
+Weights: [0.6, 0.3, 0.1]
+Split: valid
+Augmentation: True
+Segment stride: non-overlapping
+
+Loading hooktheory (weight: 60.0%)...
+2026-06-11 14:42:59 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-11 14:42:59 - realchords - INFO - Time taken to load dataset: 0.04 seconds
+2026-06-11 14:42:59 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:42:59 - realchords - INFO - Loaded 1943 items
+2026-06-11 14:42:59 - realchords - INFO - Building segment index for 1943 songs (window_len=128, stride=128)...
+2026-06-11 14:43:00 - realchords - INFO - Built segment index: 2697 segments from 1943 songs
+  hooktheory: 2,697 items (0.2s)
+Loading pop909 (weight: 30.0%)...
+2026-06-11 14:43:00 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-11 14:43:00 - realchords - INFO - Time taken to load dataset: 0.09 seconds
+2026-06-11 14:43:00 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:43:00 - realchords - INFO - Loaded 90 items
+2026-06-11 14:43:00 - realchords - INFO - Building segment index for 90 songs (window_len=128, stride=128)...
+2026-06-11 14:43:00 - realchords - INFO - Built segment index: 812 segments from 90 songs
+  pop909: 812 items (0.1s)
+Loading nottingham (weight: 10.0%)...
+2026-06-11 14:43:00 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-11 14:43:00 - realchords - INFO - Time taken to load dataset: 0.05 seconds
+2026-06-11 14:43:00 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-11 14:43:00 - realchords - INFO - Loaded 101 items
+2026-06-11 14:43:00 - realchords - INFO - Building segment index for 101 songs (window_len=128, stride=128)...
+2026-06-11 14:43:00 - realchords - INFO - Built segment index: 200 segments from 101 songs
+  nottingham: 200 items (0.1s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 3,709
+   Sampling weights: {'hooktheory': 0.6, 'pop909': 0.3, 'nottingham': 0.1}
+Note: 'shuffle' is ignored for train since a sampler is used.
+┏━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name  ┃ Type            ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ model │ OptimizedModule │ 54.3 M │ train │     0 │
+└───┴───────┴─────────────────┴────────┴───────┴───────┘
+Trainable params: 54.3 M                                                        
+Non-trainable params: 0                                                         
+Total params: 54.3 M                                                            
+Total estimated model params size (MB): 217                                     
+Modules in train mode: 348                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+Epoch 0/-2 ━━━╸            7900/30000 0:39:00 •       3.47it/s v_num: cx2w      
+                                      1:46:14                  train/loss: 0.996
+                                                               grad_norm: 4.004 
+                                                               val/loss: 2.008  
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mcontrastive_reward_w128_3_datasets[0m at: [34mhttps://wandb.ai/ikunabel/realchords/runs/xqdhcx2w[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_w128_3_datasets/wandb/run-20260611_144319-xqdhcx2w/logs[0m

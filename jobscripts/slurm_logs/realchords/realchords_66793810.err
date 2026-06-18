@@ -1,0 +1,37 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[INFO] Module CUDA/12.8.0 loaded.
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 425, in <module>
+    main(args)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+    return func(*cmd_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 63, in main
+    strategy.setup_distributed()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/deepspeed.py", line 106, in setup_distributed
+    deepspeed.init_distributed(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/deepspeed/comm/comm.py", line 691, in init_distributed
+    cdb = TorchBackend(dist_backend, timeout, init_method, rank, world_size)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/deepspeed/comm/torch.py", line 118, in __init__
+    self.init_process_group(backend, timeout, init_method, rank, world_size)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/deepspeed/comm/torch.py", line 148, in init_process_group
+    torch.distributed.init_process_group(backend,
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/distributed/c10d_logger.py", line 81, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/distributed/c10d_logger.py", line 95, in wrapper
+    func_return = func(*args, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py", line 1757, in init_process_group
+    store, rank, world_size = next(rendezvous_iterator)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/distributed/rendezvous.py", line 278, in _env_rendezvous_handler
+    store = _create_c10d_store(
+            ^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/distributed/rendezvous.py", line 198, in _create_c10d_store
+    return TCPStore(
+           ^^^^^^^^^
+torch.distributed.DistNetworkError: The server socket has failed to listen on any local network address. port: 29500, useIpv6: false, code: -98, name: EADDRINUSE, message: address already in use
+srun: error: n23g0024: task 0: Exited with exit code 1

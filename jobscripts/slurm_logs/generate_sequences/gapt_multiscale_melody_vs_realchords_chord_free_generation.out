@@ -1,0 +1,189 @@
+=== running: gapt_multiscale_melody_vs_realchords_chord_free_generation ===
+[rank: 0] Seed set to 42
+Mode: rl_melody_vs_rl_chord
+Switching mode: False
+Mel source: rl_melody
+Chord source: rl_chord
+2026-06-15 02:10:23 - realchords - INFO - Loading model from /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/step=11000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-06-15 02:10:23 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:29 - realchords - INFO - Time taken to load dataset: 5.98 seconds
+2026-06-15 02:10:29 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:29 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (6.0s)
+Loading wikifonia (weight: 20.0%)...
+2026-06-15 02:10:29 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-06-15 02:10:29 - realchords - INFO - Time taken to load dataset: 0.09 seconds
+2026-06-15 02:10:29 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:29 - realchords - INFO - Loaded 5213 items
+  wikifonia: 5,213 items (0.1s)
+Loading pop909 (weight: 20.0%)...
+2026-06-15 02:10:29 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 1.10 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 9451 items
+  pop909: 9,451 items (1.1s)
+Loading nottingham (weight: 10.0%)...
+2026-06-15 02:10:30 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-15 02:10:30 - realchords - INFO - Time taken to load dataset: 0.12 seconds
+2026-06-15 02:10:30 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:30 - realchords - INFO - Loaded 10595 items
+  nottingham: 10,595 items (0.1s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 272,935
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-06-15 02:10:31 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:31 - realchords - INFO - Time taken to load dataset: 0.05 seconds
+2026-06-15 02:10:31 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:31 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.1s)
+Loading wikifonia (weight: 20.0%)...
+2026-06-15 02:10:31 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-06-15 02:10:31 - realchords - INFO - Time taken to load dataset: 0.00 seconds
+2026-06-15 02:10:31 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:31 - realchords - INFO - Loaded 50 items
+  wikifonia: 50 items (0.0s)
+Loading pop909 (weight: 20.0%)...
+2026-06-15 02:10:31 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-06-15 02:10:31 - realchords - INFO - Time taken to load dataset: 0.00 seconds
+2026-06-15 02:10:31 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:31 - realchords - INFO - Loaded 90 items
+  pop909: 90 items (0.0s)
+Loading nottingham (weight: 10.0%)...
+2026-06-15 02:10:31 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-06-15 02:10:31 - realchords - INFO - Time taken to load dataset: 0.00 seconds
+2026-06-15 02:10:31 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-06-15 02:10:31 - realchords - INFO - Loaded 101 items
+  nottingham: 101 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 2,184
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+Note: 'shuffle' is ignored for train since a sampler is used.
+2026-06-15 02:10:37 - realchords - INFO - Loading model from /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_chord/step=11000.ckpt
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-06-15 02:10:37 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:40 - realchords - INFO - Time taken to load dataset: 2.68 seconds
+2026-06-15 02:10:40 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-06-15 02:10:40 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (2.7s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 247,676
+   Sampling weights: {'hooktheory': 1.0}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-06-15 02:10:40 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:40 - realchords - INFO - Time taken to load dataset: 0.02 seconds
+2026-06-15 02:10:40 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-06-15 02:10:40 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 1,943
+   Sampling weights: {'hooktheory': 1.0}
+Note: 'shuffle' is ignored for train since a sampler is used.
+2026-06-15 02:10:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:42 - realchords - INFO - Time taken to load dataset: 0.05 seconds
+2026-06-15 02:10:42 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/chord_names_augmented.json
+2026-06-15 02:10:42 - realchords - INFO - Loaded 1943 items
+2026-06-15 02:10:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-06-15 02:10:42 - realchords - INFO - Time taken to load dataset: 0.01 seconds
+2026-06-15 02:10:42 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/chord_names_augmented.json
+2026-06-15 02:10:42 - realchords - INFO - Loaded 1943 items
+Generating with model vs model
+  0%|          | 0/64 [00:00<?, ?it/s]  0%|          | 0/64 [00:48<?, ?it/s]
+Adjusted target_seq_len to 513 to ensure odd total length
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/generate_sequences.py", line 401, in <module>
+    main()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/generate_sequences.py", line 359, in main
+    generated_all = handle_model_vs_model_generation(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/experiment_utils_model_model.py", line 362, in handle_model_vs_model_generation
+    generated_seq_1, generated_seq_2 = generate_from_marl(
+                                       ^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/experiment_utils_model_model.py", line 77, in generate_from_marl
+    generated_seq_1, generated_seq_2 = generate_marl(
+                                       ^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/autoregressive_wrapper.py", line 32, in inner
+    out = fn(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/marl_interaction.py", line 178, in generate_marl
+    logits_2, new_cache_2 = model_2(
+                            ^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/model/gen_model.py", line 84, in forward
+    return self.decoder(x, mask=mask, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/x_transformers.py", line 3008, in forward
+    attended, intermediates = self.attn_layers(x, mask = mask, mems = mems, mem_masks = mem_masks, cache = cache, return_hiddens = True, seq_start_pos = seq_start_pos, **kwargs)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/x_transformers.py", line 2520, in forward
+    out, inter = block(x, mask = mask, context_mask = self_attn_kv_mask, attn_mask = attn_mask, rel_pos = self.rel_pos, pos = pos, rotary_pos_emb = rotary_pos_emb, prev_attn = prev_attn, cache = next(iter_attn_cache, None), mem = layer_mem, mem_mask = layer_mem_mask, attn_bias = attn_bias, value_residual = maybe_self_attn_value_residual, return_intermediates = True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/x_transformers.py", line 1670, in forward
+    k = apply_rotary_pos_emb(k, freqs, k_xpos_scale)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/torch/amp/autocast_mode.py", line 44, in decorate_autocast
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/x_transformers.py", line 712, in apply_rotary_pos_emb
+    t = (t * freqs.cos() * scale) + (rotate_half(t) * freqs.sin() * scale)
+         ~~~~~~~~~~~~~~~~^~~~~~~
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 30.00 MiB. GPU 0 has a total capacity of 93.10 GiB of which 22.88 MiB is free. Process 214607 has 14.33 GiB memory in use. Process 214587 has 7.72 GiB memory in use. Process 214627 has 5.87 GiB memory in use. Process 214602 has 5.34 GiB memory in use. Process 214621 has 4.94 GiB memory in use. Including non-PyTorch memory, this process has 4.21 GiB memory in use. Process 214637 has 10.29 GiB memory in use. Process 214642 has 4.01 GiB memory in use. Process 214592 has 7.84 GiB memory in use. Process 214582 has 13.50 GiB memory in use. Process 214612 has 3.69 GiB memory in use. Process 214645 has 6.12 GiB memory in use. Process 214617 has 5.14 GiB memory in use. Of the allocated memory 3.46 GiB is allocated by PyTorch, and 94.80 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

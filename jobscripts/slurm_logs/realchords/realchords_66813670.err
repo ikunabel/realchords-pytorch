@@ -1,0 +1,6 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[INFO] Module CUDA/12.8.0 loaded.
+srun: Job step aborted: Waiting up to 92 seconds for job step to finish.
+[2026-04-16T12:12:35.721] error: *** JOB 66813670 ON w23g0005 CANCELLED AT 2026-04-16T12:12:35 DUE to SIGNAL Terminated ***
+[2026-04-16T12:12:35.721] error: *** STEP 66813670.0 ON w23g0005 CANCELLED AT 2026-04-16T12:12:35 DUE to SIGNAL Terminated ***

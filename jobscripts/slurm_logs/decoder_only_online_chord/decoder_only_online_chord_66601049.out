@@ -1,0 +1,123 @@
+=== toolchain check ===
+PATH=/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SDL2/2.30.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FriBidi/1.0.15-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/X11/20240607-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/fontconfig/2.15.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/sbin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/freetype/2.13.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Brotli/1.1.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/libpng/1.6.43-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/expat/2.6.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x265/3.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/LAME/3.100-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x264/20240513-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/NASM/2.16.03-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Python/3.12.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenSSL/3/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/XZ/5.4.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SQLite/3.45.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Tcl/8.6.14-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/ncurses/6.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/bzip2/1.0.8-GCCcore-13.3.0/bin:/home/yh522379/.local/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/libfabric/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/intel-compilers/2024.2.0/compiler/2024.2/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/binutils/2.42-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/GCCcore/13.3.0/bin:/usr/local_host/bin:/usr/local_host/sbin:/usr/local_rwth/bin:/usr/local_rwth/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/opt/singularity/bin:/usr/local/bin:/usr/local/sbin:/opt/slurm/current/sbin:/opt/slurm/current/bin
+ffmpeg: /cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin/ffmpeg
+fluidsynth: /home/yh522379/.local/bin/fluidsynth
+ffmpeg version 7.0.2 Copyright (c) 2000-2024 the FFmpeg developers
+FluidSynth runtime version 2.5.3
+audioread backends: [<class 'audioread.rawread.RawAudioFile'>, <class 'audioread.ffdec.FFmpegAudioFile'>]
+=== end toolchain check ===
+=== nvidia-smi (job 66601049) ===
+Thu Apr  9 22:25:27 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.211.01             Driver Version: 570.211.01     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100                    On  |   00000000:AD:00.0 Off |                    0 |
+| N/A   39C    P0             70W /  700W |       0MiB /  95830MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+=== end nvidia-smi ===
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-09 22:26:32 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-09 22:26:33 - realchords - INFO - Time taken to load dataset: 1.46 seconds
+2026-04-09 22:26:33 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-04-09 22:26:33 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (1.5s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 247,676
+   Sampling weights: {'hooktheory': 1.0}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory
+Weights: [1.0]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 100.0%)...
+2026-04-09 22:26:33 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-09 22:26:33 - realchords - INFO - Time taken to load dataset: 0.04 seconds
+2026-04-09 22:26:33 - realchords - INFO - Loaded 2821 chord names from /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory/chord_names_augmented.json
+2026-04-09 22:26:33 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 1,943
+   Sampling weights: {'hooktheory': 1.0}
+Note: 'shuffle' is ignored for train since a sampler is used.
+┏━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name  ┃ Type            ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ model │ OptimizedModule │ 39.6 M │ train │     0 │
+└───┴───────┴─────────────────┴────────┴───────┴───────┘
+Trainable params: 39.6 M                                                        
+Non-trainable params: 0                                                         
+Total params: 39.6 M                                                            
+Total estimated model params size (MB): 158                                     
+Modules in train mode: 224                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+targets shape: torch.Size([64, 513])
+Time to generate: 9.55668568611145
+2026-04-09 22:27:26 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Abm9/B -> Bm9(add6)/Gb
+2026-04-09 22:27:26 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Cmmaj7/Eb -> Gbped(#9)(add3)
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: C9 -> Cm7b5(addb2)/A
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Em9 -> G5(addb2)/D
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Bb+ -> Dped(addb7)
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Db5(addb2)(#11)/D -> Dsus(add7)
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Invalid chord frame: NOTE_ON_0
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Gbm(addb2) -> Db(#9)
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Gbsus7(b13)/B -> B(addb2)
+2026-04-09 22:27:27 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Dbsus7(b13) -> Bbm11/Db
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Em9/D -> Bbped(add#5)(add2)
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Fsus2(#11) -> Db(b13)
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Dbsus(addb2)/D -> C5
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Aped(add2) -> Fsus2
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Bmaj9/Gb -> E(add2)(#11)
+2026-04-09 22:27:28 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Abmaj7(#9)(#11) -> Ebmaj9(#11)
+targets shape: torch.Size([64, 513])
+Time to generate: 9.312579870223999
+2026-04-09 22:39:02 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: B -> B(add2)
+targets shape: torch.Size([64, 513])
+Time to generate: 9.352511405944824
+targets shape: torch.Size([64, 513])
+Time to generate: 9.346205949783325
+2026-04-09 23:01:22 - realchords - ERROR - Error converting to MIDI: Note off without note on: 64 -> 88
+2026-04-09 23:01:24 - realchords - ERROR - Error converting to MIDI: Note off without note on: 76 -> 64
+targets shape: torch.Size([64, 513])
+Time to generate: 8.648531913757324
+2026-04-09 23:12:31 - realchords - ERROR - Error converting to MIDI: Note off without note on: 41 -> 53
+2026-04-09 23:12:32 - realchords - ERROR - Error converting to MIDI: Invalid chord frame: NOTE_71
+targets shape: torch.Size([64, 513])
+Time to generate: 9.371630668640137
+2026-04-09 23:23:43 - realchords - ERROR - Error converting to MIDI: Note off without note on: 52 -> 57
+targets shape: torch.Size([64, 513])
+Time to generate: 8.855870962142944
+2026-04-09 23:34:54 - realchords - ERROR - Error converting to MIDI: Note off without note on: 76 -> 73
+Epoch 0/-2 ━━━━━━━━━━━━━━━ 30000/30000 1:07:06 •       7.78it/s v_num: lk07     
+                                       0:00:00                  train/loss:     
+                                                                0.177 grad_norm:
+                                                                0.440 val/loss: 
+                                                                0.687 val/acc:  
+                                                                0.581           
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mdecoder_only_online_chord[0m at: [34mhttps://wandb.ai/ikunabel/realchords/runs/41mplk07[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_chord/wandb/run-20260409_222651-41mplk07/logs[0m

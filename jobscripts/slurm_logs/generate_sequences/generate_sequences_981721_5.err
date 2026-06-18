@@ -1,0 +1,22 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+usage: generate_sequences.py [-h]
+                             [--rl_melody_model_path RL_MELODY_MODEL_PATH]
+                             [--rl_chord_model_path RL_CHORD_MODEL_PATH]
+                             [--mle_melody_model_path MLE_MELODY_MODEL_PATH]
+                             [--mle_chord_model_path MLE_CHORD_MODEL_PATH]
+                             --mode MODE --save_dir SAVE_DIR
+                             [--batch_size BATCH_SIZE]
+                             [--num_batches NUM_BATCHES]
+                             [--target_seq_len TARGET_SEQ_LEN]
+                             [--prompt_frames PROMPT_STEPS]
+                             [--rl_melody_model_paths [RL_MELODY_MODEL_PATHS ...]]
+                             [--mle_melody_model_paths [MLE_MELODY_MODEL_PATHS ...]]
+                             [--rl_chord_model_paths [RL_CHORD_MODEL_PATHS ...]]
+                             [--mle_chord_model_paths [MLE_CHORD_MODEL_PATHS ...]]
+                             [--agent_switch_frames [AGENT_SWITCH_STEPS ...]]
+                             [--seed SEED]
+                             [--data_perturbation {none,multiple_transpose,single_transpose_6}]
+                             [--dataset_name {hooktheory,pop909,nottingham,wikifonia}]
+                             [--dataset_split {train,valid,test,all}]
+generate_sequences.py: error: the following arguments are required: --save_dir

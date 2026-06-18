@@ -1,0 +1,77 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+Using bfloat16 Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+wandb: WARNING The anonymous setting has no effect and will be removed in a future version.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run kft7jcuz
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/wandb/run-20260424_203230-kft7jcuz
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run decoder_only_online_melody_4_datasets
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/kft7jcuz
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/callbacks/model_checkpoint.py:881: Checkpoint directory /rwthfs/rz/cluster/hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/model_summary/model_summary.py:242: Precision bf16-mixed is not supported by the model summary.  Estimated model size in MB will not be accurate. Using 32 bits instead.
+SLURM auto-requeueing enabled. Setting signal handlers.
+W0424 20:32:38.031000 417900 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 20:32:39.506000 417900 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 20:32:40.754000 417900 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [2/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 64. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_decoder_only.py", line 41, in <module>
+    main(args)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+    return func(*cmd_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_decoder_only.py", line 34, in main
+    trainer.train()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/base_trainer.py", line 146, in train
+    self.trainer.fit(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 584, in fit
+    call._call_and_handle_interrupt(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 630, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 1079, in _run
+    results = self._run_stage()
+              ^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 1121, in _run_stage
+    self._run_sanity_check()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 1150, in _run_sanity_check
+    val_loop.run()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/utilities.py", line 179, in _decorator
+    return loop_run(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 146, in run
+    self._evaluation_step(batch, batch_idx, dataloader_idx, dataloader_iter)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 441, in _evaluation_step
+    output = call._call_strategy_hook(trainer, hook_name, *step_args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/call.py", line 329, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/strategies/strategy.py", line 412, in validation_step
+    return self.lightning_module.validation_step(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/lit_module/decoder_only.py", line 124, in validation_step
+    self.sample_and_log(targets, batch["song_url"])
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/lit_module/decoder_only.py", line 185, in sample_and_log
+    self.log_midi(midi_gt, suffix=f"gt_{i}")
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/base_trainer.py", line 213, in log_midi
+    payload = {f"image/{suffix}": wandb.Image(image)}
+                                  ^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 280, in __init__
+    self._initialize_from_data(data_or_path, mode, file_type, normalize)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/wandb/sdk/data_types/image.py", line 431, in _initialize_from_data
+    if data.ndim > 2:  # type: ignore [union-attr]
+       ^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'ndim'
+srun: error: n23g0019: task 0: Exited with exit code 1

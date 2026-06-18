@@ -1,0 +1,37 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+Using bfloat16 Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+wandb: WARNING The anonymous setting has no effect and will be removed in a future version.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 9u8db4zy
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/wandb/run-20260426_224910-9u8db4zy
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run decoder_only_online_melody_4_datasets
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/9u8db4zy
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/callbacks/model_checkpoint.py:881: Checkpoint directory /rwthfs/rz/cluster/hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/model_summary/model_summary.py:242: Precision bf16-mixed is not supported by the model summary.  Estimated model size in MB will not be accurate. Using 32 bits instead.
+SLURM auto-requeueing enabled. Setting signal handlers.
+W0426 22:49:14.940000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:49:16.208000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:49:17.456000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [2/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 64. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+W0426 22:49:40.339000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:49:40.475000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:52:01.558000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:52:01.729000 252126 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0426 22:52:02.670000 252126 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s77, s31)
+W0426 22:52:04.717000 252126 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [7/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
+W0426 22:52:04.828000 252126 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [8/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 8. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+wandb: WARNING Artifact "run-9u8db4zy-song_url" already exists with the same content. No new version will be created.
+srun: Job step aborted: Waiting up to 92 seconds for job step to finish.
+[2026-04-26T23:03:00.290] error: *** JOB 31790 ON n23g0004 CANCELLED AT 2026-04-26T23:03:00 DUE TO TIME LIMIT ***
+[2026-04-26T23:03:00.290] error: *** STEP 31790.0 ON n23g0004 CANCELLED AT 2026-04-26T23:03:00 DUE TO TIME LIMIT ***

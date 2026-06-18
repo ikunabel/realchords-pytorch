@@ -1,0 +1,126 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+Using bfloat16 Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+wandb: WARNING The anonymous setting has no effect and will be removed in a future version.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 4eka2yw7
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/wandb/run-20260424_032501-4eka2yw7
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run decoder_only_online_melody_4_datasets
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/4eka2yw7
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/callbacks/model_checkpoint.py:881: Checkpoint directory /rwthfs/rz/cluster/hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/model_summary/model_summary.py:242: Precision bf16-mixed is not supported by the model summary.  Estimated model size in MB will not be accurate. Using 32 bits instead.
+SLURM auto-requeueing enabled. Setting signal handlers.
+W0424 03:25:08.050000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:25:09.696000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:25:11.219000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [2/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 64. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+W0424 03:25:49.180000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:25:49.363000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:28:13.597000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:28:13.810000 463130 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0424 03:28:14.804000 463130 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s77, s31)
+W0424 03:28:17.073000 463130 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [7/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
+W0424 03:28:17.189000 463130 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [8/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 8. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_decoder_only.py", line 41, in <module>
+    main(args)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+    return func(*cmd_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_decoder_only.py", line 34, in main
+    trainer.train()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/base_trainer.py", line 146, in train
+    self.trainer.fit(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 584, in fit
+    call._call_and_handle_interrupt(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 630, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 1079, in _run
+    results = self._run_stage()
+              ^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/trainer.py", line 1123, in _run_stage
+    self.fit_loop.run()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/fit_loop.py", line 217, in run
+    self.advance()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/fit_loop.py", line 465, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/training_epoch_loop.py", line 154, in run
+    self.on_advance_end(data_fetcher)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/training_epoch_loop.py", line 406, in on_advance_end
+    self.val_loop.run()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/utilities.py", line 179, in _decorator
+    return loop_run(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 146, in run
+    self._evaluation_step(batch, batch_idx, dataloader_idx, dataloader_iter)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 441, in _evaluation_step
+    output = call._call_strategy_hook(trainer, hook_name, *step_args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/trainer/call.py", line 329, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/strategies/strategy.py", line 412, in validation_step
+    return self.lightning_module.validation_step(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/lit_module/decoder_only.py", line 122, in validation_step
+    self.sample_and_log(targets, batch["song_url"])
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/lit_module/decoder_only.py", line 183, in sample_and_log
+    self.log_midi(midi_gt, suffix=f"gt_{i}")
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/base_trainer.py", line 211, in log_midi
+    audio, image = midi_to_audio_image(midi)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/log_utils.py", line 84, in midi_to_audio_image
+    image = midi_to_image(midi)
+            ^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/log_utils.py", line 74, in midi_to_image
+    return bokeh_fig_to_image(fig)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/utils/log_utils.py", line 62, in bokeh_fig_to_image
+    export_png(fig, filename=temp_filename)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/bokeh/io/export.py", line 111, in export_png
+    image = get_screenshot_as_png(obj, width=width, height=height, driver=webdriver, timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/bokeh/io/export.py", line 237, in get_screenshot_as_png
+    web_driver.maximize_window()
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/selenium/webdriver/remote/webdriver.py", line 589, in maximize_window
+    self.execute(command, None)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/selenium/webdriver/remote/webdriver.py", line 446, in execute
+    self.error_handler.check_response(response)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/selenium/webdriver/remote/errorhandler.py", line 232, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.InvalidSessionIdException: Message: invalid session id: session deleted as the browser has closed the connection
+from disconnected: not connected to DevTools
+  (Session info: chrome=148.0.7778.56); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#invalidsessionidexception
+Stacktrace:
+#0 0x557e23a9531a <unknown>
+#1 0x557e2348db39 <unknown>
+#2 0x557e234738b3 <unknown>
+#3 0x557e2349ce56 <unknown>
+#4 0x557e23510010 <unknown>
+#5 0x557e23529b88 <unknown>
+#6 0x557e234d573f <unknown>
+#7 0x557e234d6501 <unknown>
+#8 0x557e23a587bb <unknown>
+#9 0x557e23a5b6bd <unknown>
+#10 0x557e23a45608 <unknown>
+#11 0x557e23a5c250 <unknown>
+#12 0x557e23a2c030 <unknown>
+#13 0x557e23a81c78 <unknown>
+#14 0x557e23a81e15 <unknown>
+#15 0x557e23a93d4e <unknown>
+#16 0x14af5f08a19a start_thread
+
+srun: error: r23g0003: task 0: Exited with exit code 1

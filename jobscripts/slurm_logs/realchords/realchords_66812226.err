@@ -1,0 +1,6 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[INFO] Module CUDA/12.8.0 loaded.
+srun: Job step aborted: Waiting up to 92 seconds for job step to finish.
+[2026-04-16T11:04:27.634] error: *** JOB 66812226 ON n23g0003 CANCELLED AT 2026-04-16T11:04:27 DUE TO TIME LIMIT ***
+[2026-04-16T11:04:27.635] error: *** STEP 66812226.0 ON n23g0003 CANCELLED AT 2026-04-16T11:04:27 DUE TO TIME LIMIT ***

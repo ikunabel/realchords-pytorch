@@ -1,0 +1,14 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+Traceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_contrastive_reward_rhythm.py", line 40, in <module>
+    args = argbind.parse_args(group=GROUP)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 472, in parse_args
+    loaded_args = load_args(load_args_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 238, in load_args
+    with open(input_path_or_stream, 'r') as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'configs/reward_models/contrastive_reward_no_augmentation_rhythm_2_3_datasets.yml'
+srun: error: n23g0023: task 0: Exited with exit code 1

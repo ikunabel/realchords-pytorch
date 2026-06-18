@@ -89,7 +89,6 @@ checkpoints/
 .DS_Store
 
 # Cluster related stuff
-jobscripts/
 core.*
 tmp/
 

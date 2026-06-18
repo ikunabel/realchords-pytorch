@@ -1,0 +1,115 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[INFO] Module CUDA/12.8.0 loaded.
+[rank0]:W0610 13:43:54.632000 54823 .venv/lib/python3.12/site-packages/torch/utils/cpp_extension.py:2425] TORCH_CUDA_ARCH_LIST is not set, all archs for visible cards are included for compilation. 
+[rank0]:W0610 13:43:54.632000 54823 .venv/lib/python3.12/site-packages/torch/utils/cpp_extension.py:2425] If this is not desired, please set os.environ['TORCH_CUDA_ARCH_LIST'] to specific architectures.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: setting up run 3174abx2
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/realchords_melody/wandb/run-20260610_134434-3174abx2
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run realchords_melody
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/3174abx2
+Training:   0%|          | 0/1000 [00:00<?, ?it/s]
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A
+make_experience: 100%|██████████| 1/1 [00:07<00:00,  7.40s/it][Amake_experience: 100%|██████████| 1/1 [00:07<00:00,  7.40s/it]
+
+Train epoch [1/1]:   0%|          | 0/8 [00:00<?, ?it/s][A
+Train epoch [1/1]:   0%|          | 0/8 [00:03<?, ?it/s, pg=0.0654, rm=-10.3, ret=-10.4, glen=145, tlen=290, kl=0.299, act_lr=1.25e-8, cri=4.34, vals=-0.0825, cri_lr=2.25e-7][A
+Train epoch [1/1]:  12%|█▎        | 1/8 [00:03<00:21,  3.12s/it, pg=0.0654, rm=-10.3, ret=-10.4, glen=145, tlen=290, kl=0.299, act_lr=1.25e-8, cri=4.34, vals=-0.0825, cri_lr=2.25e-7][A
+Train epoch [1/1]:  12%|█▎        | 1/8 [00:03<00:21,  3.12s/it, pg=0.0398, rm=-11.9, ret=-12, glen=164, tlen=329, kl=0.354, act_lr=1.88e-8, cri=4.69, vals=-0.0801, cri_lr=3.38e-7]  [A
+Train epoch [1/1]:  25%|██▌       | 2/8 [00:03<00:08,  1.41s/it, pg=0.0398, rm=-11.9, ret=-12, glen=164, tlen=329, kl=0.354, act_lr=1.88e-8, cri=4.69, vals=-0.0801, cri_lr=3.38e-7][A
+Train epoch [1/1]:  25%|██▌       | 2/8 [00:03<00:08,  1.41s/it, pg=0.031, rm=-12.5, ret=-12.6, glen=176, tlen=354, kl=0.336, act_lr=2.5e-8, cri=4.53, vals=-0.139, cri_lr=4.5e-7]  [A
+Train epoch [1/1]:  38%|███▊      | 3/8 [00:03<00:04,  1.16it/s, pg=0.031, rm=-12.5, ret=-12.6, glen=176, tlen=354, kl=0.336, act_lr=2.5e-8, cri=4.53, vals=-0.139, cri_lr=4.5e-7][A
+Train epoch [1/1]:  38%|███▊      | 3/8 [00:03<00:04,  1.16it/s, pg=0.0293, rm=-12.6, ret=-12.7, glen=176, tlen=353, kl=0.408, act_lr=3.12e-8, cri=5, vals=-0.0437, cri_lr=5.63e-7][A
+Train epoch [1/1]:  50%|█████     | 4/8 [00:03<00:02,  1.65it/s, pg=0.0293, rm=-12.6, ret=-12.7, glen=176, tlen=353, kl=0.408, act_lr=3.12e-8, cri=5, vals=-0.0437, cri_lr=5.63e-7][A
+Train epoch [1/1]:  50%|█████     | 4/8 [00:03<00:02,  1.65it/s, pg=0.0148, rm=-11.3, ret=-11.3, glen=168, tlen=338, kl=0.283, act_lr=3.75e-8, cri=4.03, vals=-0.0525, cri_lr=6.75e-7][A
+Train epoch [1/1]:  62%|██████▎   | 5/8 [00:03<00:01,  2.15it/s, pg=0.0148, rm=-11.3, ret=-11.3, glen=168, tlen=338, kl=0.283, act_lr=3.75e-8, cri=4.03, vals=-0.0525, cri_lr=6.75e-7][A
+Train epoch [1/1]:  62%|██████▎   | 5/8 [00:04<00:01,  2.15it/s, pg=-0.0188, rm=-11.8, ret=-11.9, glen=183, tlen=367, kl=0.344, act_lr=4.37e-8, cri=3.98, vals=-0.184, cri_lr=7.88e-7][A
+Train epoch [1/1]:  75%|███████▌  | 6/8 [00:04<00:00,  2.64it/s, pg=-0.0188, rm=-11.8, ret=-11.9, glen=183, tlen=367, kl=0.344, act_lr=4.37e-8, cri=3.98, vals=-0.184, cri_lr=7.88e-7][A
+Train epoch [1/1]:  75%|███████▌  | 6/8 [00:04<00:00,  2.64it/s, pg=0.0527, rm=-11.8, ret=-11.9, glen=164, tlen=329, kl=0.329, act_lr=5e-8, cri=4.78, vals=-0.0601, cri_lr=9e-7]      [A
+Train epoch [1/1]:  88%|████████▊ | 7/8 [00:04<00:00,  3.08it/s, pg=0.0527, rm=-11.8, ret=-11.9, glen=164, tlen=329, kl=0.329, act_lr=5e-8, cri=4.78, vals=-0.0601, cri_lr=9e-7][A
+Train epoch [1/1]:  88%|████████▊ | 7/8 [00:04<00:00,  3.08it/s, pg=0.0259, rm=-12.1, ret=-12.2, glen=168, tlen=337, kl=0.314, act_lr=5.62e-8, cri=4.56, vals=-0.0654, cri_lr=1.01e-6][A
+Train epoch [1/1]: 100%|██████████| 8/8 [00:04<00:00,  3.46it/s, pg=0.0259, rm=-12.1, ret=-12.2, glen=168, tlen=337, kl=0.314, act_lr=5.62e-8, cri=4.56, vals=-0.0654, cri_lr=1.01e-6][ATrain epoch [1/1]: 100%|██████████| 8/8 [00:04<00:00,  1.73it/s, pg=0.0259, rm=-12.1, ret=-12.2, glen=168, tlen=337, kl=0.314, act_lr=5.62e-8, cri=4.56, vals=-0.0654, cri_lr=1.01e-6]
+Training:   0%|          | 0/1000 [00:25<?, ?it/s, policy_loss=0.03, actor_lr=3.44e-8, entropy=0.599, counterpart_prediction_loss=0, counterpart_prediction_acc=0, grad_norm=tensor(0.5352, dtype=torch.bfloat16), kl=0.333, reward=-11.8, response_length=168, total_length=337, reward_contrastive_reward_0=0.487, reward_contrastive_reward_1=0.444, reward_discriminative_reward_0=0.37, reward_discriminative_reward_1=0.362, reward_contrastive_reward_rhythm_0=0.379, reward_contrastive_reward_rhythm_1=0.311, reward_discriminative_reward_rhythm_0=0.115, reward_discriminative_reward_rhythm_1=0.188, num_early_stop_tokens=27, reward_early_stop_penalty=-2.7, invalid_ratio=1, reward_invalid_output_penalty=-10, num_silence_tokens=7.79, reward_silence_penalty=-0.756, num_long_note_tokens=10.7, reward_long_note_penalty=-1.07, num_repetitive_generations=1, reward_repetition_penalty=-1, return=-11.9, critic_loss=4.49, values=-0.0883, critic_lr=6.19e-7]
+Eval at step 1:   0%|          | 0/4 [00:00<?, ?it/s][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:02<00:00,  2.42s/it][A[Amake_experience: 100%|██████████| 1/1 [00:02<00:00,  2.43s/it]
+
+Eval at step 1:  25%|██▌       | 1/4 [00:09<00:29,  9.74s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:02<00:00,  2.42s/it][A[Amake_experience: 100%|██████████| 1/1 [00:02<00:00,  2.42s/it]
+
+Eval at step 1:  50%|█████     | 2/4 [00:17<00:17,  8.73s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:02<00:00,  2.41s/it][A[Amake_experience: 100%|██████████| 1/1 [00:02<00:00,  2.41s/it]
+
+Eval at step 1:  75%|███████▌  | 3/4 [00:25<00:08,  8.40s/it][A
+
+make_experience:   0%|          | 0/1 [00:00<?, ?it/s][A[A
+
+make_experience: 100%|██████████| 1/1 [00:02<00:00,  2.41s/it][A[Amake_experience: 100%|██████████| 1/1 [00:02<00:00,  2.41s/it]
+
+Eval at step 1: 100%|██████████| 4/4 [00:33<00:00,  8.25s/it][ATraceback (most recent call last):
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 425, in <module>
+    main(args)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+    return func(*cmd_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 407, in main
+    trainer.fit(
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 592, in fit
+    self.save_logs_and_checkpoints(args, steps, pbar, status, client_states)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 286, in save_logs_and_checkpoints
+    self.evaluate(self.eval_dataloader, global_step)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 248, in evaluate
+    self.log_eval(experience_to_log, batch_to_log, info_to_log, global_step)
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 719, in log_eval
+    midi_gt = self.output_to_midi(target)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 771, in output_to_midi
+    midi = self.tokenizer.decode_to_midi(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/dataset/hooktheory_tokenizer.py", line 596, in decode_to_midi
+    chord_annotations = self.decode_chord_frames(chord_frames)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/dataset/hooktheory_tokenizer.py", line 485, in decode_chord_frames
+    raise ValueError(f"Invalid chord frame: {frame_name}")
+ValueError: Invalid chord frame: NOTE_ON_63
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 425, in <module>
+[rank0]:     main(args)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/argbind/argbind.py", line 159, in cmd_func
+[rank0]:     return func(*cmd_args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py", line 407, in main
+[rank0]:     trainer.fit(
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 592, in fit
+[rank0]:     self.save_logs_and_checkpoints(args, steps, pbar, status, client_states)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 286, in save_logs_and_checkpoints
+[rank0]:     self.evaluate(self.eval_dataloader, global_step)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 248, in evaluate
+[rank0]:     self.log_eval(experience_to_log, batch_to_log, info_to_log, global_step)
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 719, in log_eval
+[rank0]:     midi_gt = self.output_to_midi(target)
+[rank0]:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/rl/rl_trainer.py", line 771, in output_to_midi
+[rank0]:     midi = self.tokenizer.decode_to_midi(
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/dataset/hooktheory_tokenizer.py", line 596, in decode_to_midi
+[rank0]:     chord_annotations = self.decode_chord_frames(chord_frames)
+[rank0]:                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/realchords/dataset/hooktheory_tokenizer.py", line 485, in decode_chord_frames
+[rank0]:     raise ValueError(f"Invalid chord frame: {frame_name}")
+[rank0]: ValueError: Invalid chord frame: NOTE_ON_63
+[rank0]:[W610 13:45:41.831481960 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+srun: error: w23g0006: task 0: Exited with exit code 1

@@ -1,0 +1,168 @@
+TORCH_EXTENSIONS_DIR=/hpcwork/thes2192/realchords/.cache/torch_extensions
+=== toolchain check ===
+PATH=/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SDL2/2.30.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FriBidi/1.0.15-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/X11/20240607-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/fontconfig/2.15.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/sbin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/util-linux/2.40-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/freetype/2.13.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Brotli/1.1.0-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/libpng/1.6.43-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/expat/2.6.2-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x265/3.6-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/LAME/3.100-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/x264/20240513-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/NASM/2.16.03-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Python/3.12.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/OpenSSL/3/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/XZ/5.4.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/SQLite/3.45.3-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/Tcl/8.6.14-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/ncurses/6.5-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/bzip2/1.0.8-GCCcore-13.3.0/bin:/home/yh522379/.local/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/libfabric/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/impi/2021.13.0-intel-compilers-2024.2.0/mpi/2021.13/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/intel-compilers/2024.2.0/compiler/2024.2/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/binutils/2.42-GCCcore-13.3.0/bin:/cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/GCCcore/13.3.0/bin:/usr/local_host/bin:/usr/local_host/sbin:/usr/local_rwth/bin:/usr/local_rwth/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/opt/singularity/bin:/usr/local/bin:/usr/local/sbin:/opt/slurm/current/sbin:/opt/slurm/current/bin
+ffmpeg: /cvmfs/software.hpc.rwth.de/Linux/RH9/x86_64/intel/sapphirerapids/software/FFmpeg/7.0.2-GCCcore-13.3.0/bin/ffmpeg
+fluidsynth: /home/yh522379/.local/bin/fluidsynth
+ffmpeg version 7.0.2 Copyright (c) 2000-2024 the FFmpeg developers
+FluidSynth runtime version 2.5.3
+audioread backends: [<class 'audioread.rawread.RawAudioFile'>, <class 'audioread.ffdec.FFmpegAudioFile'>]
+=== end toolchain check ===
+=== nvidia-smi (job 66996440) ===
+Fri Apr 24 03:25:43 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.211.01             Driver Version: 570.211.01     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100                    On  |   00000000:9D:00.0 Off |                    0 |
+| N/A   35C    P0             71W /  700W |       0MiB /  95830MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+=== end nvidia-smi ===
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: train
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-04-24 03:26:40 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-24 03:26:41 - realchords - INFO - Time taken to load dataset: 1.42 seconds
+2026-04-24 03:26:41 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:41 - realchords - INFO - Loaded 247676 items
+  hooktheory: 247,676 items (1.4s)
+Loading wikifonia (weight: 20.0%)...
+2026-04-24 03:26:41 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-04-24 03:26:41 - realchords - INFO - Time taken to load dataset: 0.05 seconds
+2026-04-24 03:26:41 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:41 - realchords - INFO - Loaded 5213 items
+  wikifonia: 5,213 items (0.1s)
+Loading pop909 (weight: 20.0%)...
+2026-04-24 03:26:41 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.32 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 9451 items
+  pop909: 9,451 items (0.3s)
+Loading nottingham (weight: 10.0%)...
+2026-04-24 03:26:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.09 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 10595 items
+  nottingham: 10,595 items (0.1s)
+Using RepeatableWeightedSampler for training split.
+
+Weighted joint dataset created:
+   Total items: 272,935
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+=== Loading Weighted Joint Dataset ===
+Datasets: hooktheory, wikifonia, pop909, nottingham
+Weights: [0.5, 0.2, 0.2, 0.1]
+Split: valid
+Augmentation: True
+
+Loading hooktheory (weight: 50.0%)...
+2026-04-24 03:26:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/hooktheory
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.04 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 1943 items
+  hooktheory: 1,943 items (0.0s)
+Loading wikifonia (weight: 20.0%)...
+2026-04-24 03:26:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/wikifonia
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.01 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 50 items
+  wikifonia: 50 items (0.0s)
+Loading pop909 (weight: 20.0%)...
+2026-04-24 03:26:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/pop909
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.03 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 90 items
+  pop909: 90 items (0.0s)
+Loading nottingham (weight: 10.0%)...
+2026-04-24 03:26:42 - realchords - INFO - Data cache dir: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/data/cache/nottingham
+2026-04-24 03:26:42 - realchords - INFO - Time taken to load dataset: 0.02 seconds
+2026-04-24 03:26:42 - realchords - INFO - Loaded 2821 chord names from data/cache/chord_names_augmented.json
+2026-04-24 03:26:42 - realchords - INFO - Loaded 101 items
+  nottingham: 101 items (0.0s)
+Using deterministic weighted interleaving for eval (no sampler).
+
+Weighted joint dataset created:
+   Total items: 2,184
+   Sampling weights: {'hooktheory': 0.5, 'wikifonia': 0.2, 'pop909': 0.2, 'nottingham': 0.1}
+Note: 'shuffle' is ignored for train since a sampler is used.
+┏━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃   ┃ Name  ┃ Type            ┃ Params ┃ Mode  ┃ FLOPs ┃
+┡━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│ 0 │ model │ OptimizedModule │ 84.7 M │ train │     0 │
+└───┴───────┴─────────────────┴────────┴───────┴───────┘
+Trainable params: 84.7 M                                                        
+Non-trainable params: 0                                                         
+Total params: 84.7 M                                                            
+Total estimated model params size (MB): 338                                     
+Modules in train mode: 568                                                      
+Modules in eval mode: 0                                                         
+Total FLOPs: 0                                                                  
+2026-04-24 03:27:35 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_Abm9/B
+2026-04-24 03:27:35 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Bbm7(#11)
+2026-04-24 03:27:36 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_Db6/9(addb2)(#11)/Bb
+2026-04-24 03:27:36 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_Gped(addb7)(add3)
+2026-04-24 03:27:36 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Ab6/9
+2026-04-24 03:27:36 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_B5(add6)/Ab
+2026-04-24 03:27:37 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Gm7(add6)
+2026-04-24 03:27:37 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Bb+7/Gb
+2026-04-24 03:30:54 - realchords - ERROR - Error converting to MIDI: Note off without note on: 64 -> 51
+2026-04-24 03:30:54 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Fm/Ab
+2026-04-24 03:30:55 - realchords - ERROR - Error converting to MIDI: Note off without note on: 38 -> 42
+2026-04-24 03:30:55 - realchords - ERROR - Error converting to MIDI: Note off without note on: 57 -> 83
+2026-04-24 03:33:58 - realchords - ERROR - Error converting to MIDI: Note off without note on: 74 -> 73
+2026-04-24 03:34:00 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_Dmaj7(#11)
+2026-04-24 03:34:01 - realchords - ERROR - Error converting to MIDI: Note off without note on: 78 -> 52
+2026-04-24 03:36:54 - realchords - ERROR - Error converting to MIDI: Note off without note on: 72 -> 70
+2026-04-24 03:39:44 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_G+7/F
+2026-04-24 03:42:37 - realchords - ERROR - Error converting to MIDI: Note off without note on: 61 -> 77
+2026-04-24 03:42:39 - realchords - ERROR - Error converting to MIDI: Invalid melody frame: CHORD_ON_Db5(add6)/Ab
+2026-04-24 03:42:40 - realchords - ERROR - Error converting to MIDI: Note off without note on: 60 -> 59
+2026-04-24 03:45:28 - realchords - ERROR - Error converting to MIDI: Note off without note on: 52 -> 50
+2026-04-24 03:45:29 - realchords - ERROR - Error converting to MIDI: Note off without note on: 54 -> 57
+2026-04-24 03:48:21 - realchords - ERROR - Error converting to MIDI: Note off without note on: 79 -> 67
+2026-04-24 03:51:10 - realchords - ERROR - Error converting to MIDI: Note off without note on: 71 -> 59
+2026-04-24 03:59:51 - realchords - ERROR - Error converting to MIDI: Note off without note on: 71 -> 74
+2026-04-24 04:05:33 - realchords - ERROR - Error converting to MIDI: Note off without note on: 66 -> 61
+2026-04-24 04:08:25 - realchords - ERROR - Error converting to MIDI: Note off without note on: 71 -> 86
+2026-04-24 04:17:04 - realchords - ERROR - Error converting to MIDI: Note off without note on: 76 -> 95
+2026-04-24 04:17:06 - realchords - ERROR - Error converting to MIDI: Note off without note on: 69 -> 64
+2026-04-24 04:19:57 - realchords - ERROR - Error converting to MIDI: Note off without note on: 65 -> 64
+2026-04-24 04:22:49 - realchords - ERROR - Error converting to MIDI: Note off without note on: 59 -> 45
+2026-04-24 04:25:42 - realchords - ERROR - Error converting to MIDI: Note off without note on: 90 -> 89
+2026-04-24 04:25:44 - realchords - ERROR - Error converting to MIDI: Note off without note on: 83 -> 47
+2026-04-24 04:25:44 - realchords - ERROR - Error converting to MIDI: Note off without note on: 52 -> 64
+2026-04-24 04:31:30 - realchords - ERROR - Error converting to MIDI: Note off without note on: 62 -> 60
+2026-04-24 04:37:14 - realchords - ERROR - Error converting to MIDI: Note off without note on: 40 -> 42
+2026-04-24 04:37:15 - realchords - ERROR - Error converting to MIDI: Note off without note on: 42 -> 46
+2026-04-24 04:43:00 - realchords - ERROR - Error converting to MIDI: Note off without note on: 57 -> 69
+2026-04-24 04:48:43 - realchords - ERROR - Error converting to MIDI: Note off without note on: 69 -> 81
+2026-04-24 04:54:31 - realchords - ERROR - Error converting to MIDI: Note off without note on: 73 -> 72
+Epoch 0/-2 ━━━━━━━━━━━━━━━ 30000/30000 1:26:40 •       6.38it/s v_num: b57j     
+                                       0:00:00                  train/loss:     
+                                                                0.189 grad_norm:
+                                                                0.491 val/loss: 
+                                                                0.931 val/acc:  
+                                                                0.558 val/nll:  
+                                                                0.931           
+                                                                val/note_in_cho…
+                                                                nan             
+                                                                val/note_in_cho…
+                                                                nan             
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33menc_dec_base_melody_4_datasets[0m at: [34mhttps://wandb.ai/ikunabel/realchords/runs/rt1nb57j[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_melody_4_datasets/wandb/run-20260424_032658-rt1nb57j/logs[0m

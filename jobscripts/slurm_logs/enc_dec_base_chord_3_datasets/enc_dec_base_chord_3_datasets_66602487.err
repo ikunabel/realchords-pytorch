@@ -1,0 +1,57 @@
+[INFO] Module Python/3.12.3 loaded.
+[INFO] Module FFmpeg/7.0.2 loaded.
+[rank: 0] Seed set to 42
+Using bfloat16 Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+💡 Tip: For seamless cloud logging and experiment tracking, try installing [litlogger](https://pypi.org/project/litlogger/) to enable LitLogger, which logs metrics and artifacts automatically to the Lightning Experiments platform.
+wandb: WARNING The anonymous setting has no effect and will be removed in a future version.
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/yh522379/.netrc.
+wandb: Currently logged in as: ikunabel to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 47nxm5xj
+wandb: Tracking run with wandb version 0.25.1
+wandb: Run data is saved locally in /hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_chord_3_datasets/wandb/run-20260409_233611-47nxm5xj
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run enc_dec_base_chord_3_datasets
+wandb: ⭐️ View project at https://wandb.ai/ikunabel/realchords
+wandb: 🚀 View run at https://wandb.ai/ikunabel/realchords/runs/47nxm5xj
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/callbacks/model_checkpoint.py:881: Checkpoint directory /rwthfs/rz/cluster/hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_chord_3_datasets exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/model_summary/model_summary.py:242: Precision bf16-mixed is not supported by the model summary.  Estimated model size in MB will not be accurate. Using 32 bits instead.
+SLURM auto-requeueing enabled. Setting signal handlers.
+W0409 23:36:15.280000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:16.933000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:17.949000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [2/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:24.505000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [13/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:24.685000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [14/0] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:24.937000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:28.523000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/1] _maybe_guard_rel() was called on non-relation expression Eq(s0, 1) | Eq(s0, s49)
+W0409 23:36:33.951000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/2] _maybe_guard_rel() was called on non-relation expression Eq(s69, 1) | Eq(s69, s49)
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 64. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+W0409 23:36:54.184000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:54.384000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:36:58.675000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/3] _maybe_guard_rel() was called on non-relation expression Eq(s69, 1) | Eq(s69, s49)
+W0409 23:37:05.636000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [13/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:37:05.834000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [14/1] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:37:06.072000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/3] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:37:08.852000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/4] _maybe_guard_rel() was called on non-relation expression Eq(s0, 1) | Eq(s0, s49)
+W0409 23:37:19.030000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/5] _maybe_guard_rel() was called on non-relation expression Eq(s69, 1) | Eq(s69, s49)
+W0409 23:40:13.423000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [0/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:40:13.659000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/4] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+wandb: WARNING Artifact "run-47nxm5xj-song_url" already exists with the same content. No new version will be created.
+W0409 23:40:16.687000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/6] _maybe_guard_rel() was called on non-relation expression Eq(s85, 1) | Eq(s85, s37)
+W0409 23:40:16.845000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/6] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s31, s33)
+W0409 23:40:16.847000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/6] _maybe_guard_rel() was called on non-relation expression Eq(s69, 1) | Eq(s69, s49)
+W0409 23:40:21.574000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [13/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:40:21.832000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [14/2] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:40:22.094000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/variables/builtin.py:898] [1/5] incorrect arg count <bound method BuiltinVariable.call_next of BuiltinVariable(next)> too many positional arguments and no constant handler
+W0409 23:40:24.159000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/7] _maybe_guard_rel() was called on non-relation expression Eq(s85, 1) | Eq(s85, s37)
+W0409 23:40:24.344000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/7] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s31, s33)
+W0409 23:40:24.346000 250182 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [6/7] _maybe_guard_rel() was called on non-relation expression Eq(s0, 1) | Eq(s0, s49)
+W0409 23:40:27.963000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/convert_frame.py:1016] [5/8] torch._dynamo hit config.recompile_limit (8)
+W0409 23:40:27.963000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/convert_frame.py:1016] [5/8]    function: 'forward' (/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/x_transformers/x_transformers.py:1527)
+W0409 23:40:27.963000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/convert_frame.py:1016] [5/8]    last reason: 5/7: context is None                                        
+W0409 23:40:27.963000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/convert_frame.py:1016] [5/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+W0409 23:40:27.963000 250182 .venv/lib/python3.12/site-packages/torch/_dynamo/convert_frame.py:1016] [5/8] To diagnose recompilation issues, see https://pytorch.org/docs/main/torch.compiler_troubleshooting.html.
+/rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 22. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+`Trainer.fit` stopped: `max_steps=30000` reached.
