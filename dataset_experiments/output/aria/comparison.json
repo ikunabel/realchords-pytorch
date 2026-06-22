@@ -1,0 +1,37 @@
+{
+  "deduped": {
+    "total": 371053,
+    "genres": {
+      "classical": 112946,
+      "unknown": 94105,
+      "pop": 70024,
+      "soundtrack": 54912,
+      "jazz": 18839,
+      "rock": 6666,
+      "folk": 5299,
+      "ambient": 3561,
+      "ragtime": 3319,
+      "blues": 1248,
+      "atonal": 134
+    }
+  },
+  "unique": {
+    "total": 32522,
+    "genres": {
+      "classical": 31284,
+      "unknown": 1049,
+      "jazz": 101,
+      "atonal": 26,
+      "folk": 21,
+      "ragtime": 17,
+      "soundtrack": 15,
+      "blues": 8,
+      "rock": 1
+    }
+  },
+  "key_overlap": {
+    "in_both": 21970,
+    "only_deduped": 349083,
+    "only_unique": 10552
+  }
+}
