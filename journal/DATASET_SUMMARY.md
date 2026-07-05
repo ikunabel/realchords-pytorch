@@ -52,9 +52,6 @@ successfully. Wikifonia-specific symbol cleanup + note_seq; failures simplified 
 
 Need new `convert_<name>_to_cache.py` each.
 
-**Jazzvar** — MIDI, separate melody/chord tracks, 4-bar standard refrains. Good fit for current
-pipeline.
-
 **JAZZMUS** — MusicXML lead sheets, block chords. Closest template: Wikifonia converter + jazz
 symbol rules.
 
