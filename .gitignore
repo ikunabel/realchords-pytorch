@@ -97,4 +97,5 @@ configs/thesis/debug/
 
 # Generated MIDI files
 scripts/to_midi/output/
+tests/test_cache/output/
 

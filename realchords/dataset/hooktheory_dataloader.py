@@ -188,7 +188,8 @@ class HooktheoryDataset(Dataset):
                 f"  For Hooktheory: python scripts/convert_hooktheory_to_cache.py\n"
                 f"  For POP909: python scripts/convert_pop909_to_cache.py\n"
                 f"  For Nottingham: python scripts/convert_nottingham_to_cache.py\n"
-                f"  For Wikifonia: python scripts/convert_wikifonia_to_cache.py"
+                f"  For Wikifonia: python scripts/convert_wikifonia_to_cache.py\n"
+                f"  For JAZZMUS: python scripts/convert_jazzmus_to_cache.py"
             )
         logger.info(f"Loaded {len(self.data)} items")
 
@@ -341,6 +342,10 @@ class HooktheoryDataset(Dataset):
             output[
                 "song_url"
             ] = f"wikifonia://{item['wikifonia']['file']}#{item['wikifonia']['id']}"
+        elif "jazzmus" in item:
+            output[
+                "song_url"
+            ] = f"jazzmus://{item['jazzmus']['file']}#{item['jazzmus']['id']}"
         else:
             # Fallback for other datasets
             output["song_url"] = "unknown://unknown"

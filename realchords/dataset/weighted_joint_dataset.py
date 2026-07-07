@@ -150,6 +150,7 @@ class WeightedJointDataset(Dataset):
             "nottingham": os.path.join(CACHE_DIR, "nottingham"),
             "hooktheory": os.path.join(CACHE_DIR, "hooktheory"),
             "wikifonia": os.path.join(CACHE_DIR, "wikifonia"),
+            "jazzmus": os.path.join(CACHE_DIR, "jazzmus"),
         }
 
         # Load individual datasets

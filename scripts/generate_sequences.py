@@ -190,7 +190,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset_name",
         type=str,
-        choices=["hooktheory", "pop909", "nottingham", "wikifonia"],
+        choices=["hooktheory", "pop909", "nottingham", "wikifonia", "jazzmus"],
         default="hooktheory",
         help="Dataset from which conditioning examples are drawn in data modes.",
     )

@@ -25,7 +25,7 @@ CACHE_DIR = ROOT / "data" / "cache"
 CHORD_NAMES = ROOT / "data" / "cache" / "chord_names.json"
 OUTPUT_DIR = Path(__file__).parents[1] / "output" / "tsne_tensors"
 
-DATASETS = ["hooktheory", "pop909", "nottingham", "wikifonia"]
+DATASETS = ["hooktheory", "pop909", "nottingham", "wikifonia", "jazzmus"]
 
 
 def load_tokenizer():

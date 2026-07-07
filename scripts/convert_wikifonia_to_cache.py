@@ -29,6 +29,28 @@ from realchords.utils.data_utils import (
     update_global_chord_names,
 )
 
+_CHORD_SYMBOL_PARSE_VERBOSE = False
+
+
+def set_chord_symbol_parse_verbose(enabled: bool) -> None:
+    global _CHORD_SYMBOL_PARSE_VERBOSE
+    _CHORD_SYMBOL_PARSE_VERBOSE = enabled
+
+
+def _is_no_chord_symbol(chord_symbol: str) -> bool:
+    normalized = re.sub(r"[^A-Za-z]", "", chord_symbol.strip()).upper()
+    return normalized in {"", "N", "X", "NC"}
+
+
+def _pedal_root_chord(chord_symbol: str) -> Optional[str]:
+    match = re.match(r"^([A-G])(?:-|b|#)?pedal", chord_symbol.strip(), re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    match = re.match(r"^([A-G])pedal", chord_symbol.strip(), re.IGNORECASE)
+    if match:
+        return match.group(1).upper()
+    return None
+
 
 def transform_wikifonia_chord_symbol(chord_symbol: str) -> str:
     """Transform Wikifonia chord notation to note_seq compatible format.
@@ -39,10 +61,13 @@ def transform_wikifonia_chord_symbol(chord_symbol: str) -> str:
     Returns:
         str: Transformed chord symbol compatible with note_seq
     """
-    if not chord_symbol or chord_symbol.strip() in ["N", "X", "", "NC"]:
+    if not chord_symbol or _is_no_chord_symbol(chord_symbol):
         return ""
 
     chord = chord_symbol.strip()
+    pedal_root = _pedal_root_chord(chord)
+    if pedal_root is not None:
+        return pedal_root
 
     # Handle flat notation: E- → Eb, B- → Bb, etc.
     chord = re.sub(r"([A-G])-", r"\1b", chord)
@@ -150,6 +175,8 @@ def simplify_complex_chord(chord_symbol: str) -> str:
 
 def parse_chord_symbol_with_noteseq(
     chord_symbol: str,
+    *,
+    chord_symbol_transform=transform_wikifonia_chord_symbol,
 ) -> Tuple[int, List[int], int]:
     """Convert chord symbol to root pitch class, intervals, and inversion using note_seq.
 
@@ -160,7 +187,7 @@ def parse_chord_symbol_with_noteseq(
         Tuple[int, List[int], int]: (root_pitch_class, intervals, inversion)
     """
     # Transform Wikifonia chord notation to note_seq compatible format
-    transformed_chord = transform_wikifonia_chord_symbol(chord_symbol)
+    transformed_chord = chord_symbol_transform(chord_symbol)
 
     # Handle empty or invalid chord symbols
     if not transformed_chord:
@@ -178,9 +205,10 @@ def parse_chord_symbol_with_noteseq(
                 if not chord_pitches:
                     # Final fallback to C major
                     return 0, [4, 3], 0
-                print(
-                    f"Simplified '{chord_symbol}' -> '{simplified_chord}' successfully"
-                )
+                if _CHORD_SYMBOL_PARSE_VERBOSE:
+                    print(
+                        f"Simplified '{chord_symbol}' -> '{simplified_chord}' successfully"
+                    )
             except:
                 # Final fallback to C major
                 return 0, [4, 3], 0
@@ -221,15 +249,17 @@ def parse_chord_symbol_with_noteseq(
         return root_pitch_class, intervals, inversion
 
     except Exception as e:
-        print(f"Error parsing chord '{chord_symbol}' -> '{transformed_chord}': {e}")
+        if _CHORD_SYMBOL_PARSE_VERBOSE:
+            print(f"Error parsing chord '{chord_symbol}' -> '{transformed_chord}': {e}")
         # Try to simplify the chord and parse again
         try:
             simplified_chord = simplify_complex_chord(transformed_chord)
             chord_pitches = chord_symbols_lib.chord_symbol_pitches(simplified_chord)
             if chord_pitches:
-                print(
-                    f"Simplified '{chord_symbol}' -> '{simplified_chord}' successfully"
-                )
+                if _CHORD_SYMBOL_PARSE_VERBOSE:
+                    print(
+                        f"Simplified '{chord_symbol}' -> '{simplified_chord}' successfully"
+                    )
 
                 # Extract root pitch class and intervals from simplified chord
                 root_pitch_class = chord_pitches[0] % 12
@@ -248,7 +278,11 @@ def parse_chord_symbol_with_noteseq(
             return 0, [4, 3], 0
 
 
-def extract_melody_and_chords_from_musicxml(xml_file: Path) -> Optional[Dict]:
+def extract_melody_and_chords_from_musicxml(
+    xml_file: Path,
+    *,
+    chord_symbol_transform=transform_wikifonia_chord_symbol,
+) -> Optional[Dict]:
     """Extract melody and chord symbols from a MusicXML file.
 
     Args:
@@ -343,7 +377,10 @@ def extract_melody_and_chords_from_musicxml(xml_file: Path) -> Optional[Dict]:
                         root_pitch_class,
                         intervals,
                         inversion,
-                    ) = parse_chord_symbol_with_noteseq(chord_text)
+                    ) = parse_chord_symbol_with_noteseq(
+                        chord_text,
+                        chord_symbol_transform=chord_symbol_transform,
+                    )
 
                     # Skip if no intervals (invalid chord)
                     if not intervals:
@@ -494,19 +531,20 @@ def filter_zero_duration_chords(chords: List[Dict]) -> List[Dict]:
     return filtered_chords
 
 
-def process_wikifonia_file(xml_file: Path) -> Optional[Dict]:
-    """Process a single Wikifonia MusicXML file.
-
-    Args:
-        xml_file (Path): Path to MusicXML file
-
-    Returns:
-        Optional[Dict]: Processed song dictionary or None if processing failed
-    """
+def process_musicxml_file(
+    xml_file: Path,
+    *,
+    dataset_key: str = "wikifonia",
+    source_label: str = "Wikifonia Dataset",
+    chord_symbol_transform=transform_wikifonia_chord_symbol,
+) -> Optional[Dict]:
+    """Process a single MusicXML file into Hooktheory cache format."""
     song_id = xml_file.stem
 
-    # Extract melody and chords
-    parsed_data = extract_melody_and_chords_from_musicxml(xml_file)
+    parsed_data = extract_melody_and_chords_from_musicxml(
+        xml_file,
+        chord_symbol_transform=chord_symbol_transform,
+    )
     if not parsed_data:
         return None
 
@@ -538,11 +576,11 @@ def process_wikifonia_file(xml_file: Path) -> Optional[Dict]:
     song_dict = {
         "tags": ["MELODY", "HARMONY", "NO_SWING"],
         "split": "TRAIN",  # Will be reassigned later
-        "wikifonia": {
+        dataset_key: {
             "id": song_id,
             "title": metadata["title"],
             "composer": metadata.get("composer"),
-            "source": "Wikifonia Dataset",
+            "source": source_label,
             "file": xml_file.name,
             "time_signature": metadata.get("time_signature"),
             "key_signature": metadata.get("key_signature"),
@@ -563,6 +601,109 @@ def process_wikifonia_file(xml_file: Path) -> Optional[Dict]:
     }
 
     return song_dict
+
+
+def process_wikifonia_file(xml_file: Path) -> Optional[Dict]:
+    """Backward-compatible wrapper for Wikifonia MusicXML files."""
+    return process_musicxml_file(xml_file)
+
+
+def convert_musicxml_corpus(
+    xml_files: List[Path],
+    output_dir: Path,
+    process_file,
+    *,
+    augmentation: bool = False,
+    max_files: Optional[int] = None,
+    dataset_name: str = "MusicXML corpus",
+) -> Dict[str, int]:
+    """Convert a list of MusicXML files to Hooktheory cache JSONL splits."""
+    if max_files is not None:
+        xml_files = xml_files[:max_files]
+
+    if not xml_files:
+        print(f"No MusicXML files found for {dataset_name}")
+        return {"total_files": 0, "processed": 0, "failed": 0}
+
+    print(f"Found {len(xml_files)} MusicXML files to process for {dataset_name}")
+
+    all_songs: List[Dict] = []
+    failed = 0
+    for xml_file in tqdm(xml_files, desc=f"Processing {dataset_name}"):
+        try:
+            song_dict = process_file(xml_file)
+            if song_dict:
+                all_songs.append(song_dict)
+            else:
+                failed += 1
+        except Exception as exc:
+            print(f"Error processing {xml_file.name}: {exc}")
+            failed += 1
+
+    print(f"Successfully processed {len(all_songs)} songs ({failed} failed/skipped)")
+    if not all_songs:
+        print("No songs were successfully processed!")
+        return {
+            "total_files": len(xml_files),
+            "processed": 0,
+            "failed": failed,
+        }
+
+    splits = split_dataset(all_songs)
+    print("Dataset splits:")
+    print(f"  Train: {len(splits['train'])} songs")
+    print(f"  Valid: {len(splits['valid'])} songs")
+    print(f"  Test: {len(splits['test'])} songs")
+
+    chord_names = collect_chord_names(all_songs)
+    print(f"Found {len(chord_names)} unique chord names")
+
+    cache_dir = str(output_dir.parent)
+
+    if augmentation:
+        print("\n=== Creating Augmented Dataset ===")
+        augmented_train = create_augmented_dataset(splits["train"])
+        augmented_chord_names = collect_chord_names(
+            augmented_train + splits["valid"] + splits["test"]
+        )
+        print(
+            f"Found {len(augmented_chord_names)} unique chord names in augmented dataset"
+        )
+
+        augmented_splits = {
+            "train": augmented_train,
+            "valid": splits["valid"],
+            "test": splits["test"],
+        }
+        for split_name, split_songs in augmented_splits.items():
+            cache_path = output_dir / f"{split_name}_augmented.jsonl"
+            save_jsonl(split_songs, cache_path)
+            print(f"Saved {split_name} augmented split to {cache_path}")
+
+        chord_names_aug_path = output_dir / "chord_names_augmented.json"
+        with open(chord_names_aug_path, "w", encoding="utf-8") as handle:
+            json.dump(augmented_chord_names, handle, indent=2)
+        print(f"Saved augmented chord names to {chord_names_aug_path}")
+        print(f"\nUpdating global augmented chord_names in {cache_dir}...")
+        update_global_chord_names(augmented_chord_names, cache_dir, augmented=True)
+
+    for split_name, split_songs in splits.items():
+        cache_path = output_dir / f"{split_name}.jsonl"
+        save_jsonl(split_songs, cache_path)
+        print(f"Saved {split_name} split to {cache_path}")
+
+    chord_names_path = output_dir / "chord_names.json"
+    with open(chord_names_path, "w", encoding="utf-8") as handle:
+        json.dump(chord_names, handle, indent=2)
+    print(f"Saved chord names to {chord_names_path}")
+    print(f"\nUpdating global chord_names in {cache_dir}...")
+    update_global_chord_names(chord_names, cache_dir, augmented=False)
+
+    return {
+        "total_files": len(xml_files),
+        "processed": len(all_songs),
+        "failed": failed,
+    }
 
 
 def split_dataset(
@@ -711,106 +852,19 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find all MusicXML files (recursively search for .mxl files)
     wikifonia_path = Path(args.wikifonia_path)
-    xml_files = list(wikifonia_path.glob("**/*.mxl"))
+    xml_files = sorted(wikifonia_path.glob("**/*.mxl"))
 
-    if not xml_files:
-        print(f"No MusicXML files found in {wikifonia_path}")
-        return
-
-    if args.max_files:
-        xml_files = xml_files[: args.max_files]
-
-    print(f"Found {len(xml_files)} MusicXML files to process")
-
-    # Process all XML files
-    all_songs = []
-
-    for xml_file in tqdm(xml_files, desc="Processing Wikifonia files"):
-        try:
-            song_dict = process_wikifonia_file(xml_file)
-            if song_dict:
-                all_songs.append(song_dict)
-        except Exception as e:
-            print(f"Error processing {xml_file.name}: {e}")
-            continue
-
-    print(f"Successfully processed {len(all_songs)} songs")
-
-    if not all_songs:
-        print("No songs were successfully processed!")
-        return
-
-    # Split dataset
-    splits = split_dataset(all_songs)
-
-    print(f"Dataset splits:")
-    print(f"  Train: {len(splits['train'])} songs")
-    print(f"  Valid: {len(splits['valid'])} songs")
-    print(f"  Test: {len(splits['test'])} songs")
-
-    # Collect chord names (before augmentation)
-    chord_names = collect_chord_names(all_songs)
-    print(f"Found {len(chord_names)} unique chord names")
-
-    # Define cache_dir early for use in augmentation
-    cache_dir = str(output_dir.parent)  # Go up to data/cache/
-
-    # Create augmented dataset if requested
-    if args.augmentation:
-        print("\n=== Creating Augmented Dataset ===")
-        # Augment training data
-        augmented_train = create_augmented_dataset(splits["train"])
-
-        # For augmented datasets, we need to collect chord names from all data including augmentation
-        print("Collecting chord names from augmented training data...")
-        augmented_chord_names = collect_chord_names(
-            augmented_train + splits["valid"] + splits["test"]
-        )
-        print(
-            f"Found {len(augmented_chord_names)} unique chord names in augmented dataset"
-        )
-
-        # Save augmented splits
-        augmented_splits = {
-            "train": augmented_train,
-            "valid": splits["valid"],  # Keep valid/test unaugmented
-            "test": splits["test"],
-        }
-
-        for split_name, split_songs in augmented_splits.items():
-            cache_path = output_dir / f"{split_name}_augmented.jsonl"
-            save_jsonl(split_songs, cache_path)
-            print(f"Saved {split_name} augmented split to {cache_path}")
-
-        # Save augmented chord names
-        chord_names_aug_path = output_dir / "chord_names_augmented.json"
-        with open(chord_names_aug_path, "w") as f:
-            json.dump(augmented_chord_names, f, indent=2)
-        print(f"Saved augmented chord names to {chord_names_aug_path}")
-
-        # Update global augmented chord names
-        print(f"\nUpdating global augmented chord_names in {cache_dir}...")
-        update_global_chord_names(augmented_chord_names, cache_dir, augmented=True)
-
-    # Save regular (non-augmented) splits
-    for split_name, split_songs in splits.items():
-        cache_path = output_dir / f"{split_name}.jsonl"
-        save_jsonl(split_songs, cache_path)
-        print(f"Saved {split_name} split to {cache_path}")
-
-    # Save regular chord names
-    chord_names_path = output_dir / "chord_names.json"
-    with open(chord_names_path, "w") as f:
-        json.dump(chord_names, f, indent=2)
-    print(f"Saved chord names to {chord_names_path}")
-
-    # Update global chord names
-    print(f"\nUpdating global chord_names in {cache_dir}...")
-    update_global_chord_names(chord_names, cache_dir, augmented=False)
-
-    print("Wikifonia dataset conversion completed!")
+    stats = convert_musicxml_corpus(
+        xml_files,
+        output_dir,
+        process_wikifonia_file,
+        augmentation=args.augmentation,
+        max_files=args.max_files,
+        dataset_name="Wikifonia",
+    )
+    if stats["processed"]:
+        print("Wikifonia dataset conversion completed!")
 
 
 if __name__ == "__main__":

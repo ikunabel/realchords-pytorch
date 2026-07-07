@@ -7,7 +7,7 @@ from pathlib import Path
 from realchords.constants import CACHE_DIR, CHORD_NAMES_AUG_PATH
 from realchords.dataset.hooktheory_dataloader import HooktheoryDataset
 
-DATASETS = ("hooktheory", "pop909", "nottingham", "wikifonia")
+DATASETS = ("hooktheory", "pop909", "nottingham", "wikifonia", "jazzmus")
 SPLITS = ("train", "valid", "test", "all")
 
 
