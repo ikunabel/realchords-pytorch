@@ -26,6 +26,9 @@ from realchords.utils.eval_utils import evaluate_note_in_chord_ratio
 
 MODEL_PART_CHOICES = ("chord", "melody")
 SEQUENCE_ORDER_CHOICES = ("chord_first", "melody_first")
+DEFAULT_CHORD_NAMES_PATH = Path("data/cache/chord_names_augmented.json")
+DEFAULT_GENERATED_ROOT = Path("logs/generated")
+DEFAULT_MIDI_OUTPUT_ROOT = Path("scripts/to_midi/output")
 
 
 @dataclass(frozen=True)
@@ -321,3 +324,139 @@ def analyze_penalty_file(
         output_folder / "per_beat_note_in_chord_ratio.pt",
     )
     torch.save(penalties_out, output_folder / "penalties.pt")
+
+
+def interleaved_sequence_to_midi(
+    tokens: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    *,
+    sequence_order: str = "chord_first",
+    bpm: int = 120,
+):
+    """Decode one interleaved token row into PrettyMIDI (chord_first by default)."""
+    if tokens.dim() != 1:
+        raise ValueError(f"Expected rank-1 token sequence, got shape {tuple(tokens.shape)}")
+
+    chord_tokens, melody_tokens = split_tokens_by_order(tokens, sequence_order)
+    return tokenizer.decode_to_midi(
+        chord_frames=chord_tokens.numpy(),
+        melody_frames=melody_tokens.numpy(),
+        bpm=bpm,
+    )
+
+
+def _select_sequence_indices(
+    num_sequences: int,
+    *,
+    max_sequences: int | None,
+    sequence_indices: Sequence[int] | None,
+) -> list[int]:
+    if sequence_indices is not None:
+        indices = [int(index) for index in sequence_indices]
+        for index in indices:
+            if index < 0 or index >= num_sequences:
+                raise IndexError(
+                    f"Sequence index {index} out of range for {num_sequences} sequences"
+                )
+        return indices
+
+    if max_sequences is None or max_sequences < 0:
+        return list(range(num_sequences))
+    return list(range(min(max_sequences, num_sequences)))
+
+
+def convert_sequence_file_to_midi(
+    input_path: Path,
+    output_dir: Path,
+    tokenizer: HooktheoryTokenizer,
+    *,
+    sequence_order: str = "chord_first",
+    bpm: int = 120,
+    strip_bos_token: bool = True,
+    max_sequences: int | None = 8,
+    sequence_indices: Sequence[int] | None = None,
+    skip_existing: bool = False,
+) -> list[Path]:
+    """Write MIDI files for selected rows in one generated tensor file."""
+    sequences = load_sequences(input_path)
+    if strip_bos_token:
+        sequences = strip_bos(sequences, tokenizer)
+
+    indices = _select_sequence_indices(
+        sequences.size(0),
+        max_sequences=max_sequences,
+        sequence_indices=sequence_indices,
+    )
+
+    file_output_dir = output_dir / input_path.stem
+    file_output_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[Path] = []
+    for index in indices:
+        output_path = file_output_dir / f"seq_{index:04d}.mid"
+        if skip_existing and output_path.exists():
+            written.append(output_path)
+            continue
+
+        midi = interleaved_sequence_to_midi(
+            sequences[index],
+            tokenizer,
+            sequence_order=sequence_order,
+            bpm=bpm,
+        )
+        midi.write(str(output_path))
+        written.append(output_path)
+    return written
+
+
+def resolve_generated_system_dir(system: str, generated_root: Path) -> Path:
+    candidate = Path(system).expanduser()
+    if candidate.is_dir():
+        return candidate.resolve()
+
+    system_dir = (generated_root / system).expanduser().resolve()
+    if system_dir.is_dir():
+        return system_dir
+
+    raise FileNotFoundError(
+        f"Could not resolve generated system '{system}'. "
+        f"Expected a directory or a name under {generated_root}."
+    )
+
+
+def convert_generated_system_to_midi(
+    input_dir: Path,
+    output_root: Path,
+    tokenizer: HooktheoryTokenizer,
+    *,
+    system_name: str | None = None,
+    sequence_order: str = "chord_first",
+    bpm: int = 120,
+    strip_bos_token: bool = True,
+    max_sequences: int | None = 8,
+    sequence_indices: Sequence[int] | None = None,
+    skip_existing: bool = False,
+) -> tuple[str, Path, list[Path]]:
+    """Convert all generated sequence files under one system directory to MIDI."""
+    input_dir = input_dir.expanduser().resolve()
+    if not input_dir.is_dir():
+        raise FileNotFoundError(f"Input directory not found: {input_dir}")
+
+    resolved_name = system_name or input_dir.name
+    system_output_dir = output_root.expanduser().resolve() / resolved_name
+    written: list[Path] = []
+    for sequence_file in collect_sequence_files(input_dir):
+        written.extend(
+            convert_sequence_file_to_midi(
+                sequence_file,
+                system_output_dir,
+                tokenizer,
+                sequence_order=sequence_order,
+                bpm=bpm,
+                strip_bos_token=strip_bos_token,
+                max_sequences=max_sequences,
+                sequence_indices=sequence_indices,
+                skip_existing=skip_existing,
+            )
+        )
+    return resolved_name, system_output_dir, written
