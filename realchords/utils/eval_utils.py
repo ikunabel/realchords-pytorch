@@ -111,6 +111,19 @@ def _melody_pitch_histogram(
     return histogram, total_weight
 
 
+def _mode_strict_score(
+    histogram: Sequence[float],
+    total_weight: float,
+    mode_pcs: FrozenSet[int],
+) -> float:
+    if total_weight <= 0:
+        return 0.0
+    for pc, weight in enumerate(histogram):
+        if weight > 0 and pc not in mode_pcs:
+            return 0.0
+    return 1.0
+
+
 def _mode_coverage_score(
     histogram: Sequence[float],
     total_weight: float,
@@ -172,9 +185,11 @@ def _best_mode_fit_score(
             score = _mode_coverage_score(histogram, total_weight, mode_pcs)
         elif scoring == "distance":
             score = _mode_distance_score(histogram, total_weight, mode_pcs, sigma)
+        elif scoring == "strict":
+            score = _mode_strict_score(histogram, total_weight, mode_pcs)
         else:
             raise ValueError(
-                f"Unsupported scoring '{scoring}'. Expected 'coverage' or 'distance'."
+                f"Unsupported scoring '{scoring}'. Expected 'coverage', 'distance', or 'strict'."
             )
         best_score = max(best_score, score)
     return best_score
@@ -207,6 +222,7 @@ def _sequence_mode_fit_score(
 ) -> Tuple[float, float, int]:
     weighted_score_sum = 0.0
     melody_weight_sum = 0.0
+    segment_pass_sum = 0.0
     segment_count = 0
 
     onset_indices = _chord_onset_indices(chord_tokens, tokenizer)
@@ -252,10 +268,17 @@ def _sequence_mode_fit_score(
             scoring=scoring,
             sigma=sigma,
         )
-        weighted_score_sum += segment_score * total_weight
-        melody_weight_sum += total_weight
         segment_count += 1
+        if scoring == "strict":
+            segment_pass_sum += segment_score
+        else:
+            weighted_score_sum += segment_score * total_weight
+            melody_weight_sum += total_weight
 
+    if segment_count <= 0:
+        return np.nan, 0.0, segment_count
+    if scoring == "strict":
+        return segment_pass_sum / segment_count, float(segment_count), segment_count
     if melody_weight_sum <= 0:
         return np.nan, 0.0, segment_count
     return weighted_score_sum / melody_weight_sum, melody_weight_sum, segment_count
@@ -267,20 +290,20 @@ def evaluate_melody_mode_fit_ratio(
     model_part: str,
     return_count: bool = False,
     sequence_order: str = "chord_first",
-    scoring: str = "coverage",
+    scoring: str = "strict",
     sigma: float = 1.5,
     skip_underdetermined: bool = True,
     min_melody_weight: float = 1.0,
     mode_map_path: Path | str = DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
 ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Score how well melody notes over each chord region fit an idiomatic mode.
+    """Score how well melody notes over each chord region fit a mode.
 
     Unlike note-in-chord, this metric is segment-based: for each span between
     consecutive ``CHORD_ON`` events, melody pitch classes (duration-weighted by
     frame holds) are compared against candidate modes from
     ``chord_quality_mode_map.jsonl``. The best-fitting candidate mode yields a
-    continuous score in ``[0, 1]`` per segment; sequence score is the
-    melody-weighted mean across segments.
+    per-segment score; sequence score aggregates across segments (unweighted mean
+    for ``strict``, melody-weighted mean otherwise).
 
     Args:
         sequences: Tensor of shape ``[batch, seq_len]`` with alternating melody and
@@ -289,7 +312,8 @@ def evaluate_melody_mode_fit_ratio(
         model_part: ``"melody"`` or ``"chord"`` (validated for API parity).
         return_count: If True, also return melody-weight and segment counts.
         sequence_order: ``"chord_first"`` or ``"melody_first"``.
-        scoring: ``"coverage"`` (fraction of weighted melody in mode) or
+        scoring: ``"strict"`` (all notes must be in mode or segment scores 0),
+            ``"coverage"`` (fraction of weighted melody in mode), or
             ``"distance"`` (Gaussian kernel on semitone distance to nearest mode
             tone).
         sigma: Kernel width for ``scoring="distance"``.
@@ -307,9 +331,9 @@ def evaluate_melody_mode_fit_ratio(
         )
     if model_part not in {"melody", "chord"}:
         raise ValueError(f"Invalid model_part: {model_part}")
-    if scoring not in {"coverage", "distance"}:
+    if scoring not in {"coverage", "distance", "strict"}:
         raise ValueError(
-            f"Unsupported scoring '{scoring}'. Expected 'coverage' or 'distance'."
+            f"Unsupported scoring '{scoring}'. Expected 'coverage', 'distance', or 'strict'."
         )
 
     quality_map, mode_pitch_classes = _load_quality_mode_lookup(str(mode_map_path))

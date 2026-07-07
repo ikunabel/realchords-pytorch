@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified harmony and diversity evaluation for generated sequence folders.
+"""Unified harmony, note-in-mode, and diversity evaluation for generated sequence folders.
 
 This script is the recommended public entry point for reproducing the Figure 4
 evaluation workflow from user-generated checkpoints.
@@ -30,6 +30,7 @@ Outputs:
             "num_sequence_files": 3,
             "num_sequences": 1024,
             "overall_note_in_chord_ratio": 0.48,
+            "overall_mode_fit_ratio": 0.72,
             "overall_vendi_score": 21.7,
             "sources": [{"path": "...", "num_sequences": 256}, ...]
           }
@@ -60,7 +61,10 @@ from realchords.utils.chord_diversity_analysis import (
     load_contrastive_reward,
     resolve_device,
 )
-from realchords.utils.eval_utils import evaluate_note_in_chord_ratio
+from realchords.utils.eval_utils import (
+    evaluate_melody_mode_fit_ratio,
+    evaluate_note_in_chord_ratio,
+)
 from realchords.utils.experiment_utils_reward_analysis import (
     build_hooktheory_tokenizer,
 )
@@ -192,6 +196,21 @@ def parse_args() -> argparse.Namespace:
         help="Frames per beat used during harmony analysis.",
     )
     parser.add_argument(
+        "--scoring",
+        choices=("strict", "coverage", "distance"),
+        default="strict",
+        help=(
+            "Note-in-mode scoring method. "
+            "'strict': segment fails if any melody note is outside all candidate modes."
+        ),
+    )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=1.5,
+        help="Gaussian kernel width for distance-based note-in-mode scoring.",
+    )
+    parser.add_argument(
         "--skip_intermediate_artifacts",
         action="store_true",
         help="If set, compute only the system summary and skip writing per-file artifacts.",
@@ -220,10 +239,15 @@ def accumulate_harmony_metrics(
     tokenizer,
     model_part: str,
     sequence_order: str,
+    scoring: str,
+    sigma: float,
 ) -> Dict[str, object]:
     total_sequences = 0
     total_valid_frames = 0
     total_correct_frames = 0
+    total_melody_weight = 0.0
+    weighted_mode_fit_sum = 0.0
+    total_mode_fit_segments = 0
     sources = []
 
     for path in sequence_files:
@@ -240,19 +264,56 @@ def accumulate_harmony_metrics(
             return_count=True,
             sequence_order=sequence_order,
         )
+        mode_fit, melody_weights, segment_counts = evaluate_melody_mode_fit_ratio(
+            sequences,
+            tokenizer,
+            model_part=model_part,
+            return_count=True,
+            sequence_order=sequence_order,
+            scoring=scoring,
+            sigma=sigma,
+        )
         total_valid_frames += int(valid_counts.sum().item())
         total_correct_frames += int(correct_counts.sum().item())
+        scorable = torch.isfinite(mode_fit) & (segment_counts > 0)
+        if scorable.any():
+            if scoring == "strict":
+                total_mode_fit_segments += int(segment_counts[scorable].sum().item())
+                weighted_mode_fit_sum += float(
+                    (mode_fit[scorable] * segment_counts[scorable].float()).sum().item()
+                )
+            else:
+                file_melody_weight = float(melody_weights[scorable].sum().item())
+                total_melody_weight += file_melody_weight
+                weighted_mode_fit_sum += float(
+                    (mode_fit[scorable] * melody_weights[scorable]).sum().item()
+                )
 
-    overall_ratio = (
+    overall_note_in_chord_ratio = (
         float(total_correct_frames / total_valid_frames)
         if total_valid_frames
         else None
     )
+    if scoring == "strict":
+        overall_mode_fit_ratio = (
+            float(weighted_mode_fit_sum / total_mode_fit_segments)
+            if total_mode_fit_segments
+            else None
+        )
+    else:
+        overall_mode_fit_ratio = (
+            float(weighted_mode_fit_sum / total_melody_weight)
+            if total_melody_weight > 0
+            else None
+        )
     return {
         "num_sequences": total_sequences,
         "total_valid_frames": total_valid_frames,
         "total_correct_frames": total_correct_frames,
-        "overall_note_in_chord_ratio": overall_ratio,
+        "overall_note_in_chord_ratio": overall_note_in_chord_ratio,
+        "total_mode_fit_melody_weight": total_melody_weight,
+        "total_mode_fit_segments": total_mode_fit_segments,
+        "overall_mode_fit_ratio": overall_mode_fit_ratio,
         "sources": sources,
     }
 
@@ -361,6 +422,8 @@ def main() -> None:
         "contrastive_checkpoint": checkpoint,
         "model_part": args.model_part,
         "sequence_order": args.sequence_order,
+        "scoring": args.scoring,
+        "sigma": args.sigma,
         "systems": existing_systems,
     }
 
@@ -396,6 +459,8 @@ def main() -> None:
             tokenizer=harmony_tokenizer,
             model_part=args.model_part,
             sequence_order=args.sequence_order,
+            scoring=args.scoring,
+            sigma=args.sigma,
         )
         diversity_metrics = accumulate_diversity_metrics(
             sequence_files,
@@ -418,6 +483,11 @@ def main() -> None:
             "overall_note_in_chord_ratio": harmony_metrics[
                 "overall_note_in_chord_ratio"
             ],
+            "overall_mode_fit_ratio": harmony_metrics["overall_mode_fit_ratio"],
+            "total_mode_fit_melody_weight": harmony_metrics[
+                "total_mode_fit_melody_weight"
+            ],
+            "total_mode_fit_segments": harmony_metrics["total_mode_fit_segments"],
             "overall_vendi_score": diversity_metrics["overall_vendi_score"],
             "entropy_nats": diversity_metrics["entropy_nats"],
             "normalized_entropy_all_chords": diversity_metrics[

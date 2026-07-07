@@ -1,0 +1,102 @@
+#!/usr/bin/env zsh
+# Canonical registry of generated-sequence system names.
+#
+# Names match folders under logs/generated/ and functions in
+# jobscripts/generate_sequences_functions.sh.
+#
+# Used by jobscripts/evaluate_sequences_functions.sh and
+# jobscripts/submit_evaluate_sequences.sh.
+
+setopt extendedglob
+
+typeset -ga GENERATED_SYSTEMS=(
+  # Ground truth
+  hooktheory_gt
+  wikifonia_gt
+  nottingham_gt
+  pop909_gt
+
+  # Dataset melody vs online MLE chord
+  hooktheory_melody_vs_mle_chord
+  hooktheory_melody_vs_mle_chord_3_datasets
+  wikifonia_melody_vs_mle_chord
+  wikifonia_melody_vs_mle_chord_3_datasets
+  pop909_melody_vs_mle_chord
+  pop909_melody_vs_mle_chord_3_datasets
+  nottingham_melody_vs_mle_chord
+  nottingham_melody_vs_mle_chord_3_datasets
+
+  # Dataset melody vs Realchords chord
+  hooktheory_melody_vs_realchords_chord
+  wikifonia_melody_vs_realchords_chord
+  nottingham_melody_vs_realchords_chord
+  pop909_melody_vs_realchords_chord
+
+  # Dataset melody vs GAPT chord
+  hooktheory_melody_vs_gapt_chord
+  wikifonia_melody_vs_gapt_chord
+  pop909_melody_vs_gapt_chord
+  nottingham_melody_vs_gapt_chord
+
+  # Model vs model (GAPT melody family)
+  mle_melody_vs_mle_chord_free_generation
+  mle_melody_vs_mle_chord_with_prompt
+  mle_melody_vs_realchords_chord_free_generation
+  mle_melody_vs_realchords_chord_with_prompt
+  mle_melody_vs_gapt_chord_free_generation
+  mle_melody_vs_gapt_chord_with_prompt
+  realchords_melody_vs_mle_chord_free_generation
+  realchords_melody_vs_mle_chord_with_prompt
+  realchords_melody_vs_realchords_chord_free_generation
+  realchords_melody_vs_realchords_chord_with_prompt
+  realchords_melody_vs_gapt_chord_free_generation
+  realchords_melody_vs_gapt_chord_with_prompt
+  gapt_melody_vs_mle_chord_free_generation
+  gapt_melody_vs_mle_chord_with_prompt
+  gapt_melody_vs_realchords_chord_free_generation
+  gapt_melody_vs_realchords_chord_with_prompt
+  gapt_melody_vs_gapt_chord_free_generation
+  gapt_melody_vs_gapt_chord_with_prompt
+
+  # GAPT multiscale
+  hooktheory_melody_vs_gapt_multiscale_chord
+  wikifonia_melody_vs_gapt_multiscale_chord
+  pop909_melody_vs_gapt_multiscale_chord
+  nottingham_melody_vs_gapt_multiscale_chord
+  mle_melody_vs_gapt_multiscale_chord_free_generation
+  mle_melody_vs_gapt_multiscale_chord_with_prompt
+  realchords_melody_vs_gapt_multiscale_chord_free_generation
+  realchords_melody_vs_gapt_multiscale_chord_with_prompt
+  gapt_multiscale_melody_vs_mle_chord_free_generation
+  gapt_multiscale_melody_vs_mle_chord_with_prompt
+  gapt_multiscale_melody_vs_realchords_chord_free_generation
+  gapt_multiscale_melody_vs_realchords_chord_with_prompt
+  gapt_multiscale_melody_vs_gapt_multiscale_chord_free_generation
+  gapt_multiscale_melody_vs_gapt_multiscale_chord_with_prompt
+)
+
+typeset -gA GENERATED_SYSTEM_GROUPS
+
+_init_generated_system_groups() {
+  local -a _free _prompt _model
+
+  GENERATED_SYSTEM_GROUPS[all]="${GENERATED_SYSTEMS[*]}"
+  GENERATED_SYSTEM_GROUPS[gt]="hooktheory_gt wikifonia_gt nottingham_gt pop909_gt"
+  GENERATED_SYSTEM_GROUPS[melody_vs_mle]="hooktheory_melody_vs_mle_chord wikifonia_melody_vs_mle_chord pop909_melody_vs_mle_chord nottingham_melody_vs_mle_chord"
+  GENERATED_SYSTEM_GROUPS[melody_vs_mle_3_datasets]="hooktheory_melody_vs_mle_chord_3_datasets wikifonia_melody_vs_mle_chord_3_datasets pop909_melody_vs_mle_chord_3_datasets nottingham_melody_vs_mle_chord_3_datasets"
+  GENERATED_SYSTEM_GROUPS[melody_vs_realchords]="hooktheory_melody_vs_realchords_chord wikifonia_melody_vs_realchords_chord nottingham_melody_vs_realchords_chord pop909_melody_vs_realchords_chord"
+  GENERATED_SYSTEM_GROUPS[melody_vs_gapt]="hooktheory_melody_vs_gapt_chord wikifonia_melody_vs_gapt_chord pop909_melody_vs_gapt_chord nottingham_melody_vs_gapt_chord"
+  GENERATED_SYSTEM_GROUPS[melody_vs_gapt_multiscale]="hooktheory_melody_vs_gapt_multiscale_chord wikifonia_melody_vs_gapt_multiscale_chord pop909_melody_vs_gapt_multiscale_chord nottingham_melody_vs_gapt_multiscale_chord"
+  GENERATED_SYSTEM_GROUPS[gapt_multiscale_batch]="hooktheory_melody_vs_gapt_multiscale_chord wikifonia_melody_vs_gapt_multiscale_chord pop909_melody_vs_gapt_multiscale_chord nottingham_melody_vs_gapt_multiscale_chord mle_melody_vs_gapt_multiscale_chord_free_generation mle_melody_vs_gapt_multiscale_chord_with_prompt realchords_melody_vs_gapt_multiscale_chord_free_generation realchords_melody_vs_gapt_multiscale_chord_with_prompt gapt_multiscale_melody_vs_mle_chord_free_generation gapt_multiscale_melody_vs_mle_chord_with_prompt gapt_multiscale_melody_vs_realchords_chord_free_generation gapt_multiscale_melody_vs_realchords_chord_with_prompt gapt_multiscale_melody_vs_gapt_multiscale_chord_free_generation gapt_multiscale_melody_vs_gapt_multiscale_chord_with_prompt"
+
+  _free=(${(M)GENERATED_SYSTEMS:#*_free_generation})
+  _prompt=(${(M)GENERATED_SYSTEMS:#*_with_prompt})
+  _model=(${(M)GENERATED_SYSTEMS:#(*_free_generation|*_with_prompt)})
+
+  GENERATED_SYSTEM_GROUPS[free_generation]="${(j: :)_free}"
+  GENERATED_SYSTEM_GROUPS[with_prompt]="${(j: :)_prompt}"
+  GENERATED_SYSTEM_GROUPS[model_matrix]="${(j: :)_model}"
+}
+
+_init_generated_system_groups
+unset -f _init_generated_system_groups
