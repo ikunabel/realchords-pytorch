@@ -1,10 +1,348 @@
 """Evaluation utilities for ReaLchords."""
 
+from __future__ import annotations
+
+import json
+import math
+from functools import lru_cache
+from pathlib import Path
+from typing import Dict, FrozenSet, List, Sequence, Tuple
+
 import numpy as np
 import torch
 import note_seq.chord_symbols_lib as chord_symbols_lib
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
+from realchords.utils.modes import (
+    DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
+    extract_chord_quality,
+    list_scale_modes,
+)
+
+SPECIAL_TOKENS = frozenset({"PAD", "BOS", "EOS", "SILENCE"})
+ModeRef = Tuple[str, int]
+ModePitchClasses = Dict[ModeRef, FrozenSet[int]]
+QualityModeEntry = Dict[str, object]
+
+
+@lru_cache(maxsize=1)
+def _load_quality_mode_lookup(
+    map_path: str = str(DEFAULT_CHORD_QUALITY_MODE_MAP_PATH),
+) -> Tuple[Dict[str, QualityModeEntry], ModePitchClasses]:
+    """Load chord-quality → mode map and C-root pitch-class lookup."""
+    mode_pitch_classes: ModePitchClasses = {}
+    for parent_scale, mode_list in list_scale_modes().items():
+        for mode in mode_list:
+            mode_pitch_classes[(parent_scale, mode["mode_index"])] = frozenset(
+                mode["pitch_classes"]
+            )
+
+    quality_map: Dict[str, QualityModeEntry] = {}
+    for line in Path(map_path).read_text(encoding="utf-8").splitlines():
+        entry = json.loads(line)
+        quality_map[entry["chord_quality"]] = entry
+    return quality_map, mode_pitch_classes
+
+
+def _split_melody_chord_lanes(
+    seq: Sequence[int],
+    sequence_order: str,
+) -> Tuple[List[int], List[int]]:
+    if sequence_order == "chord_first":
+        return seq[1::2], seq[::2]
+    return seq[::2], seq[1::2]
+
+
+def _parse_chord_symbol(token_name: str) -> str | None:
+    if token_name.startswith("CHORD_ON_"):
+        return token_name[len("CHORD_ON_") :]
+    if token_name.startswith("CHORD_"):
+        return token_name[len("CHORD_") :]
+    return None
+
+
+def _parse_note_pitch(token_name: str) -> int | None:
+    if token_name.startswith("NOTE_ON_"):
+        prefix = "NOTE_ON_"
+    elif token_name.startswith("NOTE_"):
+        prefix = "NOTE_"
+    else:
+        return None
+    try:
+        return int(token_name[len(prefix) :])
+    except ValueError:
+        return None
+
+
+def _transpose_pitch_classes(
+    pitch_classes: FrozenSet[int],
+    root_pc: int,
+) -> FrozenSet[int]:
+    return frozenset((pc + root_pc) % 12 for pc in pitch_classes)
+
+
+def _circular_semitone_distance(pc_a: int, pc_b: int) -> int:
+    distance = abs(pc_a - pc_b) % 12
+    return min(distance, 12 - distance)
+
+
+def _min_distance_to_mode(pc: int, mode_pcs: FrozenSet[int]) -> int:
+    return min(_circular_semitone_distance(pc, mode_pc) for mode_pc in mode_pcs)
+
+
+def _melody_pitch_histogram(
+    melody_tokens: Sequence[int],
+    start: int,
+    end: int,
+    tokenizer: HooktheoryTokenizer,
+) -> Tuple[List[float], float]:
+    histogram = [0.0] * 12
+    total_weight = 0.0
+    for frame in range(start, end):
+        token_name = tokenizer.id_to_name.get(melody_tokens[frame], "")
+        if token_name in SPECIAL_TOKENS:
+            continue
+        pitch = _parse_note_pitch(token_name)
+        if pitch is None:
+            continue
+        pitch_class = pitch % 12
+        histogram[pitch_class] += 1.0
+        total_weight += 1.0
+    return histogram, total_weight
+
+
+def _mode_coverage_score(
+    histogram: Sequence[float],
+    total_weight: float,
+    mode_pcs: FrozenSet[int],
+) -> float:
+    if total_weight <= 0:
+        return 0.0
+    in_mode_weight = sum(histogram[pc] for pc in mode_pcs)
+    return in_mode_weight / total_weight
+
+
+def _mode_distance_score(
+    histogram: Sequence[float],
+    total_weight: float,
+    mode_pcs: FrozenSet[int],
+    sigma: float,
+) -> float:
+    if total_weight <= 0:
+        return 0.0
+    variance = 2.0 * sigma * sigma
+    score = 0.0
+    for pc, weight in enumerate(histogram):
+        if weight <= 0:
+            continue
+        distance = _min_distance_to_mode(pc, mode_pcs)
+        score += weight * math.exp(-(distance * distance) / variance)
+    return score / total_weight
+
+
+def _candidate_mode_pitch_classes(
+    chord_symbol: str,
+    quality_entry: QualityModeEntry,
+    mode_pitch_classes: ModePitchClasses,
+) -> List[FrozenSet[int]]:
+    root_pc = chord_symbols_lib.chord_symbol_root(chord_symbol)
+    candidate_sets: List[FrozenSet[int]] = []
+    for mode in quality_entry["modes"]:  # type: ignore[index]
+        mode_ref = (mode["parent_scale"], mode["mode_index"])
+        pitch_classes = mode_pitch_classes.get(mode_ref)
+        if pitch_classes is None:
+            continue
+        candidate_sets.append(_transpose_pitch_classes(pitch_classes, root_pc))
+    return candidate_sets
+
+
+def _best_mode_fit_score(
+    histogram: Sequence[float],
+    total_weight: float,
+    candidate_mode_pcs: Sequence[FrozenSet[int]],
+    scoring: str,
+    sigma: float,
+) -> float:
+    if total_weight <= 0 or not candidate_mode_pcs:
+        return 0.0
+
+    best_score = 0.0
+    for mode_pcs in candidate_mode_pcs:
+        if scoring == "coverage":
+            score = _mode_coverage_score(histogram, total_weight, mode_pcs)
+        elif scoring == "distance":
+            score = _mode_distance_score(histogram, total_weight, mode_pcs, sigma)
+        else:
+            raise ValueError(
+                f"Unsupported scoring '{scoring}'. Expected 'coverage' or 'distance'."
+            )
+        best_score = max(best_score, score)
+    return best_score
+
+
+def _chord_onset_indices(
+    chord_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    onset_indices = []
+    for frame, token in enumerate(chord_tokens):
+        token_name = tokenizer.id_to_name.get(token, "")
+        if token_name in SPECIAL_TOKENS:
+            continue
+        if tokenizer.is_chord_on(token):
+            onset_indices.append(frame)
+    return onset_indices
+
+
+def _sequence_mode_fit_score(
+    melody_tokens: Sequence[int],
+    chord_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+    quality_map: Dict[str, QualityModeEntry],
+    mode_pitch_classes: ModePitchClasses,
+    scoring: str,
+    sigma: float,
+    skip_underdetermined: bool,
+    min_melody_weight: float,
+) -> Tuple[float, float, int]:
+    weighted_score_sum = 0.0
+    melody_weight_sum = 0.0
+    segment_count = 0
+
+    onset_indices = _chord_onset_indices(chord_tokens, tokenizer)
+    if not onset_indices:
+        return np.nan, 0.0, 0
+
+    for index, start in enumerate(onset_indices):
+        end = (
+            onset_indices[index + 1]
+            if index + 1 < len(onset_indices)
+            else len(chord_tokens)
+        )
+        chord_name = tokenizer.id_to_name.get(chord_tokens[start], "")
+        chord_symbol = _parse_chord_symbol(chord_name)
+        if chord_symbol is None:
+            continue
+
+        quality = extract_chord_quality(chord_symbol)
+        quality_entry = quality_map.get(quality)
+        if quality_entry is None:
+            continue
+        if skip_underdetermined and quality_entry.get("underdetermined"):
+            continue
+
+        histogram, total_weight = _melody_pitch_histogram(
+            melody_tokens,
+            start,
+            end,
+            tokenizer,
+        )
+        if total_weight < min_melody_weight:
+            continue
+
+        candidate_mode_pcs = _candidate_mode_pitch_classes(
+            chord_symbol,
+            quality_entry,
+            mode_pitch_classes,
+        )
+        segment_score = _best_mode_fit_score(
+            histogram,
+            total_weight,
+            candidate_mode_pcs,
+            scoring=scoring,
+            sigma=sigma,
+        )
+        weighted_score_sum += segment_score * total_weight
+        melody_weight_sum += total_weight
+        segment_count += 1
+
+    if melody_weight_sum <= 0:
+        return np.nan, 0.0, segment_count
+    return weighted_score_sum / melody_weight_sum, melody_weight_sum, segment_count
+
+
+def evaluate_melody_mode_fit_ratio(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    model_part: str,
+    return_count: bool = False,
+    sequence_order: str = "chord_first",
+    scoring: str = "coverage",
+    sigma: float = 1.5,
+    skip_underdetermined: bool = True,
+    min_melody_weight: float = 1.0,
+    mode_map_path: Path | str = DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
+) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Score how well melody notes over each chord region fit an idiomatic mode.
+
+    Unlike note-in-chord, this metric is segment-based: for each span between
+    consecutive ``CHORD_ON`` events, melody pitch classes (duration-weighted by
+    frame holds) are compared against candidate modes from
+    ``chord_quality_mode_map.jsonl``. The best-fitting candidate mode yields a
+    continuous score in ``[0, 1]`` per segment; sequence score is the
+    melody-weighted mean across segments.
+
+    Args:
+        sequences: Tensor of shape ``[batch, seq_len]`` with alternating melody and
+            chord tokens.
+        tokenizer: Hooktheory tokenizer with ``id_to_name`` mapping.
+        model_part: ``"melody"`` or ``"chord"`` (validated for API parity).
+        return_count: If True, also return melody-weight and segment counts.
+        sequence_order: ``"chord_first"`` or ``"melody_first"``.
+        scoring: ``"coverage"`` (fraction of weighted melody in mode) or
+            ``"distance"`` (Gaussian kernel on semitone distance to nearest mode
+            tone).
+        sigma: Kernel width for ``scoring="distance"``.
+        skip_underdetermined: Skip segments for sparse qualities like ``ped``/``5``.
+        min_melody_weight: Minimum weighted melody mass required to score a segment.
+        mode_map_path: Path to curated chord-quality mode JSONL.
+
+    Returns:
+        Tensor of mode-fit ratios per sequence, or a tuple with weights and
+        segment counts when ``return_count=True``.
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+    if model_part not in {"melody", "chord"}:
+        raise ValueError(f"Invalid model_part: {model_part}")
+    if scoring not in {"coverage", "distance"}:
+        raise ValueError(
+            f"Unsupported scoring '{scoring}'. Expected 'coverage' or 'distance'."
+        )
+
+    quality_map, mode_pitch_classes = _load_quality_mode_lookup(str(mode_map_path))
+
+    ratios = []
+    melody_weights = []
+    segment_counts = []
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        melody_tokens, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        ratio, melody_weight, segment_count = _sequence_mode_fit_score(
+            melody_tokens=melody_tokens,
+            chord_tokens=chord_tokens,
+            tokenizer=tokenizer,
+            quality_map=quality_map,
+            mode_pitch_classes=mode_pitch_classes,
+            scoring=scoring,
+            sigma=sigma,
+            skip_underdetermined=skip_underdetermined,
+            min_melody_weight=min_melody_weight,
+        )
+        ratios.append(ratio)
+        melody_weights.append(melody_weight)
+        segment_counts.append(segment_count)
+
+    ratio_tensor = torch.tensor(ratios)
+    if return_count:
+        return (
+            ratio_tensor,
+            torch.tensor(melody_weights),
+            torch.tensor(segment_counts),
+        )
+    return ratio_tensor
 
 
 def evaluate_note_in_chord_ratio(

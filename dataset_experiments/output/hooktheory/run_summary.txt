@@ -1,4 +1,0 @@
-Loaded 19052 songs from train
-Exported song index 7: jennifer-lopez - on-the-floor
-MIDI: /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/dataset_experiments/output/hooktheory/midis/annotations_on-the-floor_AnLgaealgYp.midi
-JSON: output/hooktheory/sample_song_full.json
