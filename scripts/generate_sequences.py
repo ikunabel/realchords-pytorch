@@ -57,6 +57,7 @@ import torch
 from lightning import seed_everything
 
 from realchords.utils.experiment_utils import (
+    create_dataset_dataloaders,
     handle_data_only_mode,
     load_models,
     save_generated_sequences,
@@ -94,14 +95,20 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--mle_melody_model_path",
         type=str,
-        default="logs/decoder_only_online_melody/step=11000.ckpt",
-        help="Path to the baseline MLE melody Lightning checkpoint.",
+        default=None,
+        help=(
+            "Path to the baseline MLE melody Lightning checkpoint. "
+            "Not required for --mode melody_data_vs_chord_data (GT dump)."
+        ),
     )
     parser.add_argument(
         "--mle_chord_model_path",
         type=str,
-        default="logs/decoder_only_online_chord/step=11000.ckpt",
-        help="Path to the baseline MLE chord Lightning checkpoint.",
+        default=None,
+        help=(
+            "Path to the baseline MLE chord Lightning checkpoint. "
+            "Not required for --mode melody_data_vs_chord_data (GT dump)."
+        ),
     )
     parser.add_argument(
         "--mode",
@@ -338,6 +345,17 @@ def main() -> None:
             fixed_source,
             device,
         )
+    elif mel_source == "melody_data" and chord_source == "chord_data":
+        # GT / data-only mode: no model needed, just dump the dataset.
+        chord_dataloaders = create_dataset_dataloaders(
+            dataset_name=args.dataset_name,
+            dataset_split=args.dataset_split,
+            model_part="chord",
+            batch_size=args.batch_size,
+            max_len=args.target_seq_len,
+        )
+        handle_data_only_mode(args, chord_dataloaders, device, args.data_perturbation)
+        return
     else:
         (
             melody_model,
@@ -349,12 +367,6 @@ def main() -> None:
             mle_melody_model,
             mle_chord_model,
         ) = load_models(args, mel_source, chord_source, device)
-
-        if mel_source == "melody_data" and chord_source == "chord_data":
-            handle_data_only_mode(
-                args, chord_dataloaders, device, args.data_perturbation
-            )
-            return
         if "data" not in mel_source and "data" not in chord_source:
             generated_all = handle_model_vs_model_generation(
                 args,

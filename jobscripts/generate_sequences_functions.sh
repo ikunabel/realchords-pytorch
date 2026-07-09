@@ -14,45 +14,46 @@ export MY_CHECKPOINTS="${MY_CHECKPOINTS:-/hpcwork/thes2192/realchords/logs/my_lo
 hooktheory_gt() {
   python scripts/generate_sequences.py \
     --mode melody_data_vs_chord_data \
-    --mle_melody_model_path "$MY_CHECKPOINTS/decoder_only_online_melody_4_datasets/step=11000.ckpt" \
-    --mle_chord_model_path "$MY_CHECKPOINTS/decoder_only_online_chord/step=11000.ckpt" \
     --dataset_name hooktheory \
     --dataset_split test \
     --num_batches -1 \
-    --save_dir logs/generated/hooktheory_gt\
+    --save_dir logs/generated/hooktheory_gt
 }
 
 wikifonia_gt() {
   python scripts/generate_sequences.py \
     --mode melody_data_vs_chord_data \
-    --mle_melody_model_path "$MY_CHECKPOINTS/decoder_only_online_melody_4_datasets/step=11000.ckpt" \
-    --mle_chord_model_path "$MY_CHECKPOINTS/decoder_only_online_chord/step=11000.ckpt" \
     --dataset_name wikifonia \
     --dataset_split all \
     --num_batches -1 \
-    --save_dir logs/generated/wikifonia_gt \
+    --save_dir logs/generated/wikifonia_gt
 }
 
 nottingham_gt() {
   python scripts/generate_sequences.py \
     --mode melody_data_vs_chord_data \
-    --mle_melody_model_path "$MY_CHECKPOINTS/decoder_only_online_melody_4_datasets/step=11000.ckpt" \
-    --mle_chord_model_path "$MY_CHECKPOINTS/decoder_only_online_chord/step=11000.ckpt" \
     --dataset_name nottingham \
     --dataset_split test \
     --num_batches -1 \
-    --save_dir logs/generated/nottingham_gt \
+    --save_dir logs/generated/nottingham_gt
 }
 
 pop909_gt() {
   python scripts/generate_sequences.py \
     --mode melody_data_vs_chord_data \
-    --mle_melody_model_path "$MY_CHECKPOINTS/decoder_only_online_melody_4_datasets/step=11000.ckpt" \
-    --mle_chord_model_path "$MY_CHECKPOINTS/decoder_only_online_chord/step=11000.ckpt" \
     --dataset_name pop909 \
     --dataset_split test \
     --num_batches -1 \
-    --save_dir logs/generated/pop909_gt \
+    --save_dir logs/generated/pop909_gt
+}
+
+jazzmus_gt() {
+  python scripts/generate_sequences.py \
+    --mode melody_data_vs_chord_data \
+    --dataset_name jazzmus \
+    --dataset_split all \
+    --num_batches -1 \
+    --save_dir logs/generated/jazzmus_gt
 }
 
 # -----------------------------------------------------------------------------
