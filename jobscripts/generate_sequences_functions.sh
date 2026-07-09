@@ -56,6 +56,15 @@ jazzmus_gt() {
     --save_dir logs/generated/jazzmus_gt
 }
 
+wjd_gt() {
+  python scripts/generate_sequences.py \
+    --mode melody_data_vs_chord_data \
+    --dataset_name wjd \
+    --dataset_split all \
+    --num_batches -1 \
+    --save_dir logs/generated/wjd_gt
+}
+
 # -----------------------------------------------------------------------------
 # Online MLE
 # -----------------------------------------------------------------------------

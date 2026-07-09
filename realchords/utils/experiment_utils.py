@@ -36,6 +36,7 @@ DATASET_CACHE_DIRS = {
     "nottingham": os.path.join(CACHE_DIR, "nottingham"),
     "wikifonia": os.path.join(CACHE_DIR, "wikifonia"),
     "jazzmus": os.path.join(CACHE_DIR, "jazzmus"),
+    "wjd": os.path.join(CACHE_DIR, "wjd"),
 }
 
 
