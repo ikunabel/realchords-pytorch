@@ -56,10 +56,30 @@ class AnalysisConfig:
         return self.max_frames // self.frames_per_beat
 
 
+VOCAB_SNAPSHOT_FILENAME = "chord_names_augmented.json"
+
+
 def load_tokenizer(chord_names_path: Path) -> HooktheoryTokenizer:
     with chord_names_path.open("r", encoding="utf-8") as handle:
         chord_names = json.load(handle)
     return HooktheoryTokenizer(chord_names=chord_names)
+
+
+def find_vocab_for_dir(directory: Path, fallback: Path) -> Path:
+    """Return the vocab file to use for *directory*.
+
+    If *directory* contains a ``chord_names_augmented.json`` snapshot (written
+    by ``save_vocab_snapshot`` when the sequences were generated), that file is
+    used.  This guarantees the tokenizer matches the vocab that was active at
+    generation time, even if the global vocab has grown since then.
+
+    Falls back to *fallback* (typically ``DEFAULT_CHORD_NAMES_PATH``) when no
+    snapshot exists.
+    """
+    snapshot = directory / VOCAB_SNAPSHOT_FILENAME
+    if snapshot.exists():
+        return snapshot
+    return fallback
 
 
 def collect_sequence_files(input_dir: Path) -> list[Path]:

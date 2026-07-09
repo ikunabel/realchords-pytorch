@@ -1,10 +1,14 @@
 """Common utilities for sequence generation experiments."""
 
+import json
 import os
+import shutil
+import types
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -106,6 +110,33 @@ def replace_eos_with_pad(
     return sequences
 
 
+VOCAB_SNAPSHOT_FILENAME = "chord_names_augmented.json"
+
+
+def save_vocab_snapshot(save_dir: str, chord_names_path: Optional[str] = None) -> Path:
+    """Copy the active chord-names vocab into *save_dir* so that sequence
+    tensors can always be decoded with the exact vocab that was used to encode
+    them, regardless of future changes to the global vocab file.
+
+    The snapshot is written to ``<save_dir>/chord_names_augmented.json``.
+    The MIDI conversion script and evaluation pipeline pick it up
+    automatically when it is present.
+
+    Args:
+        save_dir: Directory where the ``.pt`` tensors are being saved.
+        chord_names_path: Path to the chord names JSON to snapshot.
+            Defaults to ``CHORD_NAMES_AUG_PATH``.
+
+    Returns:
+        Path to the written snapshot file.
+    """
+    src = Path(chord_names_path) if chord_names_path else Path(CHORD_NAMES_AUG_PATH)
+    dst = Path(save_dir) / VOCAB_SNAPSHOT_FILENAME
+    if src.resolve() != dst.resolve():
+        shutil.copy2(src, dst)
+    return dst
+
+
 def generate_save_paths(
     save_dir: str, mode: str, generation_type: str = "data_conditioned"
 ) -> Dict[str, Path]:
@@ -131,6 +162,37 @@ def generate_save_paths(
     raise ValueError(f"Unknown generation_type: {generation_type}")
 
 
+def _random_crop_on_chord_onset(
+    self: "HooktheoryDataset", melody: torch.Tensor, chord: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Like ``HooktheoryDataset.random_crop``, but restricts the crop start to
+    frames where a chord onset begins.
+
+    ``HooktheoryDataset.random_crop`` only aligns crop starts to beat
+    boundaries, so a crop can start in the middle of a held chord. That is
+    fine for training, but it means the resulting window has no
+    ``CHORD_ON`` for whatever chord is already sounding, which the
+    tokenizer's strict ``decode_to_midi``/``decode_chord_frames`` cannot
+    represent (it raises "Chord off without chord on"). Restricting starts
+    to chord-onset frames keeps every exported ground-truth crop decodable.
+    """
+    assert melody.shape[0] == chord.shape[0]
+
+    if melody.shape[0] <= self.max_len_per_part:
+        return melody, chord
+
+    max_len = min(self.max_len_per_part, melody.shape[0])
+    start_allowed = list(
+        range(0, melody.shape[0] - max_len + 1, self.frame_per_beat)
+    )
+    onset_starts = [
+        s for s in start_allowed if self.tokenizer.is_chord_on(int(chord[s]))
+    ]
+    start = np.random.choice(onset_starts if onset_starts else start_allowed)
+    end = start + max_len
+    return melody[start:end], chord[start:end]
+
+
 def handle_data_only_mode(
     args: Any,
     chord_dataloaders: Tuple,
@@ -142,6 +204,12 @@ def handle_data_only_mode(
     chord_data_all = []
 
     _, chord_val_dataloader = chord_dataloaders
+    # Patch this dataloader's dataset instance (not the shared
+    # HooktheoryDataset class) so ground-truth crops always start on a
+    # chord onset, without changing crop behavior used for training.
+    chord_val_dataloader.dataset.random_crop = types.MethodType(
+        _random_crop_on_chord_onset, chord_val_dataloader.dataset
+    )
     print(f"Collecting chord data from {len(chord_val_dataloader)} batches.")
 
     for batch in tqdm(chord_val_dataloader, desc="Collecting chord data"):
@@ -162,6 +230,8 @@ def handle_data_only_mode(
         torch.save(chord_data_tensor, save_paths["chord_data"])
         print(f"Saved chord data to {save_paths['chord_data']}")
         print(f"Chord data shape: {chord_data_tensor.shape}")
+        snapshot = save_vocab_snapshot(args.save_dir)
+        print(f"Saved vocab snapshot to {snapshot}")
 
 
 def save_generated_sequences(
@@ -198,6 +268,7 @@ def save_generated_sequences(
         torch.save(seq2_all, save_paths["seq2"])
         torch.save(kl_chord_all, save_paths["kl_chord"])
         torch.save(kl_melody_all, save_paths["kl_melody"])
+        save_vocab_snapshot(args.save_dir)
 
         print(f"Saved generated chord sequences to {save_paths['seq1']}")
         print(f"Chord sequences shape: {seq1_all.shape}")
@@ -217,6 +288,7 @@ def save_generated_sequences(
 
         torch.save(sequences_all, save_paths["sequences"])
         torch.save(kl_all, save_paths["kl"])
+        save_vocab_snapshot(args.save_dir)
 
         print(f"Saved generated sequences to {save_paths['sequences']}")
         print(f"Generated sequences shape: {sequences_all.shape}")
