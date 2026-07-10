@@ -231,3 +231,146 @@ Total chord occurrences   : 4,517,269
 
 5. **`extract_pijama_voicings.py` is superseded** by the general `extract_voicings.py`.
    The PIJAMA-specific script can be deleted once the merged pipeline is confirmed.
+
+---
+
+## Update: per-song chord MIDI output (Jul 10 2026)
+
+`extract_voicings.py` gained a `--midi_output_dir` argument. When set, the script writes
+one MIDI file per input file containing **only the detected chord voicings** placed at
+their original onset times (in seconds). The folder structure under `--input_dir` is
+mirrored under `--midi_output_dir`; the source MIDI files are never modified.
+
+```bash
+python scripts/extract_voicings/extract_voicings.py \
+    --input_dir data/pijama \
+    --output_dir data/voicings/pijama \
+    --midi_output_dir data/voicings/pijama/chord_midi
+```
+
+**How chord MIDIs are written:**
+- Each detected chord is a block of notes starting at its original onset time.
+- The duration of each chord is the onset time of the next chord (or `--max_hold` = 2 s
+  for the last chord).
+- A single acoustic piano instrument (program 0) is used.
+
+**Why:** The chord MIDI files make it easy to audition what the extractor actually
+captured, spot non-chord clusters, and verify register/voicing quality.
+
+**Observation — melody-chord duality:** Because the extractor groups all notes that
+onset within 50 ms, it captures both pure chord blocks and cases where a melody note is
+played simultaneously with the chord. In jazz piano this is intentional (block chords,
+locked-hand technique — the melody note is voiced into the chord on top). The exact
+pitch-class matching stage handles this cleanly: if the melody note's pitch class is
+already in the chord, the voicing still matches correctly. If the melody note is a
+non-chord tone, the voicing either matches a more extended chord name or is unmatched.
+This means the lookup table is biased toward voicings that already incorporate the
+melody note, which is musically desirable.
+
+---
+
+## Update: music-theory-aware voicing selector (Jul 10 2026)
+
+### `realchords/utils/voicing_selector.py` — `VoicingSelector` class
+
+Selects the best voicing for a chord symbol from the `chord_voicings.json` lookup table
+by jointly optimising three factors:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Voice leading | 0.6 | Greedy nearest-note assignment from previous voicing; searches ±3 octave shifts to find the best registration automatically |
+| Register | 0.3 | Gaussian penalty if voicing centroid deviates from `target_mid` (default MIDI 60, middle C), σ = 14 semitones |
+| Frequency prior | 0.1 | –log(count): prefers voicings that appeared more often in the source dataset |
+
+**Hard constraints** (applied before scoring, silently relaxed if nothing passes):
+- *Melody ceiling* (`melody_role="top"`): highest chord note < `melody_pitch`
+- *Melody floor* (`melody_role="bass"`): lowest chord note > `melody_pitch`
+- *Register bounds*: all pitches in [28, 100]
+
+Voice leading is the dominant term: the algorithm finds the octave transposition of each
+candidate that minimises total movement from the previous chord, then ranks all
+(candidate, transposition) pairs by the composite score.
+
+**Usage:**
+
+```python
+from realchords.utils.voicing_selector import VoicingSelector
+
+sel = VoicingSelector("data/voicings/merged/chord_voicings.json")
+sel.reset()                         # once per song
+pitches = sel.select("Cmaj7")
+pitches = sel.select("Am7")         # state updated automatically
+```
+
+**CLI demo** (`scripts/extract_voicings/voicing_selector.py`):
+
+```bash
+python scripts/extract_voicings/voicing_selector.py \
+    --chords Cmaj7 Am7 Dm7 G7 Cmaj7
+
+# Example output:
+# Chord         Pitches                         Centroid   VL cost
+# -----------------------------------------------------------------
+# Cmaj7         [55, 59, 60, 64]                    59.5       0.0  (G3, B3, C4, E4)
+# Am7           [55, 57, 60, 64]                    59.0       1.0  (G3, A3, C4, E4)
+# Dm7           [53, 57, 60, 62, 65]                59.4       0.6  (F3, A3, C4, D4, F4)
+# G7            [53, 55, 59, 62]                    57.2       0.6  (F3, G3, B3, D4)
+# Cmaj7         [52, 55, 59, 60, 64]                58.0       0.6  (E3, G3, B3, C4, E4)
+```
+
+**Key design note — melody constraint disabled by default:**  
+The melody ceiling (`melody_pitch` argument) was intentionally omitted from the
+MIDI conversion pipeline. Good jazz voicings regularly place chord notes above the
+melody; forcing the chord below the melody would over-constrain the selection. Voice
+leading + register alone produce musically sensible results. The constraint can still be
+passed explicitly (e.g. for WJD bass-line conditioning via `melody_role="bass"`).
+
+---
+
+## Update: voiced MIDI output from `.pt` tensors (Jul 10 2026)
+
+`convert_generated_sequences_to_midi.py` gained a `--voicings` flag that activates
+voiced MIDI rendering via `VoicingSelector`:
+
+```bash
+python scripts/to_midi/convert_generated_sequences_to_midi.py \
+    logs/generated/hooktheory_gt \
+    --voicings data/voicings/merged/chord_voicings.json \
+    --max-sequences 8
+```
+
+### Output format per sequence
+
+Each sequence writes a **single MIDI file** containing alternating naive and voiced
+sections for direct A/B comparison:
+
+```
+[naive 2 bars] [½ bar pause] [voiced 2 bars] [½ bar pause]
+[naive 2 bars] [½ bar pause] [voiced 2 bars] [½ bar pause]  ...
+```
+
+Two instruments are used: **Melody** (identical in both sections) and **Chords**
+(flat root-position in the naive section, VoicingSelector output in the voiced section).
+
+**Naive chord rendering:** `note_seq.chord_symbol_pitches` mapped to `CHORD_OCTAVE = 4`
+(MIDI 48–59), plus a bass note at `BASS_OCTAVE = 3`, matching the tokenizer's own
+`decode_to_midi` output exactly.
+
+**Voiced chord rendering:** `VoicingSelector` with stateful voice leading across the
+entire voiced half of the MIDI (selector state is not reset between chunks, so voice
+leading is continuous). For chords not found in the lookup table, the naive voicing is
+used as a fallback so the voiced section is never thinner than the naive one.
+
+**Duplicate pitch removal:** `_dedup_pitches()` runs on every chord before writing
+(e.g. bass note from `chord_symbol_bass` can equal one of the chord pitches mapped to
+the same octave).
+
+### Chunk / pause sizes
+
+Defaults: `chunk_bars=2`, `pause_bars=0.5`. At 120 BPM:
+
+| Parameter | Value | Seconds |
+|-----------|-------|---------|
+| 2-bar chunk | 8 beats | 4 s |
+| ½-bar pause | 2 beats | 1 s |
+| Full cycle (naive + pause + voiced + pause) | — | 10 s |
