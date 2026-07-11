@@ -41,12 +41,15 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import math
 import re
-from collections import Counter
+import statistics
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
@@ -62,6 +65,7 @@ from realchords.utils.chord_diversity_analysis import (
     resolve_device,
 )
 from realchords.utils.eval_utils import (
+    SPECIAL_TOKENS,
     evaluate_melody_mode_fit_ratio,
     evaluate_note_in_chord_ratio,
 )
@@ -85,6 +89,133 @@ class SystemSpec:
     label: str
     directory: Path
     slug: str
+
+
+# ---------------------------------------------------------------------------
+# Per-sequence auxiliary stats
+# ---------------------------------------------------------------------------
+
+_PER_SEQ_FIELDNAMES = [
+    "system",
+    "source_file",
+    "seq_idx",
+    "note_in_chord_ratio",
+    "valid_melody_frames",
+    "correct_melody_frames",
+    "mode_fit_ratio",
+    "mode_fit_segments",
+    "melody_silence_ratio",
+    "melody_active_frames",
+    "num_chord_changes",
+    "num_unique_chords",
+]
+
+
+def _aux_stats_batch(
+    sequences: torch.Tensor,
+    tokenizer,
+    sequence_order: str,
+) -> Dict[str, List]:
+    """Lightweight per-sequence stats derived purely from token names.
+
+    Returns equal-length lists (one entry per sequence):
+      num_chord_changes     — CHORD_ON event count
+      num_unique_chords     — distinct chord symbols used
+      melody_silence_ratio  — SILENCE / (SILENCE + NOTE) frames
+      melody_active_frames  — frames carrying a NOTE token
+    """
+    if sequence_order == "chord_first":
+        chord_slice, melody_slice = slice(0, None, 2), slice(1, None, 2)
+    else:
+        chord_slice, melody_slice = slice(1, None, 2), slice(0, None, 2)
+
+    num_chord_changes: List[int] = []
+    num_unique_chords: List[int] = []
+    melody_silence_ratio: List[float] = []
+    melody_active_frames: List[int] = []
+
+    for seq in sequences:
+        chord_tokens = seq[chord_slice].tolist()
+        melody_tokens = seq[melody_slice].tolist()
+
+        chord_on_count = 0
+        unique_names: set = set()
+        for tok in chord_tokens:
+            name = tokenizer.id_to_name.get(tok, "")
+            if name in SPECIAL_TOKENS:
+                continue
+            if tokenizer.is_chord_on(tok):
+                chord_on_count += 1
+                unique_names.add(name[len("CHORD_ON_"):])
+        num_chord_changes.append(chord_on_count)
+        num_unique_chords.append(len(unique_names))
+
+        silence_f = note_f = 0
+        for tok in melody_tokens:
+            name = tokenizer.id_to_name.get(tok, "")
+            if name in {"PAD", "BOS", "EOS"}:
+                continue
+            if name == "SILENCE":
+                silence_f += 1
+            elif name.startswith("NOTE"):
+                note_f += 1
+        total = silence_f + note_f
+        melody_silence_ratio.append(silence_f / total if total > 0 else math.nan)
+        melody_active_frames.append(note_f)
+
+    return {
+        "num_chord_changes": num_chord_changes,
+        "num_unique_chords": num_unique_chords,
+        "melody_silence_ratio": melody_silence_ratio,
+        "melody_active_frames": melody_active_frames,
+    }
+
+
+def _pct(vals: List[float], p: int) -> str:
+    if not vals:
+        return "n/a"
+    s = sorted(vals)
+    idx = max(0, min(len(s) - 1, int(len(s) * p / 100)))
+    return f"{s[idx]:.3f}"
+
+
+def _fmt_stats(vals: List[float]) -> str:
+    if not vals:
+        return "n/a"
+    mu = statistics.mean(vals)
+    sd = statistics.stdev(vals) if len(vals) > 1 else 0.0
+    return (
+        f"mean={mu:.3f}  std={sd:.3f}  "
+        f"p10={_pct(vals, 10)}  p50={_pct(vals, 50)}  p90={_pct(vals, 90)}  "
+        f"[{min(vals):.3f} … {max(vals):.3f}]"
+    )
+
+
+def _print_per_seq_summary(rows: List[Dict]) -> None:
+    by_system: Dict[str, List[Dict]] = defaultdict(list)
+    for row in rows:
+        by_system[row["system"]].append(row)
+
+    def _floats(lst: List[Dict], key: str) -> List[float]:
+        out = []
+        for r in lst:
+            v = r.get(key, "")
+            try:
+                out.append(float(v))
+            except (ValueError, TypeError):
+                pass
+        return out
+
+    print("\n" + "=" * 72)
+    print("Per-sequence distribution summary")
+    print("=" * 72)
+    for label, sys_rows in by_system.items():
+        print(f"\n{label}  (n={len(sys_rows)})")
+        print(f"  NiCR             {_fmt_stats(_floats(sys_rows, 'note_in_chord_ratio'))}")
+        print(f"  Mode fit         {_fmt_stats(_floats(sys_rows, 'mode_fit_ratio'))}")
+        print(f"  Melody silence   {_fmt_stats(_floats(sys_rows, 'melody_silence_ratio'))}")
+        print(f"  Chord changes    {_fmt_stats(_floats(sys_rows, 'num_chord_changes'))}")
+        print(f"  Unique chords    {_fmt_stats(_floats(sys_rows, 'num_unique_chords'))}")
 
 
 def slugify(value: str) -> str:
@@ -215,6 +346,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="If set, compute only the system summary and skip writing per-file artifacts.",
     )
+    parser.add_argument(
+        "--per_sequence_csv",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "If set, write a CSV with one row per sequence containing NiCR, mode-fit ratio, "
+            "melody silence ratio, chord-change count, and unique-chord count. "
+            "Also prints a per-system distribution summary (mean, std, percentiles) to stdout."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -241,6 +383,8 @@ def accumulate_harmony_metrics(
     sequence_order: str,
     scoring: str,
     sigma: float,
+    system_label: str = "",
+    per_sequence_rows: Optional[List[Dict]] = None,
 ) -> Dict[str, object]:
     total_sequences = 0
     total_valid_frames = 0
@@ -288,6 +432,35 @@ def accumulate_harmony_metrics(
                 weighted_mode_fit_sum += float(
                     (mode_fit[scorable] * melody_weights[scorable]).sum().item()
                 )
+
+        # ---- per-sequence rows (optional) ----
+        if per_sequence_rows is not None:
+            aux = _aux_stats_batch(sequences, tokenizer, sequence_order)
+            vc = valid_counts.tolist()
+            cc = correct_counts.tolist()
+            mf = mode_fit.tolist()
+            sc = segment_counts.tolist()
+            for i in range(sequences.size(0)):
+                has_melody = vc[i] > 0
+                has_mode = sc[i] > 0 and math.isfinite(mf[i])
+                per_sequence_rows.append({
+                    "system": system_label,
+                    "source_file": path.name,
+                    "seq_idx": i,
+                    "note_in_chord_ratio": f"{cc[i] / max(vc[i], 1):.4f}" if has_melody else "",
+                    "valid_melody_frames": int(vc[i]),
+                    "correct_melody_frames": int(cc[i]),
+                    "mode_fit_ratio": f"{mf[i]:.4f}" if has_mode else "",
+                    "mode_fit_segments": int(sc[i]),
+                    "melody_silence_ratio": (
+                        f"{aux['melody_silence_ratio'][i]:.4f}"
+                        if math.isfinite(aux["melody_silence_ratio"][i])
+                        else ""
+                    ),
+                    "melody_active_frames": aux["melody_active_frames"][i],
+                    "num_chord_changes": aux["num_chord_changes"][i],
+                    "num_unique_chords": aux["num_unique_chords"][i],
+                })
 
     overall_note_in_chord_ratio = (
         float(total_correct_frames / total_valid_frames)
@@ -409,6 +582,8 @@ def main() -> None:
         device,
     )
 
+    per_seq_rows: Optional[List[Dict]] = [] if args.per_sequence_csv else None
+
     existing_systems: Dict[str, object] = {}
     if args.summary_path.exists():
         with args.summary_path.open("r", encoding="utf-8") as _fh:
@@ -461,6 +636,8 @@ def main() -> None:
             sequence_order=args.sequence_order,
             scoring=args.scoring,
             sigma=args.sigma,
+            system_label=system.label,
+            per_sequence_rows=per_seq_rows,
         )
         diversity_metrics = accumulate_diversity_metrics(
             sequence_files,
@@ -510,6 +687,15 @@ def main() -> None:
         handle.write("\n")
 
     print(f"Wrote summary to {args.summary_path.resolve()}")
+
+    if per_seq_rows is not None and args.per_sequence_csv is not None:
+        args.per_sequence_csv.parent.mkdir(parents=True, exist_ok=True)
+        with args.per_sequence_csv.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=_PER_SEQ_FIELDNAMES)
+            writer.writeheader()
+            writer.writerows(per_seq_rows)
+        print(f"Wrote per-sequence CSV to {args.per_sequence_csv.resolve()}")
+        _print_per_seq_summary(per_seq_rows)
 
 
 if __name__ == "__main__":

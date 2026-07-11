@@ -274,13 +274,20 @@ melody note, which is musically desirable.
 ### `realchords/utils/voicing_selector.py` — `VoicingSelector` class
 
 Selects the best voicing for a chord symbol from the `chord_voicings.json` lookup table
-by jointly optimising three factors:
+by jointly optimising four factors:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
-| Voice leading | 0.6 | Greedy nearest-note assignment from previous voicing; searches ±3 octave shifts to find the best registration automatically |
-| Register | 0.3 | Gaussian penalty if voicing centroid deviates from `target_mid` (default MIDI 60, middle C), σ = 14 semitones |
+| Voice leading | 0.5 | Greedy nearest-note assignment from previous voicing; searches ±3 octave shifts to find the best registration automatically |
+| Register | 0.2 | Gaussian penalty if voicing centroid deviates from `target_mid` (default MIDI 60, middle C), σ = 14 semitones |
+| Compactness | 0.2 | `n_notes / max_notes` across the candidate pool; strongly prefers sparse voicings (e.g. 3–4 notes over 8-note clusters) |
 | Frequency prior | 0.1 | –log(count): prefers voicings that appeared more often in the source dataset |
+
+**Compactness motivation:** the raw voicing data can contain very dense clusters (e.g. 8
+simultaneous pitches for an extended chord like G9) that sound cluttered. By penalising
+note count relative to the densest candidate in the pool, the selector naturally gravitates
+toward the 3–5 note voicings that most pianists actually play. Weight is configurable:
+`VoicingSelector(..., compact_weight=0.3)`.
 
 **Hard constraints** (applied before scoring, silently relaxed if nothing passes):
 - *Melody ceiling* (`melody_role="top"`): highest chord note < `melody_pitch`
@@ -341,36 +348,34 @@ python scripts/to_midi/convert_generated_sequences_to_midi.py \
 
 ### Output format per sequence
 
-Each sequence writes a **single MIDI file** containing alternating naive and voiced
-sections for direct A/B comparison:
+Each sequence writes a **single MIDI file** with two halves separated by a pause:
 
 ```
-[naive 2 bars] [½ bar pause] [voiced 2 bars] [½ bar pause]
-[naive 2 bars] [½ bar pause] [voiced 2 bars] [½ bar pause]  ...
+[full song — naive root-position chords]
+[1-bar pause]
+[full song — VoicingSelector chords]
 ```
 
-Two instruments are used: **Melody** (identical in both sections) and **Chords**
-(flat root-position in the naive section, VoicingSelector output in the voiced section).
+Two instruments are used: **Melody** (identical in both halves) and **Chords**
+(flat root-position in the first half, `VoicingSelector` output in the second).
+
+This layout makes it easy to A/B compare the two chord renderings in a DAW: scrub to the
+midpoint to hear the voiced version.
 
 **Naive chord rendering:** `note_seq.chord_symbol_pitches` mapped to `CHORD_OCTAVE = 4`
 (MIDI 48–59), plus a bass note at `BASS_OCTAVE = 3`, matching the tokenizer's own
 `decode_to_midi` output exactly.
 
 **Voiced chord rendering:** `VoicingSelector` with stateful voice leading across the
-entire voiced half of the MIDI (selector state is not reset between chunks, so voice
-leading is continuous). For chords not found in the lookup table, the naive voicing is
-used as a fallback so the voiced section is never thinner than the naive one.
+entire voiced half. For chords absent from the lookup table, the naive voicing is used as
+a fallback so the voiced section is never empty.
 
-**Duplicate pitch removal:** `_dedup_pitches()` runs on every chord before writing
-(e.g. bass note from `chord_symbol_bass` can equal one of the chord pitches mapped to
-the same octave).
+**Duplicate pitch removal:** `_dedup_pitches()` runs on every chord before writing to
+guard against the bass note coincidentally colliding with a chord tone at the same MIDI
+pitch. Octave doublings within real-world voicings are preserved intentionally — they are
+a normal part of piano writing.
 
-### Chunk / pause sizes
-
-Defaults: `chunk_bars=2`, `pause_bars=0.5`. At 120 BPM:
-
-| Parameter | Value | Seconds |
-|-----------|-------|---------|
-| 2-bar chunk | 8 beats | 4 s |
-| ½-bar pause | 2 beats | 1 s |
-| Full cycle (naive + pause + voiced + pause) | — | 10 s |
+**Chord symbol annotations:** a MIDI lyric text event is written at each chord onset in
+both halves, labelled with the model-predicted chord symbol. These appear in most DAWs
+(Logic, Ableton, REAPER, GarageBand) as text markers in the piano roll or lyrics lane,
+making it straightforward to verify what chord the model predicted at each position.

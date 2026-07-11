@@ -3,18 +3,23 @@
 Given a chord symbol and a lookup table (``chord_voicings.json``), selects the
 best candidate voicing for the current musical context by jointly optimising:
 
-  1. **Voice leading** (weight: ``vl_weight``, default 0.6)
+  1. **Voice leading** (weight: ``vl_weight``, default 0.5)
        Minimise total absolute pitch movement from the previous voicing using a
        greedy nearest-note assignment.  The candidate can be shifted by whole
        octaves (±``max_octave_shift`` octaves) to search for the best
        registration automatically.
 
-  2. **Register** (weight: ``reg_weight``, default 0.3)
+  2. **Register** (weight: ``reg_weight``, default 0.2)
        Penalise voicings whose centroid deviates from ``target_mid`` (default
        MIDI 60, middle C).  The penalty is Gaussian with σ = ``reg_sigma``
        semitones (default 14).
 
-  3. **Frequency prior** (weight: ``count_weight``, default 0.1)
+  3. **Compactness** (weight: ``compact_weight``, default 0.2)
+       Prefer voicings with fewer notes.  Score is ``n_notes / max_notes``
+       across all candidates for the chord, so a 3-note voicing scores 0
+       relative to the worst (most notes) voicing.
+
+  4. **Frequency prior** (weight: ``count_weight``, default 0.1)
        Prefer voicings that appeared more often in the source dataset (acts as a
        stylistic tiebreaker).
 
@@ -96,8 +101,9 @@ class VoicingSelector:
         max_octave_shift: int = 3,
         pitch_lo: int = 28,
         pitch_hi: int = 100,
-        vl_weight: float = 0.6,
-        reg_weight: float = 0.3,
+        vl_weight: float = 0.5,
+        reg_weight: float = 0.2,
+        compact_weight: float = 0.2,
         count_weight: float = 0.1,
     ) -> None:
         with open(voicings_path, encoding="utf-8") as f:
@@ -110,6 +116,7 @@ class VoicingSelector:
         self.pitch_hi = pitch_hi
         self.vl_weight = vl_weight
         self.reg_weight = reg_weight
+        self.compact_weight = compact_weight
         self.count_weight = count_weight
 
         self._prev_voicing: Optional[List[int]] = None
@@ -196,6 +203,7 @@ class VoicingSelector:
         count: float,
         prev: Optional[List[int]],
         max_log_count: float,
+        max_notes: int,
     ) -> float:
         """Lower score = better candidate."""
         # 1. Voice leading
@@ -208,10 +216,18 @@ class VoicingSelector:
         centroid = sum(pitches) / len(pitches)
         reg = ((centroid - self.target_mid) / self.reg_sigma) ** 2
 
-        # 3. Frequency prior (negative: higher count → lower score)
+        # 3. Compactness: prefer fewer notes (ratio relative to worst candidate)
+        compact = len(pitches) / max_notes if max_notes > 0 else 0.0
+
+        # 4. Frequency prior (negative: higher count → lower score)
         cnt = -math.log1p(count) / (max_log_count + 1e-9)
 
-        return self.vl_weight * vl + self.reg_weight * reg + self.count_weight * cnt
+        return (
+            self.vl_weight * vl
+            + self.reg_weight * reg
+            + self.compact_weight * compact
+            + self.count_weight * cnt
+        )
 
     def _pick(
         self,
@@ -225,6 +241,7 @@ class VoicingSelector:
             return None
 
         max_log_count = math.log1p(max(c for _, _, c in all_shifted))
+        max_notes = max(len(p) for p, _, _ in all_shifted)
 
         def _melody_ok(pitches: List[int]) -> bool:
             if melody_pitch is None:
@@ -241,9 +258,9 @@ class VoicingSelector:
         # Fallback: drop melody constraint if nothing passes
         pool = constrained if constrained else all_shifted
 
-        best_pitches, _, best_count = min(
+        best_pitches, _, _ = min(
             pool,
-            key=lambda t: self._score(t[0], t[2], prev, max_log_count),
+            key=lambda t: self._score(t[0], t[2], prev, max_log_count, max_notes),
         )
         return best_pitches
 

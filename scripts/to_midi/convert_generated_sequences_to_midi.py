@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -69,6 +68,16 @@ def _dedup_pitches(pitches: List[int]) -> List[int]:
     return out
 
 
+def _dedup_by_pc(pitches: List[int]) -> List[int]:
+    """One note per pitch class; keep the lowest occurrence (preserves bass register)."""
+    best: dict = {}
+    for p in pitches:
+        pc = p % 12
+        if pc not in best or p < best[pc]:
+            best[pc] = p
+    return sorted(best.values())
+
+
 def row_to_midi_combined(
     tokens,
     tokenizer: HooktheoryTokenizer,
@@ -77,127 +86,88 @@ def row_to_midi_combined(
     sequence_order: str = "chord_first",
     bpm: int = 120,
     melody_role: str = "top",
-    chunk_bars: int = 2,
-    pause_bars: float = 0.5,
+    pause_bars: float = 1.0,
 ) -> pretty_midi.PrettyMIDI:
-    """Interleaved naive / voiced comparison in a single MIDI file.
+    """Full naive song → pause → full voiced song in a single MIDI file.
 
-    The output alternates between naive (flat root-position) and voiced
-    (VoicingSelector) renderings of the same musical material in chunks of
-    ``chunk_bars`` bars, with a ``pause_bars`` bar pause between each section:
+    Layout:
+        [full song, naive root-position chords]
+        [1-bar pause]
+        [full song, VoicingSelector chords]
 
-        [naive bars 1-4] [pause] [voiced bars 1-4] [pause]
-        [naive bars 5-8] [pause] [voiced bars 5-8] [pause]  ...
-
-    Two instruments are used (Melody, Chords); both sections share the same
-    melody track so the chord comparison is isolated.
-
-    Voice leading in the voiced sections is continuous across chunks (the
-    selector state is not reset at chunk boundaries).
+    Two instruments: Melody (identical in both halves) and Chords.
     """
     if tokens.dim() != 1:
         raise ValueError(f"Expected rank-1 token sequence, got shape {tuple(tokens.shape)}")
 
-    spb = 60.0 / bpm           # seconds per beat
-    beats_per_bar = 4
-    chunk_beats = chunk_bars * beats_per_bar
-    chunk_sec = chunk_beats * spb
-    pause_sec = pause_bars * beats_per_bar * spb
+    spb = 60.0 / bpm
+    pause_sec = pause_bars * 4 * spb  # 4 beats per bar
 
     chord_frames, melody_frames = split_tokens_by_order(tokens, sequence_order)
     chord_annotations = tokenizer.decode_chord_frames(chord_frames.numpy())
     melody_annotations = tokenizer.decode_melody_frames(melody_frames.numpy())
 
-    total_beats = (
-        chord_annotations[-1]["offset"] if chord_annotations else chunk_beats
+    # Duration of the naive section = end of last chord or melody note
+    all_offsets = (
+        [c["offset"] for c in chord_annotations]
+        + [m["offset"] for m in melody_annotations]
     )
-    n_chunks = max(1, math.ceil(total_beats / chunk_beats))
+    section_beats = max(all_offsets) if all_offsets else 0.0
+    offset = section_beats * spb + pause_sec  # start of voiced section
 
     midi = pretty_midi.PrettyMIDI()
     melody_instr = pretty_midi.Instrument(program=0, name="Melody")
     chord_instr = pretty_midi.Instrument(program=0, name="Chords")
 
+    def _naive_pitches(chord_name: str) -> List[int]:
+        return _dedup_pitches(
+            [p % 12 + CHORD_OCTAVE * 12 for p in _chord_lib.chord_symbol_pitches(chord_name)]
+            + [_chord_lib.chord_symbol_bass(chord_name) % 12 + BASS_OCTAVE * 12]
+        )
+
+    # ---- Section 1: naive ------------------------------------------------
+    for note in melody_annotations:
+        melody_instr.notes.append(pretty_midi.Note(
+            velocity=MELODY_VELOCITY,
+            pitch=to_midi_pitch(note["octave"], note["pitch_class"]),
+            start=note["onset"] * spb,
+            end=note["offset"] * spb,
+        ))
+    for chord in chord_annotations:
+        t = chord["onset"] * spb
+        midi.lyrics.append(pretty_midi.Lyric(text=chord["chord_name"], time=t))
+        for p in _naive_pitches(chord["chord_name"]):
+            chord_instr.notes.append(pretty_midi.Note(
+                velocity=CHORD_VELOCITY, pitch=p,
+                start=t,
+                end=chord["offset"] * spb,
+            ))
+
+    # ---- Section 2: voiced -----------------------------------------------
+    for note in melody_annotations:
+        melody_instr.notes.append(pretty_midi.Note(
+            velocity=MELODY_VELOCITY,
+            pitch=to_midi_pitch(note["octave"], note["pitch_class"]),
+            start=note["onset"] * spb + offset,
+            end=note["offset"] * spb + offset,
+        ))
+
     selector.reset()
-    t_cursor = 0.0  # running write head in seconds
-
-    for chunk_idx in range(n_chunks):
-        chunk_start = chunk_idx * chunk_beats   # beats
-        chunk_end = chunk_start + chunk_beats   # beats
-
-        chunk_chords = [
-            c for c in chord_annotations
-            if c["onset"] < chunk_end and c["offset"] > chunk_start
-        ]
-        chunk_melody = [
-            m for m in melody_annotations
-            if m["onset"] < chunk_end and m["offset"] > chunk_start
-        ]
-
-        # Local helpers: convert annotation beat → output time, clipped to chunk
-        def _local(onset_b: float, offset_b: float, section_start_sec: float) -> tuple[float, float]:
-            lo = (max(onset_b, chunk_start) - chunk_start) * spb + section_start_sec
-            hi = (min(offset_b, chunk_end) - chunk_start) * spb + section_start_sec
-            return lo, hi
-
-        # ---- Naive section ------------------------------------------------
-        naive_start = t_cursor
-
-        for note in chunk_melody:
-            lo, hi = _local(note["onset"], note["offset"], naive_start)
-            melody_instr.notes.append(pretty_midi.Note(
-                velocity=MELODY_VELOCITY,
-                pitch=to_midi_pitch(note["octave"], note["pitch_class"]),
-                start=lo, end=hi,
+    for chord in chord_annotations:
+        t = chord["onset"] * spb + offset
+        midi.lyrics.append(pretty_midi.Lyric(text=chord["chord_name"], time=t))
+        pitches = selector.select(chord["chord_name"])
+        if pitches is None:
+            pitches = _naive_pitches(chord["chord_name"])
+        else:
+            pitches = _dedup_pitches(list(pitches))
+        for p in pitches:
+            chord_instr.notes.append(pretty_midi.Note(
+                velocity=CHORD_VELOCITY,
+                pitch=max(0, min(127, p)),
+                start=t,
+                end=chord["offset"] * spb + offset,
             ))
-
-        for chord in chunk_chords:
-            lo, hi = _local(chord["onset"], chord["offset"], naive_start)
-            chord_pitches = _chord_lib.chord_symbol_pitches(chord["chord_name"])
-            chord_bass = _chord_lib.chord_symbol_bass(chord["chord_name"])
-            naive_pitches = _dedup_pitches(
-                [p % 12 + CHORD_OCTAVE * 12 for p in chord_pitches]
-                + [chord_bass % 12 + BASS_OCTAVE * 12]
-            )
-            for p in naive_pitches:
-                chord_instr.notes.append(pretty_midi.Note(
-                    velocity=CHORD_VELOCITY,
-                    pitch=p,
-                    start=lo, end=hi,
-                ))
-
-        t_cursor = naive_start + chunk_sec + pause_sec
-
-        # ---- Voiced section -----------------------------------------------
-        voiced_start = t_cursor
-
-        for note in chunk_melody:
-            lo, hi = _local(note["onset"], note["offset"], voiced_start)
-            melody_instr.notes.append(pretty_midi.Note(
-                velocity=MELODY_VELOCITY,
-                pitch=to_midi_pitch(note["octave"], note["pitch_class"]),
-                start=lo, end=hi,
-            ))
-
-        for chord in chunk_chords:
-            lo, hi = _local(chord["onset"], chord["offset"], voiced_start)
-            pitches = selector.select(chord["chord_name"])
-            if pitches is None:
-                # Fallback: naive root-position voicing (same as naive section)
-                pitches = _dedup_pitches(
-                    [p % 12 + CHORD_OCTAVE * 12
-                     for p in _chord_lib.chord_symbol_pitches(chord["chord_name"])]
-                    + [_chord_lib.chord_symbol_bass(chord["chord_name"]) % 12 + BASS_OCTAVE * 12]
-                )
-            else:
-                pitches = _dedup_pitches(pitches)
-            for p in pitches:
-                chord_instr.notes.append(pretty_midi.Note(
-                    velocity=CHORD_VELOCITY,
-                    pitch=max(0, min(127, p)),
-                    start=lo, end=hi,
-                ))
-
-        t_cursor = voiced_start + chunk_sec + pause_sec
 
     midi.instruments.extend([melody_instr, chord_instr])
     return midi
