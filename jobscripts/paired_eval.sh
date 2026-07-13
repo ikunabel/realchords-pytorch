@@ -87,14 +87,17 @@ paired_nottingham() {
 # Outputs: logs/paired_eval/gt/<dataset>/gt_chord_distribution.json
 # ---------------------------------------------------------------------------
 
+GT_BATCH_SIZE=64
+GT_NUM_BATCHES=1
+
 paired_gt_hooktheory() {
   python scripts/paired_chord_evaluation.py \
     --gt_only \
     --dataset_name  hooktheory \
     --dataset_split test \
     --save_dir      "$_PAIRED_GT_DIR/hooktheory" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
@@ -104,8 +107,8 @@ paired_gt_wikifonia() {
     --dataset_name  wikifonia \
     --dataset_split test \
     --save_dir      "$_PAIRED_GT_DIR/wikifonia" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
@@ -115,8 +118,8 @@ paired_gt_pop909() {
     --dataset_name  pop909 \
     --dataset_split test \
     --save_dir      "$_PAIRED_GT_DIR/pop909" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
@@ -126,8 +129,8 @@ paired_gt_nottingham() {
     --dataset_name  nottingham \
     --dataset_split test \
     --save_dir      "$_PAIRED_GT_DIR/nottingham" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
@@ -137,19 +140,19 @@ paired_gt_jazzmus() {
     --dataset_name  jazzmus \
     --dataset_split test \
     --save_dir      "$_PAIRED_GT_DIR/jazzmus" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
-paired_gt_wjazzd() {
+paired_gt_wjd() {
   python scripts/paired_chord_evaluation.py \
     --gt_only \
-    --dataset_name  wjazzd \
+    --dataset_name  wjd \
     --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/wjazzd" \
-    --batch_size    64 \
-    --num_batches   -1 \
+    --save_dir      "$_PAIRED_GT_DIR/wjd" \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
     --seed          42
 }
 
@@ -159,5 +162,5 @@ paired_gt_all() {
   paired_gt_pop909
   paired_gt_nottingham
   paired_gt_jazzmus
-  paired_gt_wjazzd
+  paired_gt_wjd
 }

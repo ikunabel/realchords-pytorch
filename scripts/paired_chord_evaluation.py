@@ -42,6 +42,7 @@ Outputs (all in --save_dir):
     {slug}_chords_per_frame.pt  per-frame chord symbols for each model
     gt_chord_distribution.json  GT chord counts (onset + frame) for cross-dataset analysis
     chord_names_augmented.json  vocab snapshot for downstream decoding
+    midi/                       GT-only: 10 random sanity-check MIDIs (see --midi_samples)
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import random
 import re
 from collections import Counter
 from pathlib import Path
@@ -288,6 +290,29 @@ def _append_section(
     return max(all_offsets) * spb if all_offsets else 0.0
 
 
+def _select_midi_indices(
+    num_sequences: int,
+    midi_samples: Optional[int],
+    *,
+    gt_only: bool,
+    seed: int,
+) -> List[int]:
+    """Pick which sequence indices to export as MIDI."""
+    if num_sequences <= 0:
+        return []
+    if midi_samples is None:
+        target = 10 if gt_only else num_sequences
+    elif midi_samples < 0:
+        target = num_sequences
+    else:
+        target = midi_samples
+    target = min(target, num_sequences)
+    if target >= num_sequences:
+        return list(range(num_sequences))
+    rng = random.Random(seed)
+    return sorted(rng.sample(range(num_sequences), target))
+
+
 def write_paired_midis(
     gt_tensor: torch.Tensor,
     model_tensors: Dict[str, torch.Tensor],
@@ -298,6 +323,7 @@ def write_paired_midis(
     midi_dir: Path,
     bpm: int = 120,
     pause_bars: float = 0.5,
+    indices: Optional[List[int]] = None,
 ) -> None:
     """Write one MIDI file per song.
 
@@ -316,8 +342,8 @@ def write_paired_midis(
     spb       = 60.0 / bpm
     pause_sec = pause_bars * 4 * spb  # 4 beats per bar
 
-    n = gt_tensor.size(0)
-    for i in tqdm(range(n), desc="Writing MIDIs"):
+    export_indices = indices if indices is not None else list(range(gt_tensor.size(0)))
+    for out_idx, i in enumerate(tqdm(export_indices, desc="Writing MIDIs")):
         midi_obj     = pretty_midi.PrettyMIDI(initial_tempo=float(bpm))
         melody_instr = pretty_midi.Instrument(program=0, name="Melody")
         chord_instr  = pretty_midi.Instrument(program=0, name="Chords")
@@ -345,9 +371,9 @@ def write_paired_midis(
 
         song_url = metadata[i].get("song_url", "unknown")
         safe     = re.sub(r"[^a-zA-Z0-9_-]", "_", song_url)[-60:]
-        midi_obj.write(str(midi_dir / f"{i:04d}_{safe}.mid"))
+        midi_obj.write(str(midi_dir / f"{out_idx:04d}_seq{i:04d}_{safe}.mid"))
 
-    print(f"  Wrote {n} MIDI files to {midi_dir}")
+    print(f"  Wrote {len(export_indices)} MIDI files to {midi_dir}")
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +435,14 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help="Directory for MIDI output. Defaults to <save_dir>/midi.",
+    )
+    parser.add_argument(
+        "--midi_samples",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Export N randomly chosen sequences as MIDI (seeded by --seed). "
+             "Default: 10 for --gt_only, all sequences otherwise. Use -1 for all.",
     )
     parser.add_argument(
         "--bpm", type=int, default=120,
@@ -701,26 +735,32 @@ def main() -> None:
     snapshot = save_vocab_snapshot(str(args.save_dir))
     print(f"  vocab snapshot → {snapshot}")
 
-    # ---- MIDI output (full paired eval only, unless --midi_dir set) --------
-    if not args.gt_only or args.midi_dir is not None:
-        midi_dir = args.midi_dir if args.midi_dir is not None else args.save_dir / "midi"
-        ordered_labels = [label for label, _ in model_specs]
-        model_tensors = {
-            label: torch.cat(model_rows[label], dim=0) for label in ordered_labels
-        } if not args.gt_only else {}
+    # ---- MIDI output --------------------------------------------------------
+    midi_dir = args.midi_dir if args.midi_dir is not None else args.save_dir / "midi"
+    ordered_labels = [label for label, _ in model_specs]
+    model_tensors = {
+        label: torch.cat(model_rows[label], dim=0) for label in ordered_labels
+    } if not args.gt_only else {}
+    midi_indices = _select_midi_indices(
+        gt_tensor.size(0),
+        args.midi_samples,
+        gt_only=args.gt_only,
+        seed=args.seed,
+    )
 
-        print(f"\nWriting MIDI files to {midi_dir} …")
-        write_paired_midis(
-            gt_tensor=gt_tensor,
-            model_tensors=model_tensors,
-            ordered_labels=ordered_labels,
-            metadata=metadata,
-            gt_tokenizer=dataset_tokenizer,
-            model_tokenizer=model_tokenizer or dataset_tokenizer,
-            midi_dir=midi_dir,
-            bpm=args.bpm,
-            pause_bars=args.pause_bars,
-        )
+    print(f"\nWriting MIDI files to {midi_dir} …")
+    write_paired_midis(
+        gt_tensor=gt_tensor,
+        model_tensors=model_tensors,
+        ordered_labels=ordered_labels,
+        metadata=metadata,
+        gt_tokenizer=dataset_tokenizer,
+        model_tokenizer=model_tokenizer or dataset_tokenizer,
+        midi_dir=midi_dir,
+        bpm=args.bpm,
+        pause_bars=args.pause_bars,
+        indices=midi_indices,
+    )
 
     print("\nDone.")
     if not args.gt_only:
