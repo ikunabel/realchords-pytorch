@@ -573,6 +573,8 @@ class HooktheoryTokenizer:
         chord_frames: Optional[np.ndarray] = None,
         melody_frames: Optional[np.ndarray] = None,
         bpm: int = 120,
+        include_chord_bass: bool = True,
+        chord_octave: Optional[int] = None,
     ) -> pretty_midi.PrettyMIDI:
         """
         Decode framewise sequences into a MIDI file.
@@ -581,6 +583,11 @@ class HooktheoryTokenizer:
             chord_frames (np.ndarray): The chord frames.
             melody_frames (np.ndarray): The melody frames.
             bpm (int): The beats per minute.
+            include_chord_bass (bool): Add a separate bass note one octave
+                below the chord tones. Set False when the melody lane already
+                carries the bass line (e.g. WJD walking bass).
+            chord_octave (Optional[int]): Octave for chord-tone voicing.
+                Defaults to ``CHORD_OCTAVE``.
 
         Returns:
             pretty_midi.PrettyMIDI: The generated MIDI file.
@@ -590,6 +597,10 @@ class HooktheoryTokenizer:
             raise ValueError(
                 "At least one of chord_frames or melody_frames must be provided."
             )
+
+        if chord_octave is None:
+            chord_octave = CHORD_OCTAVE
+        bass_octave = chord_octave - 1
 
         # Decode the frames into JSON format
         if chord_frames is not None:
@@ -642,7 +653,7 @@ class HooktheoryTokenizer:
                 #     continue
                 midi_chord_note = pretty_midi.Note(
                     velocity=CHORD_VELOCITY,
-                    pitch=pitch % 12 + CHORD_OCTAVE * 12,
+                    pitch=pitch % 12 + chord_octave * 12,
                     start=onset_time,
                     end=offset_time,
                 )
@@ -650,13 +661,14 @@ class HooktheoryTokenizer:
 
             # Add the bass note
             # Bass note is one octave lower than the chord
-            midi_bass_note = pretty_midi.Note(
-                velocity=BASS_VELOCITY,
-                pitch=chord_bass % 12 + BASS_OCTAVE * 12,
-                start=onset_time,
-                end=offset_time,
-            )
-            chord_instr.notes.append(midi_bass_note)
+            if include_chord_bass:
+                midi_bass_note = pretty_midi.Note(
+                    velocity=BASS_VELOCITY,
+                    pitch=chord_bass % 12 + bass_octave * 12,
+                    start=onset_time,
+                    end=offset_time,
+                )
+                chord_instr.notes.append(midi_bass_note)
 
         # Add instruments to the PrettyMIDI object
         midi.instruments.append(melody_instr)

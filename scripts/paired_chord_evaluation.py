@@ -177,6 +177,7 @@ def _fmt_nicr(mean: float) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 _CHORD_OCTAVE   = 4   # chord tones mapped to this octave (MIDI 48–59)
+_WJD_CHORD_OCTAVE = 5  # WJD: chords one octave higher so they sit above walking bass
 _BASS_OCTAVE    = 3   # bass note one octave below (MIDI 36–47)
 _MELODY_VEL     = 90
 _CHORD_VEL      = 64
@@ -192,13 +193,18 @@ def _dedup(pitches: List[int]) -> List[int]:
     return out
 
 
-def _naive_pitches(chord_name: str) -> List[int]:
+def _naive_pitches(
+    chord_name: str,
+    *,
+    include_bass: bool = True,
+    chord_octave: int = _CHORD_OCTAVE,
+) -> List[int]:
     chord_pcs = _chord_lib.chord_symbol_pitches(chord_name)
-    bass_pc   = _chord_lib.chord_symbol_bass(chord_name) % 12
-    return _dedup(
-        [p % 12 + _CHORD_OCTAVE * 12 for p in chord_pcs]
-        + [bass_pc + _BASS_OCTAVE * 12]
-    )
+    pitches = [p % 12 + chord_octave * 12 for p in chord_pcs]
+    if include_bass:
+        bass_pc = _chord_lib.chord_symbol_bass(chord_name) % 12
+        pitches.append(bass_pc + _BASS_OCTAVE * 12)
+    return _dedup(pitches)
 
 
 def _lenient_decode_chord_frames(chord_frames, tokenizer):
@@ -254,6 +260,8 @@ def _append_section(
     midi_obj: pretty_midi.PrettyMIDI,
     *,
     strict_chords: bool = False,
+    include_chord_bass: bool = True,
+    chord_octave: int = _CHORD_OCTAVE,
 ) -> float:
     """Render one section (melody + chords) into instruments.  Returns section duration (s)."""
     chord_frames = seq[0::2].numpy()
@@ -274,7 +282,11 @@ def _append_section(
         ))
 
     for chord in chord_anns:
-        for p in _naive_pitches(chord["chord_name"]):
+        for p in _naive_pitches(
+            chord["chord_name"],
+            include_bass=include_chord_bass,
+            chord_octave=chord_octave,
+        ):
             chord_instr.notes.append(pretty_midi.Note(
                 velocity=_CHORD_VEL,
                 pitch=max(0, min(127, p)),
@@ -324,6 +336,8 @@ def write_paired_midis(
     bpm: int = 120,
     pause_bars: float = 0.5,
     indices: Optional[List[int]] = None,
+    include_chord_bass: bool = True,
+    chord_octave: int = _CHORD_OCTAVE,
 ) -> None:
     """Write one MIDI file per song.
 
@@ -355,6 +369,8 @@ def write_paired_midis(
         dur = _append_section(
             gt_seq, gt_tokenizer, spb, t_cursor, "GT",
             melody_instr, chord_instr, midi_obj, strict_chords=True,
+            include_chord_bass=include_chord_bass,
+            chord_octave=chord_octave,
         )
         t_cursor += dur + pause_sec
 
@@ -364,6 +380,8 @@ def write_paired_midis(
             dur = _append_section(
                 model_seq, model_tokenizer, spb, t_cursor, label,
                 melody_instr, chord_instr, midi_obj, strict_chords=False,
+                include_chord_bass=include_chord_bass,
+                chord_octave=chord_octave,
             )
             t_cursor += dur + pause_sec
 
@@ -464,7 +482,31 @@ def _parse_args() -> argparse.Namespace:
         default=1.5,
         help="Gaussian kernel width when --mode_scoring=distance.",
     )
+    parser.add_argument(
+        "--no_chord_bass",
+        action="store_true",
+        help="Omit the separate bass note from chord voicings (default for wjd).",
+    )
+    parser.add_argument(
+        "--include_chord_bass",
+        action="store_true",
+        help="Force the separate chord bass note even for wjd.",
+    )
     return parser.parse_args()
+
+
+def _resolve_include_chord_bass(args: argparse.Namespace) -> bool:
+    if args.include_chord_bass:
+        return True
+    if args.no_chord_bass:
+        return False
+    return args.dataset_name != "wjd"
+
+
+def _resolve_chord_octave(args: argparse.Namespace) -> int:
+    if args.dataset_name == "wjd":
+        return _WJD_CHORD_OCTAVE
+    return _CHORD_OCTAVE
 
 
 def _validate_args(args: argparse.Namespace) -> None:
@@ -749,6 +791,8 @@ def main() -> None:
     )
 
     print(f"\nWriting MIDI files to {midi_dir} …")
+    include_chord_bass = _resolve_include_chord_bass(args)
+    chord_octave = _resolve_chord_octave(args)
     write_paired_midis(
         gt_tensor=gt_tensor,
         model_tensors=model_tensors,
@@ -760,6 +804,8 @@ def main() -> None:
         bpm=args.bpm,
         pause_bars=args.pause_bars,
         indices=midi_indices,
+        include_chord_bass=include_chord_bass,
+        chord_octave=chord_octave,
     )
 
     print("\nDone.")

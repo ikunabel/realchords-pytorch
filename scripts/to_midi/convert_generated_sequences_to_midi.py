@@ -28,7 +28,14 @@ from typing import Dict, List, Optional, Sequence
 import note_seq.chord_symbols_lib as _chord_lib
 import pretty_midi
 
-from realchords.constants import BASS_OCTAVE, BASS_VELOCITY, CHORD_OCTAVE, CHORD_VELOCITY, MELODY_VELOCITY
+from realchords.constants import (
+    BASS_OCTAVE,
+    BASS_VELOCITY,
+    CHORD_OCTAVE,
+    CHORD_VELOCITY,
+    MELODY_VELOCITY,
+    WJD_CHORD_OCTAVE,
+)
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer, to_midi_pitch
 from realchords.utils.sequence_penalty_analysis import (
     DEFAULT_CHORD_NAMES_PATH,
@@ -78,6 +85,23 @@ def _dedup_by_pc(pitches: List[int]) -> List[int]:
     return sorted(best.values())
 
 
+def _naive_pitches(
+    chord_name: str,
+    *,
+    include_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
+) -> List[int]:
+    pitches = [
+        p % 12 + chord_octave * 12
+        for p in _chord_lib.chord_symbol_pitches(chord_name)
+    ]
+    if include_bass:
+        pitches.append(
+            _chord_lib.chord_symbol_bass(chord_name) % 12 + BASS_OCTAVE * 12
+        )
+    return _dedup_pitches(pitches)
+
+
 def row_to_midi_combined(
     tokens,
     tokenizer: HooktheoryTokenizer,
@@ -87,6 +111,8 @@ def row_to_midi_combined(
     bpm: int = 120,
     melody_role: str = "top",
     pause_bars: float = 1.0,
+    include_chord_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
 ) -> pretty_midi.PrettyMIDI:
     """Full naive song → pause → full voiced song in a single MIDI file.
 
@@ -119,12 +145,6 @@ def row_to_midi_combined(
     melody_instr = pretty_midi.Instrument(program=0, name="Melody")
     chord_instr = pretty_midi.Instrument(program=0, name="Chords")
 
-    def _naive_pitches(chord_name: str) -> List[int]:
-        return _dedup_pitches(
-            [p % 12 + CHORD_OCTAVE * 12 for p in _chord_lib.chord_symbol_pitches(chord_name)]
-            + [_chord_lib.chord_symbol_bass(chord_name) % 12 + BASS_OCTAVE * 12]
-        )
-
     # ---- Section 1: naive ------------------------------------------------
     for note in melody_annotations:
         melody_instr.notes.append(pretty_midi.Note(
@@ -136,7 +156,11 @@ def row_to_midi_combined(
     for chord in chord_annotations:
         t = chord["onset"] * spb
         midi.lyrics.append(pretty_midi.Lyric(text=chord["chord_name"], time=t))
-        for p in _naive_pitches(chord["chord_name"]):
+        for p in _naive_pitches(
+            chord["chord_name"],
+            include_bass=include_chord_bass,
+            chord_octave=chord_octave,
+        ):
             chord_instr.notes.append(pretty_midi.Note(
                 velocity=CHORD_VELOCITY, pitch=p,
                 start=t,
@@ -158,7 +182,11 @@ def row_to_midi_combined(
         midi.lyrics.append(pretty_midi.Lyric(text=chord["chord_name"], time=t))
         pitches = selector.select(chord["chord_name"])
         if pitches is None:
-            pitches = _naive_pitches(chord["chord_name"])
+            pitches = _naive_pitches(
+                chord["chord_name"],
+                include_bass=include_chord_bass,
+                chord_octave=chord_octave,
+            )
         else:
             pitches = _dedup_pitches(list(pitches))
         for p in pitches:
@@ -179,6 +207,8 @@ def row_to_midi(
     *,
     sequence_order: str = "chord_first",
     bpm: int = 120,
+    include_chord_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
 ) -> pretty_midi.PrettyMIDI:
     """Decode one interleaved token row into PrettyMIDI.
 
@@ -194,6 +224,8 @@ def row_to_midi(
         chord_frames=chord_frames.numpy(),
         melody_frames=melody_frames.numpy(),
         bpm=bpm,
+        include_chord_bass=include_chord_bass,
+        chord_octave=chord_octave,
     )
 
 
@@ -230,6 +262,8 @@ def convert_sequence_file_to_midi(
     skip_existing: bool = False,
     voicing_selector: Optional[VoicingSelector] = None,
     melody_role: str = "top",
+    include_chord_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
 ) -> List[Path]:
     """Write MIDI files for selected rows in one generated tensor file.
 
@@ -266,6 +300,8 @@ def convert_sequence_file_to_midi(
                     sequence_order=sequence_order,
                     bpm=bpm,
                     melody_role=melody_role,
+                    include_chord_bass=include_chord_bass,
+                    chord_octave=chord_octave,
                 )
             else:
                 midi = row_to_midi(
@@ -273,6 +309,8 @@ def convert_sequence_file_to_midi(
                     tokenizer,
                     sequence_order=sequence_order,
                     bpm=bpm,
+                    include_chord_bass=include_chord_bass,
+                    chord_octave=chord_octave,
                 )
         except Exception as e:  # noqa: BLE001 - match decoder_only.py's own handling
             print(f"  seq {index}: skipped ({e})")
@@ -298,6 +336,8 @@ def convert_generated_system_to_midi(
     skip_existing: bool = False,
     voicing_selector: Optional[VoicingSelector] = None,
     melody_role: str = "top",
+    include_chord_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
 ) -> tuple[str, Path, List[Path]]:
     """Convert all generated sequence files under one system directory to MIDI.
 
@@ -332,6 +372,8 @@ def convert_generated_system_to_midi(
                 skip_existing=skip_existing,
                 voicing_selector=voicing_selector,
                 melody_role=melody_role,
+                include_chord_bass=include_chord_bass,
+                chord_octave=chord_octave,
             )
         )
     return resolved_name, system_output_dir, written
@@ -428,7 +470,31 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional JSON path recording conversion outputs.",
     )
+    parser.add_argument(
+        "--no-chord-bass",
+        action="store_true",
+        help="Omit the separate bass note from chord voicings.",
+    )
+    parser.add_argument(
+        "--include-chord-bass",
+        action="store_true",
+        help="Force the separate chord bass note even for wjd systems.",
+    )
     return parser.parse_args()
+
+
+def _resolve_include_chord_bass(args: argparse.Namespace, system_name: str) -> bool:
+    if args.include_chord_bass:
+        return True
+    if args.no_chord_bass:
+        return False
+    return "wjd" not in system_name.lower()
+
+
+def _resolve_chord_octave(args: argparse.Namespace, system_name: str) -> int:
+    if "wjd" in system_name.lower():
+        return WJD_CHORD_OCTAVE
+    return CHORD_OCTAVE
 
 
 def main() -> None:
@@ -461,6 +527,8 @@ def main() -> None:
             skip_existing=args.skip_existing,
             voicing_selector=selector,
             melody_role=args.melody_role,
+            include_chord_bass=_resolve_include_chord_bass(args, input_dir.name),
+            chord_octave=_resolve_chord_octave(args, input_dir.name),
         )
         print(
             f"{name}: wrote {len(midi_paths)} MIDI files -> {output_dir}"
