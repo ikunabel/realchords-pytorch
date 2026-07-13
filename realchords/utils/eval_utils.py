@@ -284,6 +284,122 @@ def _sequence_mode_fit_score(
     return weighted_score_sum / melody_weight_sum, melody_weight_sum, segment_count
 
 
+def _frame_mode_fit_score(
+    pitch_class: int,
+    chord_symbol: str,
+    quality_map: Dict[str, QualityModeEntry],
+    mode_pitch_classes: ModePitchClasses,
+    scoring: str,
+    sigma: float,
+    skip_underdetermined: bool,
+) -> Tuple[bool, float]:
+    """Score one melody frame against candidate modes for the active chord."""
+    quality = extract_chord_quality(chord_symbol)
+    quality_entry = quality_map.get(quality)
+    if quality_entry is None:
+        return False, float("nan")
+    if skip_underdetermined and quality_entry.get("underdetermined"):
+        return False, float("nan")
+
+    candidate_mode_pcs = _candidate_mode_pitch_classes(
+        chord_symbol,
+        quality_entry,
+        mode_pitch_classes,
+    )
+    if not candidate_mode_pcs:
+        return False, float("nan")
+
+    histogram = [0.0] * 12
+    histogram[pitch_class] = 1.0
+    score = _best_mode_fit_score(
+        histogram,
+        1.0,
+        candidate_mode_pcs,
+        scoring=scoring,
+        sigma=sigma,
+    )
+    return True, score
+
+
+def evaluate_melody_mode_fit_per_frame(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+    scoring: str = "strict",
+    sigma: float = 1.5,
+    skip_underdetermined: bool = True,
+    mode_map_path: Path | str = DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
+) -> Dict[str, torch.Tensor]:
+    """Per-frame note-in-mode for interleaved chord-first sequences.
+
+    Each active melody frame is scored against candidate modes for the chord
+    sounding at that frame (same chord-quality lookup as the segment metric).
+
+    Returns a dict with:
+        matches: float tensor [batch, num_frames] — score in [0, 1], NaN if unscorable
+        valid: bool tensor [batch, num_frames]
+        mean: float tensor [batch] — mean over valid frames (NaN if none)
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+    if scoring not in {"coverage", "distance", "strict"}:
+        raise ValueError(
+            f"Unsupported scoring '{scoring}'. Expected 'coverage', 'distance', or 'strict'."
+        )
+
+    quality_map, mode_pitch_classes = _load_quality_mode_lookup(str(mode_map_path))
+
+    batch_size = sequences.size(0)
+    num_frames = sequences.size(1) // 2
+    matches = torch.full((batch_size, num_frames), float("nan"))
+    valid = torch.zeros((batch_size, num_frames), dtype=torch.bool)
+    means: List[float] = []
+
+    for row_idx, seq in enumerate(sequences):
+        seq_list = seq.cpu().tolist()
+        melody_tokens, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+
+        score_sum = 0.0
+        valid_count = 0
+        for frame_idx, (note_token, chord_token) in enumerate(
+            zip(melody_tokens, chord_tokens)
+        ):
+            note_name = tokenizer.id_to_name.get(note_token, "")
+            chord_name = tokenizer.id_to_name.get(chord_token, "")
+            if note_name in SPECIAL_TOKENS or chord_name in SPECIAL_TOKENS:
+                continue
+
+            pitch = _parse_note_pitch(note_name)
+            chord_symbol = _parse_chord_symbol(chord_name)
+            if pitch is None or chord_symbol is None:
+                continue
+
+            is_valid, score = _frame_mode_fit_score(
+                pitch % 12,
+                chord_symbol,
+                quality_map,
+                mode_pitch_classes,
+                scoring=scoring,
+                sigma=sigma,
+                skip_underdetermined=skip_underdetermined,
+            )
+            if not is_valid:
+                continue
+            valid[row_idx, frame_idx] = True
+            matches[row_idx, frame_idx] = float(score)
+            score_sum += score
+            valid_count += 1
+        means.append(score_sum / valid_count if valid_count > 0 else float("nan"))
+
+    return {
+        "matches": matches,
+        "valid": valid,
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
 def evaluate_melody_mode_fit_ratio(
     sequences: torch.Tensor,
     tokenizer: HooktheoryTokenizer,
@@ -369,6 +485,151 @@ def evaluate_melody_mode_fit_ratio(
     return ratio_tensor
 
 
+def _note_in_chord_pair(
+    note_token: int,
+    chord_token: int,
+    tokenizer: HooktheoryTokenizer,
+) -> Tuple[bool, bool]:
+    """Return (valid, in_chord) for one melody/chord frame pair."""
+    note_name = tokenizer.id_to_name.get(note_token, "")
+    chord_name_full = tokenizer.id_to_name.get(chord_token, "")
+
+    if note_name in SPECIAL_TOKENS or chord_name_full in SPECIAL_TOKENS:
+        return False, False
+
+    if not (note_name.startswith("NOTE_") or note_name.startswith("NOTE_ON_")):
+        return False, False
+
+    if chord_name_full.startswith("CHORD_ON_"):
+        chord_str = chord_name_full[len("CHORD_ON_") :]
+    elif chord_name_full.startswith("CHORD_"):
+        chord_str = chord_name_full[len("CHORD_") :]
+    else:
+        return False, False
+
+    if note_name.startswith("NOTE_ON_"):
+        try:
+            note_pitch = int(note_name[len("NOTE_ON_") :])
+        except ValueError:
+            return False, False
+    elif note_name.startswith("NOTE_"):
+        try:
+            note_pitch = int(note_name[len("NOTE_") :])
+        except ValueError:
+            return False, False
+    else:
+        return False, False
+
+    chord_pitches = chord_symbols_lib.chord_symbol_pitches(chord_str)
+    in_chord = note_pitch % 12 in [p % 12 for p in chord_pitches]
+    return True, in_chord
+
+
+def evaluate_note_in_chord_per_frame(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, torch.Tensor]:
+    """Per-frame note-in-chord for interleaved chord-first sequences.
+
+    Returns a dict with:
+        matches: float tensor [batch, num_frames] — 1.0 in-chord, 0.0 not, NaN invalid
+        valid: bool tensor [batch, num_frames]
+        mean: float tensor [batch] — sequence-level NiCR (NaN if no valid frames)
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    batch_size = sequences.size(0)
+    num_frames = sequences.size(1) // 2
+    matches = torch.full((batch_size, num_frames), float("nan"))
+    valid = torch.zeros((batch_size, num_frames), dtype=torch.bool)
+    means: List[float] = []
+
+    for row_idx, seq in enumerate(sequences):
+        seq_list = seq.cpu().tolist()
+        if sequence_order == "chord_first":
+            chord_tokens = seq_list[::2]
+            melody_tokens = seq_list[1::2]
+        else:
+            melody_tokens = seq_list[::2]
+            chord_tokens = seq_list[1::2]
+
+        correct = 0
+        valid_count = 0
+        for frame_idx, (note_token, chord_token) in enumerate(
+            zip(melody_tokens, chord_tokens)
+        ):
+            is_valid, in_chord = _note_in_chord_pair(
+                note_token, chord_token, tokenizer
+            )
+            if not is_valid:
+                continue
+            valid[row_idx, frame_idx] = True
+            matches[row_idx, frame_idx] = float(in_chord)
+            valid_count += 1
+            if in_chord:
+                correct += 1
+        means.append(correct / valid_count if valid_count > 0 else float("nan"))
+
+    return {
+        "matches": matches,
+        "valid": valid,
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
+def evaluate_chord_symbols_per_frame(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, object]:
+    """Per-frame chord symbols for interleaved sequences.
+
+    Returns a dict with:
+        symbols: list[list[str]] — chord symbol per frame, ``""`` if none
+        is_onset: bool tensor [batch, num_frames] — ``CHORD_ON`` at this frame
+        valid: bool tensor [batch, num_frames] — frame carries a chord token
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    batch_size = sequences.size(0)
+    num_frames = sequences.size(1) // 2
+    symbols: List[List[str]] = []
+    is_onset = torch.zeros((batch_size, num_frames), dtype=torch.bool)
+    valid = torch.zeros((batch_size, num_frames), dtype=torch.bool)
+
+    for row_idx, seq in enumerate(sequences):
+        seq_list = seq.cpu().tolist()
+        _, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        row_symbols: List[str] = []
+        for frame_idx, chord_token in enumerate(chord_tokens):
+            token_name = tokenizer.id_to_name.get(chord_token, "")
+            if token_name in SPECIAL_TOKENS:
+                row_symbols.append("")
+                continue
+            chord_symbol = _parse_chord_symbol(token_name)
+            if chord_symbol is None:
+                row_symbols.append("")
+                continue
+            row_symbols.append(chord_symbol)
+            valid[row_idx, frame_idx] = True
+            if tokenizer.is_chord_on(chord_token):
+                is_onset[row_idx, frame_idx] = True
+        symbols.append(row_symbols)
+
+    return {
+        "symbols": symbols,
+        "is_onset": is_onset,
+        "valid": valid,
+    }
+
+
 def evaluate_note_in_chord_ratio(
     sequences: torch.Tensor,
     tokenizer: HooktheoryTokenizer,
@@ -398,8 +659,6 @@ def evaluate_note_in_chord_ratio(
             f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
         )
 
-    special_tokens = {"PAD", "BOS", "EOS", "SILENCE"}
-
     ratios = []
     valid_counts = []
     correct_counts = []
@@ -417,55 +676,16 @@ def evaluate_note_in_chord_ratio(
         if model_part not in {"melody", "chord"}:
             raise ValueError(f"Invalid model_part: {model_part}")
 
-        # Regardless of which model generated the tokens, melody tokens correspond to notes
-        # and chord tokens provide the harmonic context.
-        note_tokens = melody_tokens
-
         valid_count = 0
         correct_count = 0
 
-        for note_token, chord_token in zip(note_tokens, chord_tokens):
-            # Get token names using tokenizer's id_to_name mapping.
-            note_name = tokenizer.id_to_name.get(note_token, "")
-            chord_name_full = tokenizer.id_to_name.get(chord_token, "")
-
-            # Skip this pair if either token is a special token.
-            if note_name in special_tokens or chord_name_full in special_tokens:
+        for note_token, chord_token in zip(melody_tokens, chord_tokens):
+            is_valid, in_chord = _note_in_chord_pair(
+                note_token, chord_token, tokenizer
+            )
+            if not is_valid:
                 continue
-
-            # Only process note tokens that start with "NOTE" or "NOTE_ON"
-            if not (
-                note_name.startswith("NOTE_")
-                or note_name.startswith("NOTE_ON_")
-            ):
-                continue
-
-            # Only process chords that start with "CHORD_" or "CHORD_ON_"
-            if chord_name_full.startswith("CHORD_ON_"):
-                chord_str = chord_name_full[len("CHORD_ON_") :]
-            elif chord_name_full.startswith("CHORD_"):
-                chord_str = chord_name_full[len("CHORD_") :]
-            else:
-                continue
-
-            # Get chord pitches using chord_symbols_lib.
-            chord_pitches = chord_symbols_lib.chord_symbol_pitches(chord_str)
-            # Extract note pitch from note token.
-            if note_name.startswith("NOTE_ON_"):
-                try:
-                    note_pitch = int(note_name[len("NOTE_ON_") :])
-                except ValueError:
-                    continue
-            elif note_name.startswith("NOTE_"):
-                try:
-                    note_pitch = int(note_name[len("NOTE_") :])
-                except ValueError:
-                    continue
-            else:
-                continue
-
-            # Check if note (mod 12) is in the chord: compare reducing to pitch-class.
-            if note_pitch % 12 in [p % 12 for p in chord_pitches]:
+            if in_chord:
                 correct_count += 1
             valid_count += 1
 

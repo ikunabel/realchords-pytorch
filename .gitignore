@@ -99,3 +99,6 @@ configs/thesis/debug/
 scripts/to_midi/output/
 tests/test_cache/output/
 
+# Journal
+
+journal/

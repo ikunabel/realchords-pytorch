@@ -19,15 +19,28 @@ Usage:
         --batch_size 64 \
         --seed 42
 
+    python scripts/paired_chord_evaluation.py \
+        --gt_only \
+        --dataset_name hooktheory \
+        --dataset_split test \
+        --save_dir logs/paired_eval/gt/hooktheory
+
 Model spec format  (--model):
     Label=base          use the base MLE checkpoint directly
     Label=path.ckpt     load a Lightning checkpoint (needs args.yml alongside)
     Label=path.pth      load RL actor weights on top of the base model
 
 Outputs (all in --save_dir):
-    metadata.jsonl              one JSON line per row: {seq_idx, song_url}
+    metadata.jsonl              one JSON line per row: {seq_idx, song_url, nicr}
     gt.pt                       GT sequences  [N, seq_len]
     {slug}.pt                   model predictions [N, seq_len] for each --model
+    gt_nicr_per_frame.pt        per-frame NiCR for GT (matches/valid/mean)
+    {slug}_nicr_per_frame.pt    per-frame NiCR for each model
+    gt_mode_per_frame.pt        per-frame note-in-mode for GT
+    {slug}_mode_per_frame.pt    per-frame note-in-mode for each model
+    gt_chords_per_frame.pt      per-frame chord symbols for GT
+    {slug}_chords_per_frame.pt  per-frame chord symbols for each model
+    gt_chord_distribution.json  GT chord counts (onset + frame) for cross-dataset analysis
     chord_names_augmented.json  vocab snapshot for downstream decoding
 """
 
@@ -37,6 +50,7 @@ import argparse
 import copy
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -50,6 +64,11 @@ from tqdm import tqdm
 
 from realchords.dataset.hooktheory_tokenizer import to_midi_pitch
 from realchords.lit_module.decoder_only import LitDecoder
+from realchords.utils.eval_utils import (
+    evaluate_chord_symbols_per_frame,
+    evaluate_melody_mode_fit_per_frame,
+    evaluate_note_in_chord_per_frame,
+)
 from realchords.utils.experiment_utils import (
     DATASET_CACHE_DIRS,
     _random_crop_on_chord_onset,
@@ -59,6 +78,96 @@ from realchords.utils.experiment_utils import (
 )
 from realchords.utils.experiment_utils_model_data import generate_from_data
 from realchords.utils.inference_utils import load_lit_model, load_rl_model
+from realchords.utils.sequence_penalty_analysis import strip_bos
+
+
+def _save_nicr_per_frame(
+    tensor: torch.Tensor,
+    tokenizer,
+    path: Path,
+) -> torch.Tensor:
+    """Compute per-frame NiCR, save .pt, return per-sequence means [N]."""
+    stripped = strip_bos(tensor, tokenizer)
+    nicr = evaluate_note_in_chord_per_frame(stripped, tokenizer)
+    torch.save(nicr, path)
+    return nicr["mean"]
+
+
+def _save_mode_per_frame(
+    tensor: torch.Tensor,
+    tokenizer,
+    path: Path,
+    *,
+    scoring: str,
+    sigma: float,
+) -> torch.Tensor:
+    """Compute per-frame note-in-mode, save .pt, return per-sequence means [N]."""
+    stripped = strip_bos(tensor, tokenizer)
+    mode_fit = evaluate_melody_mode_fit_per_frame(
+        stripped,
+        tokenizer,
+        scoring=scoring,
+        sigma=sigma,
+    )
+    torch.save(mode_fit, path)
+    return mode_fit["mean"]
+
+
+def _save_chords_per_frame(
+    tensor: torch.Tensor,
+    tokenizer,
+    path: Path,
+) -> Dict[str, object]:
+    """Compute per-frame chord symbols and save .pt."""
+    stripped = strip_bos(tensor, tokenizer)
+    chords = evaluate_chord_symbols_per_frame(stripped, tokenizer)
+    torch.save(chords, path)
+    return chords
+
+
+def _chord_distribution(chords: Dict[str, object]) -> Dict[str, object]:
+    """Aggregate per-frame chord symbols into onset and frame counts."""
+    onset_counts: Counter = Counter()
+    frame_counts: Counter = Counter()
+    symbols = chords["symbols"]
+    is_onset = chords["is_onset"]
+    for row_idx, row in enumerate(symbols):
+        for frame_idx, sym in enumerate(row):
+            if not sym:
+                continue
+            frame_counts[sym] += 1
+            if bool(is_onset[row_idx, frame_idx].item()):
+                onset_counts[sym] += 1
+    return {
+        "onset_counts": dict(onset_counts),
+        "frame_counts": dict(frame_counts),
+        "num_onsets": int(sum(onset_counts.values())),
+        "num_chord_frames": int(sum(frame_counts.values())),
+        "num_unique_chords_onset": len(onset_counts),
+        "num_unique_chords_frame": len(frame_counts),
+    }
+
+
+def _save_chord_distribution(
+    chords: Dict[str, object],
+    path: Path,
+    *,
+    dataset_name: str,
+    dataset_split: str,
+    num_sequences: int,
+) -> None:
+    dist = _chord_distribution(chords)
+    dist["dataset_name"] = dataset_name
+    dist["dataset_split"] = dataset_split
+    dist["num_sequences"] = num_sequences
+    with path.open("w", encoding="utf-8") as fh:
+        json.dump(dist, fh, indent=2, sort_keys=True)
+
+
+def _fmt_nicr(mean: float) -> Optional[float]:
+    if mean != mean:  # NaN
+        return None
+    return round(float(mean), 4)
 
 
 # ---------------------------------------------------------------------------
@@ -261,21 +370,25 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base_model",
-        required=True,
         metavar="PATH",
         help="Lightning checkpoint (.ckpt) for the MLE chord baseline. "
-             "Defines the model architecture; all .pth models are loaded on top of it.",
+             "Required unless --gt_only.",
     )
     parser.add_argument(
         "--model",
         action="append",
-        required=True,
         metavar="Label=PATH",
         help=(
             "Model to evaluate. Use 'Label=base' for the base MLE model, "
             "'Label=path.ckpt' for a Lightning checkpoint, "
-            "or 'Label=path.pth' for an RL actor. Repeat for multiple models."
+            "or 'Label=path.pth' for an RL actor. Repeat for multiple models. "
+            "Not used with --gt_only."
         ),
+    )
+    parser.add_argument(
+        "--gt_only",
+        action="store_true",
+        help="Collect GT sequences and chord distributions only (no model loading).",
     )
     parser.add_argument(
         "--dataset_name",
@@ -305,7 +418,30 @@ def _parse_args() -> argparse.Namespace:
         "--pause_bars", type=float, default=0.5,
         help="Silence between sections in bars (default: 0.5).",
     )
+    parser.add_argument(
+        "--mode_scoring",
+        choices=("strict", "coverage", "distance"),
+        default="strict",
+        help="Per-frame note-in-mode scoring (default: strict).",
+    )
+    parser.add_argument(
+        "--mode_sigma",
+        type=float,
+        default=1.5,
+        help="Gaussian kernel width when --mode_scoring=distance.",
+    )
     return parser.parse_args()
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    if args.gt_only:
+        if args.base_model or args.model:
+            print("Note: --base_model / --model are ignored in --gt_only mode.")
+        return
+    if not args.base_model:
+        raise SystemExit("--base_model is required unless --gt_only is set.")
+    if not args.model:
+        raise SystemExit("At least one --model is required unless --gt_only is set.")
 
 
 # ---------------------------------------------------------------------------
@@ -375,13 +511,18 @@ def _load_models(
 
 def main() -> None:
     args = _parse_args()
+    _validate_args(args)
     seed_everything(args.seed, workers=True)
     device = _resolve_device(args.device)
 
-    model_specs = [_parse_model_arg(m) for m in args.model]
-    models, model_tokenizer = _load_models(
-        args.base_model, model_specs, device, args.batch_size
-    )
+    model_specs: List[Tuple[str, str]] = []
+    models: Dict[str, torch.nn.Module] = {}
+    model_tokenizer = None
+    if not args.gt_only:
+        model_specs = [_parse_model_arg(m) for m in args.model]
+        models, model_tokenizer = _load_models(
+            args.base_model, model_specs, device, args.batch_size
+        )
 
     # Chord dataloader — shuffle=False (already the default in create_dataset_dataloaders)
     _, val_loader = create_dataset_dataloaders(
@@ -392,6 +533,7 @@ def main() -> None:
         max_len=256,   # standard crop length
     )
     dataset_tokenizer = val_loader.dataset.tokenizer
+    tokenizer = dataset_tokenizer if args.gt_only else model_tokenizer
     # Ensure every crop starts on a CHORD_ON event so the strict decoder
     # never sees a hold token at frame 0 (same fix as handle_data_only_mode).
     val_loader.dataset.random_crop = types.MethodType(
@@ -401,7 +543,10 @@ def main() -> None:
     n_batches = len(val_loader) if args.num_batches == -1 else args.num_batches
     print(f"\nDataset: {args.dataset_name} / {args.dataset_split}")
     print(f"Batches to process: {n_batches}  (total available: {len(val_loader)})")
-    print(f"Models: {[l for l, _ in model_specs]}")
+    if args.gt_only:
+        print("Mode: GT only")
+    else:
+        print(f"Models: {[l for l, _ in model_specs]}")
     print(f"Saving to: {args.save_dir}\n")
 
     args.save_dir.mkdir(parents=True, exist_ok=True)
@@ -422,7 +567,7 @@ def main() -> None:
             # GT sequences: [batch, seq_len] with BOS+EOS stripped to [BOS, tokens…]
             gt_seq = batch["targets"].to(device)          # [B, seq_len] with BOS+EOS
             gt_seq_stripped = gt_seq[:, 1:-1]             # drop leading BOS + trailing EOS
-            gt_seq_stripped = replace_eos_with_pad(gt_seq_stripped, model_tokenizer)
+            gt_seq_stripped = replace_eos_with_pad(gt_seq_stripped, tokenizer)
 
             song_urls: List[str] = batch.get("song_url", ["unknown"] * gt_seq.size(0))
 
@@ -433,29 +578,28 @@ def main() -> None:
                     "song_url": song_urls[b] if isinstance(song_urls, list) else song_urls,
                     "batch_idx": batch_idx,
                     "batch_pos": b,
+                    "dataset_name": args.dataset_name,
                 })
 
             # Save GT (with BOS, without EOS)
             gt_with_bos = torch.cat([
-                torch.full((gt_seq.size(0), 1), model_tokenizer.bos_token,
+                torch.full((gt_seq.size(0), 1), tokenizer.bos_token,
                            dtype=torch.long, device=device),
                 gt_seq_stripped,
             ], dim=1)
             gt_rows.append(gt_with_bos.cpu())
 
-            # Target sequence length: match the GT length so outputs are comparable
-            target_seq_len = gt_with_bos.size(1)
-
-            # Generate from each model conditioned on the GT melody
-            for label, model in models.items():
-                preds = generate_from_data(
-                    model=model,
-                    sequences=gt_seq_stripped,
-                    tokenizer=model_tokenizer,
-                    prompt_steps=0,
-                    target_seq_len=target_seq_len,
-                )
-                model_rows[label].append(preds.cpu())
+            if not args.gt_only:
+                target_seq_len = gt_with_bos.size(1)
+                for label, model in models.items():
+                    preds = generate_from_data(
+                        model=model,
+                        sequences=gt_seq_stripped,
+                        tokenizer=model_tokenizer,
+                        prompt_steps=0,
+                        target_seq_len=target_seq_len,
+                    )
+                    model_rows[label].append(preds.cpu())
 
             seq_idx += gt_seq.size(0)
 
@@ -468,45 +612,121 @@ def main() -> None:
     print(f"  gt.pt  {tuple(gt_tensor.shape)}")
 
     # Per-model predictions
-    for label, rows in model_rows.items():
-        slug = _slugify(label)
-        tensor = torch.cat(rows, dim=0)
-        torch.save(tensor, args.save_dir / f"{slug}.pt")
-        print(f"  {slug}.pt  {tuple(tensor.shape)}")
+    if not args.gt_only:
+        for label, rows in model_rows.items():
+            slug = _slugify(label)
+            tensor = torch.cat(rows, dim=0)
+            torch.save(tensor, args.save_dir / f"{slug}.pt")
+            print(f"  {slug}.pt  {tuple(tensor.shape)}")
 
-    # Metadata
+    gt_nicr_means = _save_nicr_per_frame(
+        gt_tensor, dataset_tokenizer, args.save_dir / "gt_nicr_per_frame.pt"
+    )
+    print(f"  gt_nicr_per_frame.pt  mean={gt_nicr_means.nanmean().item():.4f}")
+
+    gt_mode_means = _save_mode_per_frame(
+        gt_tensor,
+        dataset_tokenizer,
+        args.save_dir / "gt_mode_per_frame.pt",
+        scoring=args.mode_scoring,
+        sigma=args.mode_sigma,
+    )
+    print(f"  gt_mode_per_frame.pt  mean={gt_mode_means.nanmean().item():.4f}")
+
+    gt_chords = _save_chords_per_frame(
+        gt_tensor, dataset_tokenizer, args.save_dir / "gt_chords_per_frame.pt"
+    )
+    print("  gt_chords_per_frame.pt")
+
+    dist_path = args.save_dir / "gt_chord_distribution.json"
+    _save_chord_distribution(
+        gt_chords,
+        dist_path,
+        dataset_name=args.dataset_name,
+        dataset_split=args.dataset_split,
+        num_sequences=gt_tensor.size(0),
+    )
+    print(f"  gt_chord_distribution.json  ({dist_path})")
+
+    model_nicr_means: Dict[str, torch.Tensor] = {}
+    model_mode_means: Dict[str, torch.Tensor] = {}
+    if not args.gt_only:
+        for label, rows in model_rows.items():
+            slug = _slugify(label)
+            tensor = torch.cat(rows, dim=0)
+            means = _save_nicr_per_frame(
+                tensor, model_tokenizer, args.save_dir / f"{slug}_nicr_per_frame.pt"
+            )
+            model_nicr_means[label] = means
+            print(
+                f"  {slug}_nicr_per_frame.pt  mean={means.nanmean().item():.4f}"
+            )
+            mode_means = _save_mode_per_frame(
+                tensor,
+                model_tokenizer,
+                args.save_dir / f"{slug}_mode_per_frame.pt",
+                scoring=args.mode_scoring,
+                sigma=args.mode_sigma,
+            )
+            model_mode_means[label] = mode_means
+            print(
+                f"  {slug}_mode_per_frame.pt  mean={mode_means.nanmean().item():.4f}"
+            )
+            _save_chords_per_frame(
+                tensor, model_tokenizer, args.save_dir / f"{slug}_chords_per_frame.pt"
+            )
+            print(f"  {slug}_chords_per_frame.pt")
+
+    # Metadata (with per-sequence NiCR / mode-fit means)
     meta_path = args.save_dir / "metadata.jsonl"
     with meta_path.open("w", encoding="utf-8") as fh:
         for entry in metadata:
+            idx = entry["seq_idx"]
+            entry["nicr"] = {
+                "gt": _fmt_nicr(gt_nicr_means[idx].item()),
+            }
+            entry["mode_fit"] = {
+                "gt": _fmt_nicr(gt_mode_means[idx].item()),
+            }
+            for label, means in model_nicr_means.items():
+                slug = _slugify(label)
+                entry["nicr"][slug] = _fmt_nicr(means[idx].item())
+            for label, means in model_mode_means.items():
+                slug = _slugify(label)
+                entry["mode_fit"][slug] = _fmt_nicr(means[idx].item())
             fh.write(json.dumps(entry) + "\n")
-    print(f"  metadata.jsonl  ({len(metadata)} rows)")
+    print(f"  metadata.jsonl  ({len(metadata)} rows, with per-sequence NiCR/mode-fit)")
 
     # Vocab snapshot so the .pt files can always be decoded correctly
     snapshot = save_vocab_snapshot(str(args.save_dir))
     print(f"  vocab snapshot → {snapshot}")
 
-    # ---- MIDI output --------------------------------------------------------
-    midi_dir = args.midi_dir if args.midi_dir is not None else args.save_dir / "midi"
-    ordered_labels = [label for label, _ in model_specs]
-    model_tensors  = {label: torch.cat(model_rows[label], dim=0) for label in ordered_labels}
+    # ---- MIDI output (full paired eval only, unless --midi_dir set) --------
+    if not args.gt_only or args.midi_dir is not None:
+        midi_dir = args.midi_dir if args.midi_dir is not None else args.save_dir / "midi"
+        ordered_labels = [label for label, _ in model_specs]
+        model_tensors = {
+            label: torch.cat(model_rows[label], dim=0) for label in ordered_labels
+        } if not args.gt_only else {}
 
-    print(f"\nWriting MIDI files to {midi_dir} …")
-    write_paired_midis(
-        gt_tensor=gt_tensor,
-        model_tensors=model_tensors,
-        ordered_labels=ordered_labels,
-        metadata=metadata,
-        gt_tokenizer=dataset_tokenizer,
-        model_tokenizer=model_tokenizer,
-        midi_dir=midi_dir,
-        bpm=args.bpm,
-        pause_bars=args.pause_bars,
-    )
+        print(f"\nWriting MIDI files to {midi_dir} …")
+        write_paired_midis(
+            gt_tensor=gt_tensor,
+            model_tensors=model_tensors,
+            ordered_labels=ordered_labels,
+            metadata=metadata,
+            gt_tokenizer=dataset_tokenizer,
+            model_tokenizer=model_tokenizer or dataset_tokenizer,
+            midi_dir=midi_dir,
+            bpm=args.bpm,
+            pause_bars=args.pause_bars,
+        )
 
     print("\nDone.")
-    print("Model labels saved:")
-    for label, _ in model_specs:
-        print(f"  {label}  →  {_slugify(label)}.pt")
+    if not args.gt_only:
+        print("Model labels saved:")
+        for label, _ in model_specs:
+            print(f"  {label}  →  {_slugify(label)}.pt")
 
 
 if __name__ == "__main__":
