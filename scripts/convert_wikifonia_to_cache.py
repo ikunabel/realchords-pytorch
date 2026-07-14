@@ -295,6 +295,11 @@ def extract_melody_and_chords_from_musicxml(
         score = music21.converter.parse(str(xml_file))
         if score is None:
             return None
+        # Some sources notate transposing instruments (e.g. guitar written an
+        # octave above sounding pitch via <transpose><octave-change>) -- read
+        # sounding pitch so melody octaves are correct. No-op when no
+        # <transpose> is declared (true for typical piano-voice lead sheets).
+        score = score.toSoundingPitch()
 
         # Get metadata
         metadata = {

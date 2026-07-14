@@ -37,7 +37,40 @@ DATASET_CACHE_DIRS = {
     "wikifonia": os.path.join(CACHE_DIR, "wikifonia"),
     "jazzmus": os.path.join(CACHE_DIR, "jazzmus"),
     "wjd": os.path.join(CACHE_DIR, "wjd"),
+    "cocopops": os.path.join(CACHE_DIR, "cocopops"),
+    "chord_melody_dataset": os.path.join(CACHE_DIR, "chord_melody_dataset"),
 }
+
+
+def resolve_chord_names_path_for_dataset(cache_dir: str) -> str:
+    """Return a chord vocab path that covers both global and dataset-local symbols."""
+    global_path = Path(CHORD_NAMES_AUG_PATH)
+    if not global_path.exists():
+        raise FileNotFoundError(
+            f"Expected augmented chord vocab at {global_path}"
+        )
+
+    with open(global_path, encoding="utf-8") as handle:
+        global_names = set(json.load(handle))
+
+    local_candidates = [
+        Path(cache_dir) / "chord_names_augmented.json",
+        Path(cache_dir) / "chord_names.json",
+    ]
+    local_names: set[str] = set()
+    for local_path in local_candidates:
+        if local_path.exists():
+            with open(local_path, encoding="utf-8") as handle:
+                local_names.update(json.load(handle))
+
+    if local_names.issubset(global_names):
+        return str(global_path)
+
+    merged_path = Path(cache_dir) / "chord_names_eval_merged.json"
+    merged = sorted(global_names | local_names)
+    with open(merged_path, "w", encoding="utf-8") as handle:
+        json.dump(merged, handle, indent=2)
+    return str(merged_path)
 
 
 def create_dataset_dataloaders(
@@ -59,11 +92,7 @@ def create_dataset_dataloaders(
         )
 
     cache_dir = DATASET_CACHE_DIRS[dataset_key]
-    chord_names_path = CHORD_NAMES_AUG_PATH
-    if not os.path.exists(chord_names_path):
-        raise FileNotFoundError(
-            f"Expected augmented chord vocab at {chord_names_path}"
-        )
+    chord_names_path = resolve_chord_names_path_for_dataset(cache_dir)
 
     dataset = HooktheoryDataset(
         cache_dir=cache_dir,

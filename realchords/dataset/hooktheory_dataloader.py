@@ -346,6 +346,10 @@ class HooktheoryDataset(Dataset):
             output[
                 "song_url"
             ] = f"jazzmus://{item['jazzmus']['file']}#{item['jazzmus']['id']}"
+        elif "cocopops" in item:
+            output[
+                "song_url"
+            ] = f"cocopops://{item['cocopops']['file']}#{item['cocopops']['id']}"
         else:
             # Fallback for other datasets
             output["song_url"] = "unknown://unknown"
