@@ -19,6 +19,9 @@ NUM_MIDIS=50      # -1 = export all sequences
 MELODY_OCTAVE=0   # offset added to stored melody octaves in MIDI export
 CHORD_OCTAVE=4    # octave for naive chord voicings
 
+# Each call below writes two variants under --save_dir:
+#   cropped_songs/  legacy 256-frame (8-bar melody + 8-bar chord) crop
+#   full_songs/     whole songs, uncropped
 _paired_eval() {
   python scripts/paired_chord_evaluation.py \
     --midi_samples "$NUM_MIDIS" \
@@ -203,6 +206,17 @@ paired_gt_chord_melody_dataset() {
     --seed          42
 }
 
+paired_gt_emopia_plus() {
+  _paired_eval \
+    --gt_only \
+    --dataset_name  emopia_plus \
+    --dataset_split test \
+    --save_dir      "$_PAIRED_GT_DIR/emopia_plus" \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
+    --seed          42
+}
+
 paired_gt_all() {
   paired_gt_hooktheory
   paired_gt_wikifonia
@@ -211,4 +225,6 @@ paired_gt_all() {
   paired_gt_jazzmus
   paired_gt_wjd
   paired_gt_cocopops
+  paired_gt_chord_melody_dataset
+  paired_gt_emopia_plus
 }

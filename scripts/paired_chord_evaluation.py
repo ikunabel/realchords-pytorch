@@ -25,6 +25,18 @@ Usage:
         --dataset_split test \
         --save_dir logs/paired_eval/gt/hooktheory
 
+Every run produces two variants under --save_dir, each with its own full set
+of outputs (gt.pt, {slug}.pt, midi/, etc.):
+    <save_dir>/cropped_songs/   legacy 256-frame (8-bar melody + 8-bar chord)
+                                random crop, aligned to a chord onset
+    <save_dir>/full_songs/      whole songs, uncropped (sized to the longest
+                                song in the split) -- for listening to full
+                                MIDIs or computing frame-level GT metrics over
+                                entire songs rather than a random window
+Model generation works for both (the target length is derived from the
+batch, not hardcoded), but a model's own positional-embedding limit -- if
+any -- is a separate constraint that "full_songs" doesn't route around.
+
 Model spec format  (--model):
     Label=base          use the base MLE checkpoint directly
     Label=path.ckpt     load a Lightning checkpoint (needs args.yml alongside)
@@ -64,6 +76,7 @@ import torch
 from lightning import seed_everything
 from tqdm import tqdm
 
+from realchords.constants import FRAME_PER_BEAT
 from realchords.dataset.hooktheory_tokenizer import to_midi_pitch
 from realchords.lit_module.decoder_only import LitDecoder
 from realchords.utils.eval_utils import (
@@ -539,6 +552,29 @@ def _resolve_device(spec: str) -> torch.device:
     return torch.device(spec)
 
 
+def _max_song_frames(dataset_name: str, dataset_split: str) -> int:
+    """Longest song (in frames, per melody/chord lane) in the given split(s).
+
+    Used to size an uncropped ("full song") dataloader: `HooktheoryDataset
+    .random_crop` (and its chord-onset-aligned variant) only crop when a
+    song's frame count exceeds `max_len_per_part`, so passing a `max_len`
+    derived from this never truncates anything, while still using the same
+    fixed-size padding/collation the dataloader already relies on.
+    """
+    cache_dir = Path(DATASET_CACHE_DIRS[dataset_name.lower()])
+    splits = ["train", "valid", "test"] if dataset_split == "all" else [dataset_split]
+    max_beats = 0
+    for split in splits:
+        split_path = cache_dir / f"{split}.jsonl"
+        if not split_path.exists():
+            continue
+        with open(split_path, encoding="utf-8") as handle:
+            for line in handle:
+                num_beats = json.loads(line)["annotations"].get("num_beats", 0)
+                max_beats = max(max_beats, num_beats)
+    return max_beats * FRAME_PER_BEAT
+
+
 def _load_models(
     base_ckpt: str,
     model_specs: List[Tuple[str, str]],   # [(label, path_or_keyword), ...]
@@ -594,28 +630,28 @@ def _load_models(
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    args = _parse_args()
-    _validate_args(args)
-    seed_everything(args.seed, workers=True)
-    device = _resolve_device(args.device)
+def _run_eval(
+    args: argparse.Namespace,
+    *,
+    device: torch.device,
+    models: Dict[str, torch.nn.Module],
+    model_tokenizer,
+    model_specs: List[Tuple[str, str]],
+    max_len: int,
+    save_dir: Path,
+    run_label: str,
+) -> None:
+    """Run one full eval pass (dataloader → generation → save) into save_dir.
 
-    model_specs: List[Tuple[str, str]] = []
-    models: Dict[str, torch.nn.Module] = {}
-    model_tokenizer = None
-    if not args.gt_only:
-        model_specs = [_parse_model_arg(m) for m in args.model]
-        models, model_tokenizer = _load_models(
-            args.base_model, model_specs, device, args.batch_size
-        )
-
+    Called once per crop variant ("cropped_songs", "full_songs") from main().
+    """
     # Chord dataloader — shuffle=False (already the default in create_dataset_dataloaders)
     _, val_loader = create_dataset_dataloaders(
         dataset_name=args.dataset_name,
         dataset_split=args.dataset_split,
         model_part="chord",
         batch_size=args.batch_size,
-        max_len=256,   # standard crop length
+        max_len=max_len,
     )
     dataset_tokenizer = val_loader.dataset.tokenizer
     tokenizer = dataset_tokenizer if args.gt_only else model_tokenizer
@@ -626,15 +662,16 @@ def main() -> None:
     )
 
     n_batches = len(val_loader) if args.num_batches == -1 else args.num_batches
-    print(f"\nDataset: {args.dataset_name} / {args.dataset_split}")
+    print(f"\n=== {run_label} ===")
+    print(f"Dataset: {args.dataset_name} / {args.dataset_split}")
     print(f"Batches to process: {n_batches}  (total available: {len(val_loader)})")
     if args.gt_only:
         print("Mode: GT only")
     else:
         print(f"Models: {[l for l, _ in model_specs]}")
-    print(f"Saving to: {args.save_dir}\n")
+    print(f"Saving to: {save_dir}\n")
 
-    args.save_dir.mkdir(parents=True, exist_ok=True)
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     # Accumulators
     gt_rows: List[torch.Tensor] = []
@@ -689,11 +726,11 @@ def main() -> None:
             seq_idx += gt_seq.size(0)
 
     # ---- Save ---------------------------------------------------------------
-    print(f"\nSaving {seq_idx} sequences to {args.save_dir} …")
+    print(f"\nSaving {seq_idx} sequences to {save_dir} …")
 
     # GT
     gt_tensor = torch.cat(gt_rows, dim=0)
-    torch.save(gt_tensor, args.save_dir / "gt.pt")
+    torch.save(gt_tensor, save_dir / "gt.pt")
     print(f"  gt.pt  {tuple(gt_tensor.shape)}")
 
     # Per-model predictions
@@ -701,29 +738,29 @@ def main() -> None:
         for label, rows in model_rows.items():
             slug = _slugify(label)
             tensor = torch.cat(rows, dim=0)
-            torch.save(tensor, args.save_dir / f"{slug}.pt")
+            torch.save(tensor, save_dir / f"{slug}.pt")
             print(f"  {slug}.pt  {tuple(tensor.shape)}")
 
     gt_nicr_means = _save_nicr_per_frame(
-        gt_tensor, dataset_tokenizer, args.save_dir / "gt_nicr_per_frame.pt"
+        gt_tensor, dataset_tokenizer, save_dir / "gt_nicr_per_frame.pt"
     )
     print(f"  gt_nicr_per_frame.pt  mean={gt_nicr_means.nanmean().item():.4f}")
 
     gt_mode_means = _save_mode_per_frame(
         gt_tensor,
         dataset_tokenizer,
-        args.save_dir / "gt_mode_per_frame.pt",
+        save_dir / "gt_mode_per_frame.pt",
         scoring=args.mode_scoring,
         sigma=args.mode_sigma,
     )
     print(f"  gt_mode_per_frame.pt  mean={gt_mode_means.nanmean().item():.4f}")
 
     gt_chords = _save_chords_per_frame(
-        gt_tensor, dataset_tokenizer, args.save_dir / "gt_chords_per_frame.pt"
+        gt_tensor, dataset_tokenizer, save_dir / "gt_chords_per_frame.pt"
     )
     print("  gt_chords_per_frame.pt")
 
-    dist_path = args.save_dir / "gt_chord_distribution.json"
+    dist_path = save_dir / "gt_chord_distribution.json"
     _save_chord_distribution(
         gt_chords,
         dist_path,
@@ -740,7 +777,7 @@ def main() -> None:
             slug = _slugify(label)
             tensor = torch.cat(rows, dim=0)
             means = _save_nicr_per_frame(
-                tensor, model_tokenizer, args.save_dir / f"{slug}_nicr_per_frame.pt"
+                tensor, model_tokenizer, save_dir / f"{slug}_nicr_per_frame.pt"
             )
             model_nicr_means[label] = means
             print(
@@ -749,7 +786,7 @@ def main() -> None:
             mode_means = _save_mode_per_frame(
                 tensor,
                 model_tokenizer,
-                args.save_dir / f"{slug}_mode_per_frame.pt",
+                save_dir / f"{slug}_mode_per_frame.pt",
                 scoring=args.mode_scoring,
                 sigma=args.mode_sigma,
             )
@@ -758,12 +795,12 @@ def main() -> None:
                 f"  {slug}_mode_per_frame.pt  mean={mode_means.nanmean().item():.4f}"
             )
             _save_chords_per_frame(
-                tensor, model_tokenizer, args.save_dir / f"{slug}_chords_per_frame.pt"
+                tensor, model_tokenizer, save_dir / f"{slug}_chords_per_frame.pt"
             )
             print(f"  {slug}_chords_per_frame.pt")
 
     # Metadata (with per-sequence NiCR / mode-fit means)
-    meta_path = args.save_dir / "metadata.jsonl"
+    meta_path = save_dir / "metadata.jsonl"
     with meta_path.open("w", encoding="utf-8") as fh:
         for entry in metadata:
             idx = entry["seq_idx"]
@@ -783,11 +820,13 @@ def main() -> None:
     print(f"  metadata.jsonl  ({len(metadata)} rows, with per-sequence NiCR/mode-fit)")
 
     # Vocab snapshot so the .pt files can always be decoded correctly
-    snapshot = save_vocab_snapshot(str(args.save_dir))
+    snapshot = save_vocab_snapshot(str(save_dir))
     print(f"  vocab snapshot → {snapshot}")
 
     # ---- MIDI output --------------------------------------------------------
-    midi_dir = args.midi_dir if args.midi_dir is not None else args.save_dir / "midi"
+    # If the caller passed an explicit --midi_dir, nest it per run_label so
+    # the cropped_songs/full_songs variants don't overwrite each other.
+    midi_dir = (args.midi_dir / run_label) if args.midi_dir is not None else save_dir / "midi"
     ordered_labels = [label for label, _ in model_specs]
     model_tensors = {
         label: torch.cat(model_rows[label], dim=0) for label in ordered_labels
@@ -817,11 +856,58 @@ def main() -> None:
         melody_octave=args.melody_octave,
     )
 
-    print("\nDone.")
+    print(f"\nDone with {run_label}.")
     if not args.gt_only:
         print("Model labels saved:")
         for label, _ in model_specs:
             print(f"  {label}  →  {_slugify(label)}.pt")
+
+
+def main() -> None:
+    args = _parse_args()
+    _validate_args(args)
+    seed_everything(args.seed, workers=True)
+    device = _resolve_device(args.device)
+
+    model_specs: List[Tuple[str, str]] = []
+    models: Dict[str, torch.nn.Module] = {}
+    model_tokenizer = None
+    if not args.gt_only:
+        model_specs = [_parse_model_arg(m) for m in args.model]
+        models, model_tokenizer = _load_models(
+            args.base_model, model_specs, device, args.batch_size
+        )
+
+    # +1 bar of margin: num_beats can under-count by a frame or two at the
+    # tail depending on quantization, and max_len must strictly exceed the
+    # longest song for random_crop's guard to skip cropping.
+    max_frames = _max_song_frames(args.dataset_name, args.dataset_split)
+    full_songs_max_len = 2 * (max_frames + FRAME_PER_BEAT * 4)
+    print(
+        f"full_songs: sizing dataloader for uncropped songs "
+        f"(longest song ~{max_frames} frames/lane, max_len={full_songs_max_len})"
+    )
+
+    _run_eval(
+        args,
+        device=device,
+        models=models,
+        model_tokenizer=model_tokenizer,
+        model_specs=model_specs,
+        max_len=256,  # legacy crop length: 8-bar melody + 8-bar chord
+        save_dir=args.save_dir / "cropped_songs",
+        run_label="cropped_songs",
+    )
+    _run_eval(
+        args,
+        device=device,
+        models=models,
+        model_tokenizer=model_tokenizer,
+        model_specs=model_specs,
+        max_len=full_songs_max_len,
+        save_dir=args.save_dir / "full_songs",
+        run_label="full_songs",
+    )
 
 
 if __name__ == "__main__":

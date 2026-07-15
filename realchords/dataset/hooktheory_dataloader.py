@@ -350,6 +350,20 @@ class HooktheoryDataset(Dataset):
             output[
                 "song_url"
             ] = f"cocopops://{item['cocopops']['file']}#{item['cocopops']['id']}"
+        elif "chord_melody_dataset" in item:
+            output["song_url"] = (
+                f"chord_melody_dataset://{item['chord_melody_dataset']['file']}"
+                f"#{item['chord_melody_dataset']['id']}"
+            )
+        elif "emopia_plus" in item:
+            # id is already the filename stem (file == f"{id}.mid"), so
+            # including both here would just duplicate the same string.
+            output["song_url"] = f"emopia_plus://{item['emopia_plus']['id']}"
+        elif "wjazzd" in item:
+            output["song_url"] = (
+                f"wjazzd://{item['wjazzd']['performer']}_{item['wjazzd']['title']}"
+                f"#{item['wjazzd']['melid']}"
+            )
         else:
             # Fallback for other datasets
             output["song_url"] = "unknown://unknown"
