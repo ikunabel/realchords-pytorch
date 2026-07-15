@@ -1,4 +1,4 @@
-"""Filter rules shared with scripts/convert_hooktheory_to_cache.py.
+"""Filter rules shared with scripts/convert_data_to_cache/convert_hooktheory_to_cache.py.
 
 Songs are written to data/cache/hooktheory/*.jsonl only when they pass
 passes_hooktheory_cache_filter(). Viewer scripts should inspect the same set.

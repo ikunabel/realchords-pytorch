@@ -18,7 +18,7 @@ python dataset_experiments/scripts/explore_raw_chords.py
 
 Hooktheory viewers (`explore_hooktheory.py`, `explore_raw_hookpad.py`) only inspect
 songs that are in `data/cache/hooktheory` — the same filter as
-`scripts/convert_hooktheory_to_cache.py`: **MELODY + HARMONY tags, no TEMPO_CHANGES**.
+`scripts/convert_data_to_cache/convert_hooktheory_to_cache.py`: **MELODY + HARMONY tags, no TEMPO_CHANGES**.
 Alignment tags are not part of that filter. See `scripts/hooktheory_cache_filter.py`.
 
 Use matching `--split` and `--song-index` (default: `train`, `7`) so cache JSON,

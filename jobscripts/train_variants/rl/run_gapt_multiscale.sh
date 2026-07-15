@@ -28,6 +28,6 @@ export CC=gcc
 export CXX=g++
 export CUDAHOSTCXX=g++
 
-srun python scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail_multiscale.py \
+srun python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_gail_multiscale.py \
   --args.load "${CONFIG_YML}" \
   --save_dir "${RUN_DIR}"

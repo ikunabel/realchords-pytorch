@@ -38,9 +38,9 @@ from typing import Dict, List, Optional, Tuple
 
 import pretty_midi
 
-SCRIPT_DIR = str(Path(__file__).resolve().parents[1])
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
+CONVERT_DIR = str(Path(__file__).resolve().parents[1] / "convert_data_to_cache")
+if CONVERT_DIR not in sys.path:
+    sys.path.insert(0, CONVERT_DIR)
 
 from convert_wikifonia_to_cache import parse_chord_symbol_with_noteseq  # type: ignore
 

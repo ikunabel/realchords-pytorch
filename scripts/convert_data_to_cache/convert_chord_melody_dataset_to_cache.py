@@ -25,9 +25,9 @@ a full octave too high.
 
 Usage::
 
-    python scripts/convert_chord_melody_dataset_to_cache.py
-    python scripts/convert_chord_melody_dataset_to_cache.py --report_only
-    python scripts/convert_chord_melody_dataset_to_cache.py --max_songs 20
+    python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py
+    python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py --report_only
+    python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py --max_songs 20
 """
 
 from __future__ import annotations

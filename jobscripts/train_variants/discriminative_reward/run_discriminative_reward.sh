@@ -22,7 +22,7 @@ CONFIG_YML="$1"
 RUN_DIR="${RUNS_ROOT}/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
-srun python scripts/train_discriminative_reward.py \
+srun python scripts/train/train_discriminative_reward.py \
   --args.load "${CONFIG_YML}" \
   --save_dir "${RUN_DIR}"
 

@@ -91,24 +91,24 @@ Download and convert all four datasets using these commands:
 
 ```bash
 # 1. Hooktheory (19K songs)
-python scripts/download_hooktheory_dataset.py --verify
-python scripts/convert_hooktheory_to_cache.py
-python scripts/convert_hooktheory_to_cache.py --augmentation
+python scripts/convert_data_to_cache/download_hooktheory_dataset.py --verify
+python scripts/convert_data_to_cache/convert_hooktheory_to_cache.py
+python scripts/convert_data_to_cache/convert_hooktheory_to_cache.py --augmentation
 
 # 2. POP909 (909 popular songs)
-python scripts/download_pop909_dataset.py --verify
-python scripts/convert_pop909_to_cache.py
-python scripts/convert_pop909_to_cache.py --augmentation
+python scripts/convert_data_to_cache/download_pop909_dataset.py --verify
+python scripts/convert_data_to_cache/convert_pop909_to_cache.py
+python scripts/convert_data_to_cache/convert_pop909_to_cache.py --augmentation
 
 # 3. Nottingham (1,019 folk tunes)
-python scripts/download_nottingham_dataset.py --verify
-python scripts/convert_nottingham_to_cache.py
-python scripts/convert_nottingham_to_cache.py --augmentation
+python scripts/convert_data_to_cache/download_nottingham_dataset.py --verify
+python scripts/convert_data_to_cache/convert_nottingham_to_cache.py
+python scripts/convert_data_to_cache/convert_nottingham_to_cache.py --augmentation
 
 # 4. Wikifonia (6K+ lead sheets)
-python scripts/download_wikifonia_dataset.py
-python scripts/convert_wikifonia_to_cache.py
-python scripts/convert_wikifonia_to_cache.py --augmentation
+python scripts/convert_data_to_cache/download_wikifonia_dataset.py
+python scripts/convert_data_to_cache/convert_wikifonia_to_cache.py
+python scripts/convert_data_to_cache/convert_wikifonia_to_cache.py --augmentation
 ```
 
 **Output**: Converted datasets are stored in `data/cache/<dataset_name>/*.jsonl` with train/valid/test splits (80/10/10). Each line in the `.jsonl` file is a JSON object containing melody notes, chord annotations, and timing information. The above commands will create both regular and augmented versions of the datasets.
@@ -158,28 +158,28 @@ Follow the following process to train the final RL-finetuned models. This codeba
 
 ```bash
 # Online accompaniment models
-python scripts/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_chord.yml --save_dir logs/decoder_only_online_chord
+python scripts/train/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_chord.yml --save_dir logs/decoder_only_online_chord
 
 # Encoder-decoder models
-python scripts/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_chord.yml --save_dir logs/enc_dec_base_chord
+python scripts/train/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_chord.yml --save_dir logs/enc_dec_base_chord
 ```
 
 **Reward Model Training**
 
 ```bash
 # Contrastive reward models
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward.yml --save_dir logs/contrastive_reward
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2.yml --save_dir logs/contrastive_reward_2
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward.yml --save_dir logs/contrastive_reward
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2.yml --save_dir logs/contrastive_reward_2
 
 # Discriminative reward models (with 128 batch size)
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward.yml --save_dir logs/discriminative_reward_128_bs
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_2.yml --save_dir logs/discriminative_reward_128_bs_2
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward.yml --save_dir logs/discriminative_reward_128_bs
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_2.yml --save_dir logs/discriminative_reward_128_bs_2
 
 # Rhythm-specific reward models, which do not use augmentation
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2
 ```
 
 ### GAPT Model (trained on 3 datasets: Hooktheory, POP909, Nottingham):
@@ -188,28 +188,28 @@ python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_
 
 ```bash
 # Online accompaniment model (3 datasets)
-python scripts/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_chord_3_datasets.yml --save_dir logs/decoder_only_online_chord_3_datasets
+python scripts/train/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_chord_3_datasets.yml --save_dir logs/decoder_only_online_chord_3_datasets
 
 # Encoder-decoder model (3 datasets)
-python scripts/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_chord_3_datasets.yml --save_dir logs/enc_dec_base_chord_3_datasets
+python scripts/train/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_chord_3_datasets.yml --save_dir logs/enc_dec_base_chord_3_datasets
 ```
 
 **Reward Model Training**
 
 ```bash
 # Contrastive reward models (3 datasets)
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_3_datasets.yml --save_dir logs/contrastive_reward_3_datasets
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2_3_datasets.yml --save_dir logs/contrastive_reward_2_3_datasets
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_3_datasets.yml --save_dir logs/contrastive_reward_3_datasets
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2_3_datasets.yml --save_dir logs/contrastive_reward_2_3_datasets
 
 # Discriminative reward models (3 datasets, 128 batch size)
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_3_datasets.yml --save_dir logs/discriminative_reward_128_bs_3_datasets
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_2_3_datasets.yml --save_dir logs/discriminative_reward_128_bs_2_3_datasets
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_3_datasets.yml --save_dir logs/discriminative_reward_128_bs_3_datasets
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_2_3_datasets.yml --save_dir logs/discriminative_reward_128_bs_2_3_datasets
 
 # Rhythm-specific reward models (3 datasets, no augmentation)
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_3_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_3_datasets
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2_3_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2_3_datasets
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_3_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_3_datasets
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2_3_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2_3_datasets
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_3_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_3_datasets
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2_3_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2_3_datasets
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_3_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_3_datasets
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2_3_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2_3_datasets
 ```
 
 
@@ -230,7 +230,7 @@ This requires the following pre-trained models:
 - Rhythm reward models: `contrastive_reward_no_augmentation_rhythm`, `contrastive_reward_no_augmentation_rhythm_2`, `discriminative_reward_no_augmentation_rhythm`, `discriminative_reward_no_augmentation_rhythm_2`
 
 ```bash
-python scripts/train_rl_ensemble_rhythm_reward_offline_anchor.py \
+python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor.py \
   --args.load configs/single_agent_rl/realchords.yml \
   --save_dir logs/realchords
 ```
@@ -245,7 +245,7 @@ This requires the following pre-trained models (3 datasets):
 
 
 ```bash
-python scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
+python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
   --args.load configs/single_agent_rl/gapt.yml \
   --save_dir logs/gapt
 ```
@@ -268,7 +268,7 @@ mpirun -np 1 \
   -x MASTER_PORT \
   -x MASTER_ADDR \
   -x RANK \
-  python scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
+  python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
     --args.load configs/single_agent_rl/gapt.yml \
     --save_dir logs/gapt
 ```
@@ -296,33 +296,33 @@ If you want to train an online model that generates melody given chords, you can
 **1. MLE Pre-training:**
 
 ```bash
-python scripts/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_melody_4_datasets.yml --save_dir logs/decoder_only_online_melody_4_datasets
+python scripts/train/train_decoder_only.py --args.load configs/gen_models/decoder_only_online_melody_4_datasets.yml --save_dir logs/decoder_only_online_melody_4_datasets
 
-python scripts/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_melody_4_datasets.yml --save_dir logs/enc_dec_base_melody_4_datasets
+python scripts/train/train_enc_dec.py --args.load configs/gen_models/enc_dec_base_melody_4_datasets.yml --save_dir logs/enc_dec_base_melody_4_datasets
 ```
 
 **2. Reward Model Training:**
 
 ```bash
 # Contrastive reward models
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_4_datasets.yml --save_dir logs/contrastive_reward_4_datasets
-python scripts/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2_4_datasets.yml --save_dir logs/contrastive_reward_2_4_datasets
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_4_datasets.yml --save_dir logs/contrastive_reward_4_datasets
+python scripts/train/train_contrastive_reward.py --args.load configs/reward_models/contrastive_reward_2_4_datasets.yml --save_dir logs/contrastive_reward_2_4_datasets
 
 # Discriminative reward models
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_4_datasets.yml --save_dir logs/discriminative_reward_128_bs_4_datasets
-python scripts/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_2_4_datasets.yml --save_dir logs/discriminative_reward_128_bs_2_4_datasets
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_4_datasets.yml --save_dir logs/discriminative_reward_128_bs_4_datasets
+python scripts/train/train_discriminative_reward.py --args.load configs/reward_models/discriminative_reward_128_bs_2_4_datasets.yml --save_dir logs/discriminative_reward_128_bs_2_4_datasets
 
 # Rhythm-specific reward models
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_4_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_4_datasets
-python scripts/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2_4_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2_4_datasets
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_4_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_4_datasets
-python scripts/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2_4_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2_4_datasets
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_4_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_4_datasets
+python scripts/train/train_contrastive_reward_rhythm.py --args.load configs/reward_models/contrastive_reward_no_augmentation_rhythm_2_4_datasets.yml --save_dir logs/contrastive_reward_no_augmentation_rhythm_2_4_datasets
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_4_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_4_datasets
+python scripts/train/train_discriminative_reward_rhythm.py --args.load configs/reward_models/discriminative_reward_no_augmentation_rhythm_2_4_datasets.yml --save_dir logs/discriminative_reward_no_augmentation_rhythm_2_4_datasets
 ```
 
 **3. RL Training with GAIL:**
 
 ```bash
-python scripts/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
+python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_gail.py \
   --args.load configs/single_agent_rl/rl_melody_gail_4_datasets.yml \
   --save_dir logs/rl_melody_gail_4_datasets
 ```

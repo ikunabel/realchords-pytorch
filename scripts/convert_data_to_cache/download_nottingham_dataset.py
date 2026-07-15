@@ -184,7 +184,7 @@ def main():
     print(f"\nNottingham dataset setup completed!")
     print(f"Next steps:")
     print(
-        f"  1. Run: python scripts/convert_nottingham_to_cache.py --augmentation"
+        f"  1. Run: python scripts/convert_data_to_cache/convert_nottingham_to_cache.py --augmentation"
     )
     print(f"  2. Check: data/cache/nottingham/")
 

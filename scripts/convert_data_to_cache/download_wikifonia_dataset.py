@@ -101,7 +101,7 @@ def main():
     if dataset_path:
         print(f"\nWikifonia dataset setup completed!")
         print(f"Next steps:")
-        print(f"  1. Run: python scripts/convert_wikifonia_to_cache.py")
+        print(f"  1. Run: python scripts/convert_data_to_cache/convert_wikifonia_to_cache.py")
 
 
 if __name__ == "__main__":

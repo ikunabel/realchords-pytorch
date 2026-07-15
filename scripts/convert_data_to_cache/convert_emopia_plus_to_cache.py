@@ -29,10 +29,10 @@ a new random split.
 
 Usage::
 
-    python scripts/convert_emopia_plus_to_cache.py
-    python scripts/convert_emopia_plus_to_cache.py --report_only
-    python scripts/convert_emopia_plus_to_cache.py --max_files 20
-    python scripts/convert_emopia_plus_to_cache.py --augmentation
+    python scripts/convert_data_to_cache/convert_emopia_plus_to_cache.py
+    python scripts/convert_data_to_cache/convert_emopia_plus_to_cache.py --report_only
+    python scripts/convert_data_to_cache/convert_emopia_plus_to_cache.py --max_files 20
+    python scripts/convert_data_to_cache/convert_emopia_plus_to_cache.py --augmentation
 """
 
 from __future__ import annotations

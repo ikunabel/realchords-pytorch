@@ -44,9 +44,9 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 import numpy as np
 from tqdm import tqdm
 
-SCRIPT_DIR = str(Path(__file__).resolve().parents[1])
-if SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, SCRIPT_DIR)
+CONVERT_DIR = str(Path(__file__).resolve().parents[1] / "convert_data_to_cache")
+if CONVERT_DIR not in sys.path:
+    sys.path.insert(0, CONVERT_DIR)
 
 from convert_wikifonia_to_cache import parse_chord_symbol_with_noteseq
 

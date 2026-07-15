@@ -2,7 +2,7 @@
 """Explore one Hooktheory cache song: JSON, MIDI, and tokenized output.
 
 Loads from data/cache/hooktheory, which only contains songs that passed the
-cache filter in scripts/convert_hooktheory_to_cache.py (MELODY + HARMONY tags,
+cache filter in scripts/convert_data_to_cache/convert_hooktheory_to_cache.py (MELODY + HARMONY tags,
 no TEMPO_CHANGES). See hooktheory_cache_filter.py for details.
 """
 

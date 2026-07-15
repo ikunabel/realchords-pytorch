@@ -319,7 +319,7 @@ def _midi_to_hooktheory(midi_pitch: int) -> Tuple[int, int]:
     # Python's // already floors toward -infinity and % is non-negative, so
     # semitone == octave * 12 + pitch_class holds exactly -- matching
     # to_midi_pitch()'s inverse. No extra adjustment needed for negative
-    # semitones (see scripts/convert_wikifonia_to_cache.py for the same
+    # semitones (see scripts/convert_data_to_cache/convert_wikifonia_to_cache.py for the same
     # pattern without the redundant decrement).
     semitone = midi_pitch - ZERO_OCTAVE
     octave = semitone // 12

@@ -9,19 +9,19 @@ separate track (Verovio only plays ``**kern`` notes, not analytic chord labels).
 
 Prerequisites (one-time):
 
-    cd scripts/verovio_humdrum
+    cd scripts/convert_data_to_cache/verovio_humdrum
     npm install
 
 Examples:
 
     # All canonical */Data/*.hum files
-    python scripts/convert_cocopops_hum_to_midi.py
+    python scripts/convert_data_to_cache/convert_cocopops_hum_to_midi.py
 
     # Quick test on 5 files
-    python scripts/convert_cocopops_hum_to_midi.py --max_files 5
+    python scripts/convert_data_to_cache/convert_cocopops_hum_to_midi.py --max_files 5
 
     # Melody-only (no chord realization)
-    python scripts/convert_cocopops_hum_to_midi.py --melody_only
+    python scripts/convert_data_to_cache/convert_cocopops_hum_to_midi.py --melody_only
 """
 
 from __future__ import annotations

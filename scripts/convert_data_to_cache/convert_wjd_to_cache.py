@@ -16,7 +16,7 @@ Pickup bars (``bar < 0``) are skipped.
 
 Usage::
 
-    python scripts/convert_wjd_to_cache.py [--wjd_db data/wjazzd/wjazzd.db]
+    python scripts/convert_data_to_cache/convert_wjd_to_cache.py [--wjd_db data/wjazzd/wjazzd.db]
                                             [--output_dir data/cache/wjd]
                                             [--augmentation]
                                             [--min_beats 16]

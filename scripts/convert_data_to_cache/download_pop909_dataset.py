@@ -178,7 +178,7 @@ def main():
 
     print(f"\nPOP909 dataset setup completed!")
     print(f"Next steps:")
-    print(f"  1. Run: python scripts/convert_pop909_to_cache.py")
+    print(f"  1. Run: python scripts/convert_data_to_cache/convert_pop909_to_cache.py")
     print(f"  2. Run: python scripts/test_pop909_dataset.py")
 
 

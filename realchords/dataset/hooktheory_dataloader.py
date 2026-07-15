@@ -185,11 +185,11 @@ class HooktheoryDataset(Dataset):
             raise FileNotFoundError(
                 f"Cache not found at {self.cache_dir}. "
                 f"Please run the appropriate conversion script first:\n"
-                f"  For Hooktheory: python scripts/convert_hooktheory_to_cache.py\n"
-                f"  For POP909: python scripts/convert_pop909_to_cache.py\n"
-                f"  For Nottingham: python scripts/convert_nottingham_to_cache.py\n"
-                f"  For Wikifonia: python scripts/convert_wikifonia_to_cache.py\n"
-                f"  For JAZZMUS: python scripts/convert_jazzmus_to_cache.py"
+                f"  For Hooktheory: python scripts/convert_data_to_cache/convert_hooktheory_to_cache.py\n"
+                f"  For POP909: python scripts/convert_data_to_cache/convert_pop909_to_cache.py\n"
+                f"  For Nottingham: python scripts/convert_data_to_cache/convert_nottingham_to_cache.py\n"
+                f"  For Wikifonia: python scripts/convert_data_to_cache/convert_wikifonia_to_cache.py\n"
+                f"  For JAZZMUS: python scripts/convert_data_to_cache/convert_jazzmus_to_cache.py"
             )
         logger.info(f"Loaded {len(self.data)} items")
 

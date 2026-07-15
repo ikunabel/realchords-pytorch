@@ -137,7 +137,7 @@ def main():
 
     print(f"\nHooktheory dataset setup completed!")
     print(f"Next steps:")
-    print(f"  1. Run: python scripts/convert_hooktheory_to_cache.py --augmentation")
+    print(f"  1. Run: python scripts/convert_data_to_cache/convert_hooktheory_to_cache.py --augmentation")
     print(f"  2. Check: data/cache/hooktheory/")
 
 
