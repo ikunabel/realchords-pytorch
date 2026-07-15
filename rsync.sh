@@ -16,9 +16,12 @@ ssh -o ControlMaster=yes -o ControlPath="$SSH_SOCKET" -o ControlPersist=10m -fN 
 RSYNC_RSH="ssh -o ControlPath=$SSH_SOCKET -o ControlMaster=no"
 
 rsync -avz --progress -e "$RSYNC_RSH" \
-  --exclude-from "$ROOT/data/exclude.txt" \
-  "$ROOT/data/" \
-  "$REMOTE:$REMOTE_REPO/data/"
+  "$ROOT/data/cache/" \
+  "$REMOTE:$REMOTE_REPO/data/cache/"
+
+rsync -avz --progress -e "$RSYNC_RSH" \
+  "$ROOT/data/voicings/" \
+  "$REMOTE:$REMOTE_REPO/data/voicings/"
 
 rsync -avz --progress -e "$RSYNC_RSH" \
   "$ROOT/journal/" \
