@@ -27,16 +27,4 @@ rsync -avz --progress -e "$RSYNC_RSH" \
   "$ROOT/journal/" \
   "$REMOTE:$REMOTE_REPO/journal/"
 
-rsync -avz --progress -e "$RSYNC_RSH" \
-  "$ROOT/logs/eval/" \
-  "$REMOTE:$REMOTE_REPO/logs/eval/"
-
-rsync -avz --progress -e "$RSYNC_RSH" \
-  "$ROOT/logs/paired_eval/" \
-  "$REMOTE:$REMOTE_REPO/logs/paired_eval/"
-
-rsync -avz --progress -e "$RSYNC_RSH" \
-  "$ROOT/logs/generated/" \
-  "$REMOTE:$REMOTE_REPO/logs/generated/"
-
 echo "Done."

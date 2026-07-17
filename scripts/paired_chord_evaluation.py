@@ -43,18 +43,33 @@ Model spec format  (--model):
     Label=path.pth      load RL actor weights on top of the base model
 
 Outputs (all in --save_dir):
-    metadata.jsonl              one JSON line per row: {seq_idx, song_url, nicr}
-    gt.pt                       GT sequences  [N, seq_len]
-    {slug}.pt                   model predictions [N, seq_len] for each --model
-    gt_nicr_per_frame.pt        per-frame NiCR for GT (matches/valid/mean)
-    {slug}_nicr_per_frame.pt    per-frame NiCR for each model
-    gt_mode_per_frame.pt        per-frame note-in-mode for GT
-    {slug}_mode_per_frame.pt    per-frame note-in-mode for each model
-    gt_chords_per_frame.pt      per-frame chord symbols for GT
-    {slug}_chords_per_frame.pt  per-frame chord symbols for each model
-    gt_chord_distribution.json  GT chord counts (onset + frame) for cross-dataset analysis
-    chord_names_augmented.json  vocab snapshot for downstream decoding
-    midi/                       GT-only: 10 random sanity-check MIDIs (see --midi_samples)
+    metadata.jsonl                    one JSON line per row: {seq_idx, song_url, nicr}
+    gt.pt                             GT sequences  [N, seq_len]
+    {slug}.pt                         model predictions [N, seq_len] for each --model
+    gt_nicr_per_frame.pt              per-frame NiCR for GT (matches/valid/mean)
+    {slug}_nicr_per_frame.pt          per-frame NiCR for each model
+    gt_mode_per_frame.pt              per-frame note-in-mode for GT
+    {slug}_mode_per_frame.pt          per-frame note-in-mode for each model
+    gt_chords_per_frame.pt            per-frame chord symbols for GT
+    {slug}_chords_per_frame.pt        per-frame chord symbols for each model
+    gt_chord_distribution.json        GT chord counts (onset + frame) for cross-dataset analysis
+    gt_chord_durations.pt             chord segment durations (frames) for GT
+    gt_note_durations.pt              melody note durations (frames) for GT
+    gt_chord_silence_ratio.pt         per-sequence chord-lane SILENCE fraction for GT
+    gt_melody_silence_ratio.pt        per-sequence melody-lane SILENCE fraction for GT
+    gt_num_frames.pt                  per-sequence valid (non-PAD) frame count for GT
+    gt_sync_intervals.pt              chord-to-note onset intervals (synchronization) for GT
+    {slug}_chord_durations.pt         same, per model
+    {slug}_note_durations.pt          same, per model
+    {slug}_chord_silence_ratio.pt     same, per model
+    {slug}_melody_silence_ratio.pt    same, per model
+    {slug}_num_frames.pt              same, per model
+    {slug}_sync_intervals.pt          same, per model
+    extra_metrics.json                summary: rhythm/silence means per source, plus
+                                       model-vs-GT comparisons (sync EMD, chord-type JS
+                                       distance) -- see realchords/utils/eval_utils.py
+    chord_names_augmented.json        vocab snapshot for downstream decoding
+    midi/                             GT-only: 10 random sanity-check MIDIs (see --midi_samples)
 """
 
 from __future__ import annotations
@@ -64,7 +79,6 @@ import copy
 import json
 import random
 import re
-from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -80,9 +94,19 @@ from realchords.constants import FRAME_PER_BEAT
 from realchords.dataset.hooktheory_tokenizer import to_midi_pitch
 from realchords.lit_module.decoder_only import LitDecoder
 from realchords.utils.eval_utils import (
+    chord_type_distribution,
+    chord_type_js_distance,
+    duration_entropy,
+    evaluate_chord_durations,
+    evaluate_chord_silence_ratio,
     evaluate_chord_symbols_per_frame,
+    evaluate_chord_to_note_onset_intervals,
     evaluate_melody_mode_fit_per_frame,
+    evaluate_melody_silence_ratio,
+    evaluate_note_durations,
     evaluate_note_in_chord_per_frame,
+    evaluate_sequence_num_frames,
+    synchronization_emd,
 )
 from realchords.utils.experiment_utils import (
     DATASET_CACHE_DIRS,
@@ -142,20 +166,11 @@ def _save_chords_per_frame(
 
 def _chord_distribution(chords: Dict[str, object]) -> Dict[str, object]:
     """Aggregate per-frame chord symbols into onset and frame counts."""
-    onset_counts: Counter = Counter()
-    frame_counts: Counter = Counter()
-    symbols = chords["symbols"]
-    is_onset = chords["is_onset"]
-    for row_idx, row in enumerate(symbols):
-        for frame_idx, sym in enumerate(row):
-            if not sym:
-                continue
-            frame_counts[sym] += 1
-            if bool(is_onset[row_idx, frame_idx].item()):
-                onset_counts[sym] += 1
+    onset_counts = chord_type_distribution(chords, weighting="onset")
+    frame_counts = chord_type_distribution(chords, weighting="frame")
     return {
-        "onset_counts": dict(onset_counts),
-        "frame_counts": dict(frame_counts),
+        "onset_counts": onset_counts,
+        "frame_counts": frame_counts,
         "num_onsets": int(sum(onset_counts.values())),
         "num_chord_frames": int(sum(frame_counts.values())),
         "num_unique_chords_onset": len(onset_counts),
@@ -179,10 +194,105 @@ def _save_chord_distribution(
         json.dump(dist, fh, indent=2, sort_keys=True)
 
 
+def _nanmean(tensor: torch.Tensor) -> float:
+    if tensor.numel() == 0:
+        return float("nan")
+    return float(tensor.float().nanmean().item())
+
+
+def _save_extra_metrics(
+    tensor: torch.Tensor,
+    tokenizer,
+    save_dir: Path,
+    prefix: str,
+    chords: Dict[str, object],
+) -> Dict[str, object]:
+    """Rhythm/silence/synchronization metrics for one source (GT or a model).
+
+    Saves per-sequence .pt files (durations, silence ratios, frame counts,
+    synchronization intervals) and returns a summary dict -- both scalar
+    means for printing, and the raw pooled distributions needed to compare
+    this source against another one (synchronization_emd, chord_type_js_distance).
+    """
+    stripped = strip_bos(tensor, tokenizer)
+
+    chord_durations = evaluate_chord_durations(stripped, tokenizer)
+    torch.save(chord_durations, save_dir / f"{prefix}_chord_durations.pt")
+    chord_duration_entropy = (
+        duration_entropy(chord_durations["durations_flat"])
+        if chord_durations["durations_flat"].numel() > 0
+        else float("nan")
+    )
+
+    note_durations = evaluate_note_durations(stripped, tokenizer)
+    torch.save(note_durations, save_dir / f"{prefix}_note_durations.pt")
+    note_duration_entropy = (
+        duration_entropy(note_durations["durations_flat"])
+        if note_durations["durations_flat"].numel() > 0
+        else float("nan")
+    )
+
+    chord_silence = evaluate_chord_silence_ratio(stripped, tokenizer)
+    torch.save(chord_silence, save_dir / f"{prefix}_chord_silence_ratio.pt")
+
+    melody_silence = evaluate_melody_silence_ratio(stripped, tokenizer)
+    torch.save(melody_silence, save_dir / f"{prefix}_melody_silence_ratio.pt")
+
+    num_frames = evaluate_sequence_num_frames(stripped, tokenizer)
+    torch.save(num_frames, save_dir / f"{prefix}_num_frames.pt")
+
+    sync = evaluate_chord_to_note_onset_intervals(stripped, tokenizer)
+    torch.save(sync, save_dir / f"{prefix}_sync_intervals.pt")
+
+    return {
+        "chord_duration_entropy": chord_duration_entropy,
+        "note_duration_entropy": note_duration_entropy,
+        "chord_silence_ratio_mean": _nanmean(chord_silence),
+        "melody_silence_ratio_mean": _nanmean(melody_silence),
+        "num_frames_mean": _nanmean(num_frames),
+        "sync_intervals_flat": sync["intervals_flat"],
+        "chord_dist_onset": chord_type_distribution(chords, weighting="onset"),
+        "chord_dist_frame": chord_type_distribution(chords, weighting="frame"),
+    }
+
+
+def _compare_to_gt(model_extra: Dict[str, object], gt_extra: Dict[str, object]) -> Dict[str, Optional[float]]:
+    """Cross-source comparison metrics: model vs. GT (this run's reference)."""
+    model_sync = model_extra["sync_intervals_flat"]
+    gt_sync = gt_extra["sync_intervals_flat"]
+    sync_emd = (
+        synchronization_emd(model_sync, gt_sync)
+        if model_sync.numel() > 0 and gt_sync.numel() > 0
+        else None
+    )
+
+    def _safe_js(a: Dict[str, int], b: Dict[str, int]) -> Optional[float]:
+        if not a or not b:
+            return None
+        return chord_type_js_distance(a, b)
+
+    return {
+        "sync_emd_vs_gt": sync_emd,
+        "chord_type_js_distance_onset_vs_gt": _safe_js(
+            model_extra["chord_dist_onset"], gt_extra["chord_dist_onset"]
+        ),
+        "chord_type_js_distance_frame_vs_gt": _safe_js(
+            model_extra["chord_dist_frame"], gt_extra["chord_dist_frame"]
+        ),
+    }
+
+
 def _fmt_nicr(mean: float) -> Optional[float]:
     if mean != mean:  # NaN
         return None
     return round(float(mean), 4)
+
+
+def _fmt_metric(value: Optional[float]) -> Optional[float]:
+    """NaN/None-safe rounding for JSON output (NaN isn't valid JSON)."""
+    if value is None or value != value:  # None or NaN
+        return None
+    return round(float(value), 4)
 
 
 # ---------------------------------------------------------------------------
@@ -552,27 +662,70 @@ def _resolve_device(spec: str) -> torch.device:
     return torch.device(spec)
 
 
-def _max_song_frames(dataset_name: str, dataset_split: str) -> int:
-    """Longest song (in frames, per melody/chord lane) in the given split(s).
+def _max_song_frames(
+    dataset_name: str,
+    dataset_split: str,
+    outlier_factor: float = 2.0,
+) -> int:
+    """Longest song (in frames, per melody/chord lane) in the given split(s),
+    robust to a single mis-annotated outlier blowing up padding for every song.
 
     Used to size an uncropped ("full song") dataloader: `HooktheoryDataset
     .random_crop` (and its chord-onset-aligned variant) only crop when a
     song's frame count exceeds `max_len_per_part`, so passing a `max_len`
-    derived from this never truncates anything, while still using the same
-    fixed-size padding/collation the dataloader already relies on.
+    derived from this never truncates anything (for the songs it's sized to),
+    while still using the same fixed-size padding/collation the dataloader
+    already relies on.
+
+    Every song gets padded to whatever this returns, so one bad `num_beats`
+    value (e.g. hooktheory's largest is 1716 beats vs. a 544-beat runner-up
+    and a 36-beat median -- almost certainly a data error, not a real song)
+    would otherwise force ~100x wasted padding on every other song in the
+    split. Rather than a blanket percentile cutoff (which would also catch
+    genuinely long songs in the long tail, not just the error), this compares
+    each candidate max only against its immediate runner-up: a real outlier
+    shows up as one isolated, dramatic jump (1716 vs. 544 -- more than 3x),
+    whereas the legitimate long tail grows gradually (544 vs. 532 -- barely
+    above 1x). Only isolated jumps past `outlier_factor` get dropped, and
+    dropping stops the moment a step is no longer dramatic, so the real long
+    tail is left untouched. Dropped songs just get legitimately cropped like
+    any over-long song, same as the legacy crop path already does for songs
+    longer than the crop length.
     """
     cache_dir = Path(DATASET_CACHE_DIRS[dataset_name.lower()])
     splits = ["train", "valid", "test"] if dataset_split == "all" else [dataset_split]
-    max_beats = 0
+    all_beats: List[int] = []
     for split in splits:
         split_path = cache_dir / f"{split}.jsonl"
         if not split_path.exists():
             continue
         with open(split_path, encoding="utf-8") as handle:
             for line in handle:
-                num_beats = json.loads(line)["annotations"].get("num_beats", 0)
-                max_beats = max(max_beats, num_beats)
-    return max_beats * FRAME_PER_BEAT
+                all_beats.append(json.loads(line)["annotations"].get("num_beats", 0))
+
+    if not all_beats:
+        return 0
+
+    all_beats.sort()
+    excluded = 0
+    while (
+        len(all_beats) >= 2
+        and all_beats[-2] > 0
+        and all_beats[-1] > outlier_factor * all_beats[-2]
+    ):
+        excluded += 1
+        all_beats.pop()
+
+    if excluded:
+        print(
+            f"_max_song_frames: excluded {excluded} outlier song(s) whose "
+            f"num_beats was more than {outlier_factor}x their runner-up "
+            f"from full_songs sizing -- using {all_beats[-1]} instead. "
+            "These will be cropped like any over-long song instead of "
+            "forcing huge padding on every other song in the split."
+        )
+
+    return all_beats[-1] * FRAME_PER_BEAT
 
 
 def _load_models(
@@ -770,8 +923,23 @@ def _run_eval(
     )
     print(f"  gt_chord_distribution.json  ({dist_path})")
 
+    gt_extra = _save_extra_metrics(gt_tensor, dataset_tokenizer, save_dir, "gt", gt_chords)
+    print(
+        f"  gt_chord_durations.pt / gt_note_durations.pt  "
+        f"chord_entropy={gt_extra['chord_duration_entropy']:.4f} "
+        f"note_entropy={gt_extra['note_duration_entropy']:.4f}"
+    )
+    print(
+        f"  gt_chord_silence_ratio.pt / gt_melody_silence_ratio.pt  "
+        f"chord={gt_extra['chord_silence_ratio_mean']:.4f} "
+        f"melody={gt_extra['melody_silence_ratio_mean']:.4f}"
+    )
+    print(f"  gt_num_frames.pt  mean={gt_extra['num_frames_mean']:.1f}")
+    print("  gt_sync_intervals.pt")
+
     model_nicr_means: Dict[str, torch.Tensor] = {}
     model_mode_means: Dict[str, torch.Tensor] = {}
+    model_extras: Dict[str, Dict[str, object]] = {}
     if not args.gt_only:
         for label, rows in model_rows.items():
             slug = _slugify(label)
@@ -794,10 +962,54 @@ def _run_eval(
             print(
                 f"  {slug}_mode_per_frame.pt  mean={mode_means.nanmean().item():.4f}"
             )
-            _save_chords_per_frame(
+            model_chords = _save_chords_per_frame(
                 tensor, model_tokenizer, save_dir / f"{slug}_chords_per_frame.pt"
             )
             print(f"  {slug}_chords_per_frame.pt")
+
+            model_extra = _save_extra_metrics(
+                tensor, model_tokenizer, save_dir, slug, model_chords
+            )
+            model_extras[label] = model_extra
+            print(
+                f"  {slug}_chord_durations.pt / {slug}_note_durations.pt  "
+                f"chord_entropy={model_extra['chord_duration_entropy']:.4f} "
+                f"note_entropy={model_extra['note_duration_entropy']:.4f}"
+            )
+            print(
+                f"  {slug}_chord_silence_ratio.pt / {slug}_melody_silence_ratio.pt  "
+                f"chord={model_extra['chord_silence_ratio_mean']:.4f} "
+                f"melody={model_extra['melody_silence_ratio_mean']:.4f}"
+            )
+            print(f"  {slug}_num_frames.pt  mean={model_extra['num_frames_mean']:.1f}")
+            print(f"  {slug}_sync_intervals.pt")
+
+    # Cross-source comparison metrics (model vs. GT), one small summary file
+    extra_metrics_summary = {
+        "gt": {
+            "chord_duration_entropy": _fmt_metric(gt_extra["chord_duration_entropy"]),
+            "note_duration_entropy": _fmt_metric(gt_extra["note_duration_entropy"]),
+            "chord_silence_ratio_mean": _fmt_metric(gt_extra["chord_silence_ratio_mean"]),
+            "melody_silence_ratio_mean": _fmt_metric(gt_extra["melody_silence_ratio_mean"]),
+            "num_frames_mean": _fmt_metric(gt_extra["num_frames_mean"]),
+        },
+        "models": {},
+    }
+    for label, model_extra in model_extras.items():
+        slug = _slugify(label)
+        comparison = _compare_to_gt(model_extra, gt_extra)
+        extra_metrics_summary["models"][slug] = {
+            "chord_duration_entropy": _fmt_metric(model_extra["chord_duration_entropy"]),
+            "note_duration_entropy": _fmt_metric(model_extra["note_duration_entropy"]),
+            "chord_silence_ratio_mean": _fmt_metric(model_extra["chord_silence_ratio_mean"]),
+            "melody_silence_ratio_mean": _fmt_metric(model_extra["melody_silence_ratio_mean"]),
+            "num_frames_mean": _fmt_metric(model_extra["num_frames_mean"]),
+            **{key: _fmt_metric(value) for key, value in comparison.items()},
+        }
+    extra_metrics_path = save_dir / "extra_metrics.json"
+    with extra_metrics_path.open("w", encoding="utf-8") as fh:
+        json.dump(extra_metrics_summary, fh, indent=2, sort_keys=True)
+    print(f"  extra_metrics.json  ({extra_metrics_path})")
 
     # Metadata (with per-sequence NiCR / mode-fit means)
     meta_path = save_dir / "metadata.jsonl"

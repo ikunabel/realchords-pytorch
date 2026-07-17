@@ -14,6 +14,11 @@
 #   paired_gt_all
 #   paired_gt_hooktheory
 #
+# --save_dir is suffixed with the dataset split (e.g. "wjd_test", "wjd_all")
+# so cropped_songs/ and full_songs/ from different splits never collide:
+#   gt/wjd_test/cropped_songs, gt/wjd_test/full_songs
+#   gt/wjd_all/cropped_songs,  gt/wjd_all/full_songs
+#
 _PAIRED_GT_DIR="logs/paired_eval/gt"
 NUM_MIDIS=50      # -1 = export all sequences
 MELODY_OCTAVE=0   # offset added to stored melody octaves in MIDI export
@@ -48,7 +53,7 @@ paired_hooktheory() {
     --model         "GAPT=$_GAPT" \
     --dataset_name  hooktheory \
     --dataset_split test \
-    --save_dir      logs/paired_eval/hooktheory \
+    --save_dir      logs/paired_eval/hooktheory_test \
     --batch_size    8 \
     --num_batches   1 \
     --seed          42
@@ -62,7 +67,7 @@ paired_wikifonia() {
     --model         "GAPT=$_GAPT" \
     --dataset_name  wikifonia \
     --dataset_split test \
-    --save_dir      logs/paired_eval/wikifonia \
+    --save_dir      logs/paired_eval/wikifonia_test \
     --batch_size    64 \
     --num_batches   -1 \
     --seed          42
@@ -76,7 +81,7 @@ paired_pop909() {
     --model         "GAPT=$_GAPT" \
     --dataset_name  pop909 \
     --dataset_split test \
-    --save_dir      logs/paired_eval/pop909 \
+    --save_dir      logs/paired_eval/pop909_test \
     --batch_size    64 \
     --num_batches   -1 \
     --seed          42
@@ -90,21 +95,7 @@ paired_nottingham() {
     --model         "GAPT=$_GAPT" \
     --dataset_name  nottingham \
     --dataset_split test \
-    --save_dir      logs/paired_eval/nottingham \
-    --batch_size    64 \
-    --num_batches   -1 \
-    --seed          42
-}
-
-paired_cocopops() {
-  _paired_eval \
-    --base_model    "$_BASE" \
-    --model         "MLE=base" \
-    --model         "RealJam=$_REALCHORDS" \
-    --model         "GAPT=$_GAPT" \
-    --dataset_name  cocopops \
-    --dataset_split test \
-    --save_dir      logs/paired_eval/cocopops \
+    --save_dir      logs/paired_eval/nottingham_test \
     --batch_size    64 \
     --num_batches   -1 \
     --seed          42
@@ -112,18 +103,18 @@ paired_cocopops() {
 
 # ---------------------------------------------------------------------------
 # GT-only collection (no model loading) — chord distributions per dataset
-# Outputs: logs/paired_eval/gt/<dataset>/gt_chord_distribution.json
+# Outputs: logs/paired_eval/gt/<dataset>_<split>/gt_chord_distribution.json
 # ---------------------------------------------------------------------------
 
 GT_BATCH_SIZE=64
-GT_NUM_BATCHES=1
+GT_NUM_BATCHES=-1
 
 paired_gt_hooktheory() {
   _paired_eval \
     --gt_only \
     --dataset_name  hooktheory \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/hooktheory" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/hooktheory_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -133,8 +124,8 @@ paired_gt_wikifonia() {
   _paired_eval \
     --gt_only \
     --dataset_name  wikifonia \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/wikifonia" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/wikifonia_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -144,8 +135,8 @@ paired_gt_pop909() {
   _paired_eval \
     --gt_only \
     --dataset_name  pop909 \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/pop909" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/pop909_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -155,8 +146,8 @@ paired_gt_nottingham() {
   _paired_eval \
     --gt_only \
     --dataset_name  nottingham \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/nottingham" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/nottingham_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -166,8 +157,8 @@ paired_gt_jazzmus() {
   _paired_eval \
     --gt_only \
     --dataset_name  jazzmus \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/jazzmus" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/jazzmus_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -177,19 +168,8 @@ paired_gt_wjd() {
   CHORD_OCTAVE=5 _paired_eval \
     --gt_only \
     --dataset_name  wjd \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/wjd" \
-    --batch_size    $GT_BATCH_SIZE \
-    --num_batches   $GT_NUM_BATCHES \
-    --seed          42
-}
-
-paired_gt_cocopops() {
-  _paired_eval \
-    --gt_only \
-    --dataset_name  cocopops \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/cocopops" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/wjd_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -200,7 +180,7 @@ paired_gt_chord_melody_dataset() {
     --gt_only \
     --dataset_name  chord_melody_dataset \
     --dataset_split all \
-    --save_dir      "$_PAIRED_GT_DIR/chord_melody_dataset" \
+    --save_dir      "$_PAIRED_GT_DIR/chord_melody_dataset_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -210,8 +190,8 @@ paired_gt_emopia_plus() {
   _paired_eval \
     --gt_only \
     --dataset_name  emopia_plus \
-    --dataset_split test \
-    --save_dir      "$_PAIRED_GT_DIR/emopia_plus" \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/emopia_plus_all" \
     --batch_size    $GT_BATCH_SIZE \
     --num_batches   $GT_NUM_BATCHES \
     --seed          42
@@ -224,7 +204,6 @@ paired_gt_all() {
   paired_gt_nottingham
   paired_gt_jazzmus
   paired_gt_wjd
-  paired_gt_cocopops
   paired_gt_chord_melody_dataset
   paired_gt_emopia_plus
 }

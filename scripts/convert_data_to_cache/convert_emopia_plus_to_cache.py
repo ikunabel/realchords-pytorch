@@ -54,7 +54,6 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from convert_cocopops_to_cache import _midi_to_hooktheory
 from convert_wikifonia_to_cache import (
     collect_chord_names,
     create_augmented_dataset,
@@ -64,10 +63,21 @@ from convert_wikifonia_to_cache import (
     resolve_melody_overlaps,
     set_chord_symbol_parse_verbose,
 )
+from realchords.constants import ZERO_OCTAVE
 from realchords.utils.data_utils import update_global_chord_names
 from realchords.utils.io_utils import save_jsonl
 
 _MELODY_TRACK = "Melody"
+
+
+def _midi_to_hooktheory(midi_pitch: int) -> Tuple[int, int]:
+    # Python's // already floors toward -infinity and % is non-negative, so
+    # semitone == octave * 12 + pitch_class holds exactly -- matching
+    # to_midi_pitch()'s inverse.
+    semitone = midi_pitch - ZERO_OCTAVE
+    octave = semitone // 12
+    pitch_class = semitone % 12
+    return pitch_class, octave
 _CHORD_TRACK = "Chord"
 _BASS_TRACK = "Bass"
 

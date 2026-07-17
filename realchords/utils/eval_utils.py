@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Sequence, Tuple
 
+import bisect
+
 import numpy as np
 import torch
 import note_seq.chord_symbols_lib as chord_symbols_lib
+from scipy.spatial.distance import jensenshannon
+from scipy.stats import entropy as _scipy_entropy
+from scipy.stats import wasserstein_distance
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.modes import (
@@ -205,6 +211,20 @@ def _chord_onset_indices(
         if token_name in SPECIAL_TOKENS:
             continue
         if tokenizer.is_chord_on(token):
+            onset_indices.append(frame)
+    return onset_indices
+
+
+def _note_onset_indices(
+    melody_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    onset_indices = []
+    for frame, token in enumerate(melody_tokens):
+        token_name = tokenizer.id_to_name.get(token, "")
+        if token_name in SPECIAL_TOKENS:
+            continue
+        if tokenizer.is_note_on(token):
             onset_indices.append(frame)
     return onset_indices
 
@@ -630,6 +650,81 @@ def evaluate_chord_symbols_per_frame(
     }
 
 
+def chord_type_distribution(
+    chords: Dict[str, object],
+    weighting: str = "onset",
+) -> Dict[str, int]:
+    """Chord-symbol usage histogram from ``evaluate_chord_symbols_per_frame``'s output.
+
+    Args:
+        chords: Output of ``evaluate_chord_symbols_per_frame`` (needs
+            ``symbols``, ``is_onset``, ``valid``).
+        weighting: ``"onset"`` counts each chord *change* once (progression
+            vocabulary -- what chords get chosen, regardless of how long they
+            last). ``"frame"`` counts every frame the chord is held (dwell-time
+            weighted -- long chords dominate the count).
+
+    Returns:
+        Dict mapping chord symbol -> count.
+    """
+    if weighting not in {"onset", "frame"}:
+        raise ValueError(f"Unsupported weighting '{weighting}'. Expected 'onset' or 'frame'.")
+
+    counts: Counter = Counter()
+    symbols = chords["symbols"]
+    is_onset = chords["is_onset"]
+    valid = chords["valid"]
+    for row_idx, row in enumerate(symbols):
+        for frame_idx, sym in enumerate(row):
+            if not sym or not bool(valid[row_idx, frame_idx].item()):
+                continue
+            if weighting == "frame":
+                counts[sym] += 1
+            elif bool(is_onset[row_idx, frame_idx].item()):
+                counts[sym] += 1
+    return dict(counts)
+
+
+def chord_type_js_distance(
+    counts_a: Dict[str, int],
+    counts_b: Dict[str, int],
+    base: float = 2.0,
+) -> float:
+    """Jensen-Shannon distance between two chord-type usage distributions.
+
+    Unlike Vendi score (which measures how diverse ONE source's own chord
+    usage is against itself), this directly compares whether TWO sources --
+    e.g. a model's output vs. the GT test set, or two different datasets --
+    choose chords in similar proportions. A model can have high Vendi
+    (genuinely varied output) while still favoring a completely different
+    chord palette than real data; this metric is what catches that, not
+    Vendi. Missing symbols in one distribution are treated as zero count, not
+    excluded.
+
+    Args:
+        counts_a: Chord symbol -> count, e.g. ``chord_type_distribution(...)``.
+        counts_b: Chord symbol -> count, same format, other source.
+        base: Logarithm base for the underlying entropy calculation. With the
+            default of 2.0, the result is bounded in [0, 1]: 0 = identical
+            usage proportions, 1 = completely disjoint chord vocabularies.
+
+    Returns:
+        Jensen-Shannon distance (the square root of the JS divergence, a true
+        metric satisfying the triangle inequality, unlike divergence itself).
+    """
+    vocab = sorted(set(counts_a) | set(counts_b))
+    if not vocab:
+        raise ValueError("Cannot compute JS distance: both distributions are empty.")
+
+    a = np.array([counts_a.get(sym, 0) for sym in vocab], dtype=np.float64)
+    b = np.array([counts_b.get(sym, 0) for sym in vocab], dtype=np.float64)
+    if a.sum() == 0 or b.sum() == 0:
+        raise ValueError(
+            "Cannot compute JS distance: a distribution has zero total count."
+        )
+    return float(jensenshannon(a, b, base=base))
+
+
 def evaluate_note_in_chord_ratio(
     sequences: torch.Tensor,
     tokenizer: HooktheoryTokenizer,
@@ -698,6 +793,411 @@ def evaluate_note_in_chord_ratio(
         return torch.tensor(ratios), torch.tensor(valid_counts), torch.tensor(correct_counts)
     else:
         return torch.tensor(ratios)
+
+
+def _chord_to_note_onset_intervals(
+    melody_tokens: Sequence[int],
+    chord_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    """Chord-onset -> nearest preceding melody-note-onset interval, in frames.
+
+    For each chord onset, find the closest melody note onset at or before it
+    and record the gap between them. Chord onsets with no preceding melody
+    note onset (nothing has been played yet) are skipped -- there is no
+    "preceding note" to measure from.
+    """
+    note_onsets = _note_onset_indices(melody_tokens, tokenizer)
+    chord_onsets = _chord_onset_indices(chord_tokens, tokenizer)
+
+    intervals: List[int] = []
+    for chord_frame in chord_onsets:
+        # Rightmost note onset at or before chord_frame.
+        pos = bisect.bisect_right(note_onsets, chord_frame) - 1
+        if pos < 0:
+            continue
+        intervals.append(chord_frame - note_onsets[pos])
+    return intervals
+
+
+def evaluate_chord_to_note_onset_intervals(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, object]:
+    """Chord-to-note onset intervals (synchronization), per RealChords §"Synchronization".
+
+    For each chord onset, measures the gap (in frames) to the nearest
+    preceding melody note onset. A model that places chords tightly relative
+    to melody rhythm should produce a distribution of these gaps similar to
+    real data; compare distributions across sequences with
+    ``synchronization_emd`` rather than just comparing means.
+
+    Returns a dict with:
+        intervals: list[list[int]] — one list of gaps (frames) per sequence,
+            ragged since chord-onset counts vary; empty if no chord onset has
+            a preceding melody note onset.
+        intervals_flat: int64 tensor [total_onsets] — all intervals across the
+            batch, flattened, for feeding directly into ``synchronization_emd``.
+        mean: float tensor [batch] — per-sequence mean interval (NaN if none).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    intervals_per_seq: List[List[int]] = []
+    means: List[float] = []
+    flat: List[int] = []
+
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        melody_tokens, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        intervals = _chord_to_note_onset_intervals(melody_tokens, chord_tokens, tokenizer)
+        intervals_per_seq.append(intervals)
+        flat.extend(intervals)
+        means.append(float(np.mean(intervals)) if intervals else float("nan"))
+
+    return {
+        "intervals": intervals_per_seq,
+        "intervals_flat": torch.tensor(flat, dtype=torch.int64),
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
+def synchronization_emd(
+    model_intervals: torch.Tensor | Sequence[int],
+    reference_intervals: torch.Tensor | Sequence[int],
+) -> float:
+    """Earth Mover's Distance between two chord-to-note onset interval distributions.
+
+    Compares the full distribution of chord-to-note onset intervals (see
+    ``evaluate_chord_to_note_onset_intervals``) between a model's output and a
+    reference (e.g. test-set GT) -- lower is better, 0 means identical
+    distributions. Operates directly on the interval samples (exact 1D
+    Wasserstein distance), not a lossily-binned histogram.
+
+    Args:
+        model_intervals: Flattened chord-to-note onset intervals from the model.
+        reference_intervals: Flattened chord-to-note onset intervals from the
+            reference distribution (e.g. GT test set).
+
+    Returns:
+        The Earth Mover's Distance (Wasserstein-1) between the two distributions,
+        in frames.
+    """
+    model_arr = np.asarray(
+        model_intervals.cpu().numpy() if isinstance(model_intervals, torch.Tensor) else model_intervals
+    )
+    reference_arr = np.asarray(
+        reference_intervals.cpu().numpy()
+        if isinstance(reference_intervals, torch.Tensor)
+        else reference_intervals
+    )
+    if model_arr.size == 0 or reference_arr.size == 0:
+        raise ValueError(
+            "Cannot compute EMD: both model_intervals and reference_intervals "
+            "must be non-empty."
+        )
+    return float(wasserstein_distance(model_arr, reference_arr))
+
+
+def chord_to_note_onset_interval_histogram(
+    intervals: torch.Tensor | Sequence[int],
+    max_interval: int = 16,
+    density: bool = True,
+) -> np.ndarray:
+    """Histogram of chord-to-note onset intervals, one bin per frame gap.
+
+    For visualization/inspection alongside ``synchronization_emd`` -- the EMD
+    itself is computed on the raw samples (exact), not on this histogram, so
+    the bin count here only affects what you *see*, not the metric value.
+
+    Args:
+        intervals: Flattened chord-to-note onset intervals (frames), e.g.
+            ``evaluate_chord_to_note_onset_intervals(...)["intervals_flat"]``.
+        max_interval: Number of exact-gap bins, for gaps ``0, 1, ..., max_interval - 1``.
+            Gaps ``>= max_interval`` are folded into one overflow bin.
+        density: If True (default), normalize to a probability distribution
+            (sums to 1) so histograms from batches of different sizes are
+            directly comparable, e.g. model output vs. a GT test set.
+
+    Returns:
+        1D array of length ``max_interval + 1``: counts (or densities) for
+        gaps ``0, 1, ..., max_interval - 1``, then the ``>= max_interval``
+        overflow bin last.
+    """
+    if max_interval < 1:
+        raise ValueError(f"max_interval must be >= 1, got {max_interval}")
+
+    arr = np.asarray(
+        intervals.cpu().numpy() if isinstance(intervals, torch.Tensor) else intervals
+    )
+    clipped = np.minimum(arr, max_interval)
+    counts = np.bincount(clipped, minlength=max_interval + 1)[: max_interval + 1]
+
+    if density:
+        total = counts.sum()
+        if total > 0:
+            counts = counts / total
+    return counts
+
+
+def _chord_durations(
+    chord_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    """Duration (in frames) of each chord segment, onset to next onset.
+
+    The final segment runs to the end of ``chord_tokens`` (i.e. to the end of
+    whatever window was passed in -- a crop boundary, not necessarily the
+    chord's true end, same convention as the mode-fit segment scorer).
+    """
+    onsets = _chord_onset_indices(chord_tokens, tokenizer)
+    durations: List[int] = []
+    for index, start in enumerate(onsets):
+        end = onsets[index + 1] if index + 1 < len(onsets) else len(chord_tokens)
+        durations.append(end - start)
+    return durations
+
+
+def evaluate_chord_durations(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, object]:
+    """Chord segment durations (frames), for the "Rhythmic diversity" metric.
+
+    Returns a dict with:
+        durations: list[list[int]] — one list of segment durations (frames)
+            per sequence, ragged since chord counts vary; empty if no chord
+            onset was found.
+        durations_flat: int64 tensor [total_segments] — all durations across
+            the batch, flattened, ready for ``duration_entropy``.
+        mean: float tensor [batch] — per-sequence mean duration (NaN if none).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    durations_per_seq: List[List[int]] = []
+    means: List[float] = []
+    flat: List[int] = []
+
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        _, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        durations = _chord_durations(chord_tokens, tokenizer)
+        durations_per_seq.append(durations)
+        flat.extend(durations)
+        means.append(float(np.mean(durations)) if durations else float("nan"))
+
+    return {
+        "durations": durations_per_seq,
+        "durations_flat": torch.tensor(flat, dtype=torch.int64),
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
+def duration_entropy(
+    durations: torch.Tensor | Sequence[int],
+    base: float = 2.0,
+) -> float:
+    """Shannon entropy of a distribution of segment durations (rhythmic diversity
+    / rhythmic regularity).
+
+    Generic over chord durations (``evaluate_chord_durations``) or melody note
+    durations (``evaluate_note_durations``) -- each distinct duration value
+    (in frames) is treated as a category. Low entropy means the source
+    repeatedly defaults to one or two durations (e.g. a walking bass that's
+    almost always exactly one quarter note, as in WJD); high entropy means a
+    wide, varied mix of note/chord lengths (typical of freer melodic rhythm in
+    the other datasets). This is the same quantity either way -- "rhythmic
+    diversity" and "rhythmic regularity" are just low/high entropy read in
+    opposite directions.
+
+    Pool ``durations_flat`` across a whole batch/test-set for a stable
+    estimate -- entropy from a single sequence's handful of segments is a
+    noisy, biased estimate of the true diversity, same small-sample issue as
+    the synchronization histograms.
+
+    Args:
+        durations: Segment durations in frames, e.g.
+            ``evaluate_chord_durations(...)["durations_flat"]`` or
+            ``evaluate_note_durations(...)["durations_flat"]``.
+        base: Logarithm base. 2.0 (default) gives entropy in bits.
+
+    Returns:
+        Shannon entropy of the empirical duration distribution.
+    """
+    arr = np.asarray(
+        durations.cpu().numpy() if isinstance(durations, torch.Tensor) else durations
+    )
+    if arr.size == 0:
+        raise ValueError("Cannot compute entropy of an empty duration distribution.")
+    _, counts = np.unique(arr, return_counts=True)
+    return float(_scipy_entropy(counts, base=base))
+
+
+def _note_durations(
+    melody_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    """Duration (in frames) of each melody note, onset to next onset.
+
+    Same convention as ``_chord_durations``: the final note runs to the end
+    of ``melody_tokens`` (i.e. to the end of whatever window was passed in).
+    A gap that includes trailing SILENCE before the next onset is still
+    counted as part of the note's inter-onset interval, same as real rhythm
+    analysis (IOI) -- this isn't distinguishing legato/staccato articulation,
+    just "how long until the next note starts."
+    """
+    onsets = _note_onset_indices(melody_tokens, tokenizer)
+    durations: List[int] = []
+    for index, start in enumerate(onsets):
+        end = onsets[index + 1] if index + 1 < len(onsets) else len(melody_tokens)
+        durations.append(end - start)
+    return durations
+
+
+def evaluate_note_durations(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, object]:
+    """Melody note durations (frames) -- the melody-side rhythmic diversity/
+    regularity metric (see ``duration_entropy``).
+
+    Returns a dict with:
+        durations: list[list[int]] — one list of note durations (frames) per
+            sequence, ragged since note counts vary; empty if no note onset
+            was found.
+        durations_flat: int64 tensor [total_notes] — all durations across the
+            batch, flattened, ready for ``duration_entropy``.
+        mean: float tensor [batch] — per-sequence mean duration (NaN if none).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    durations_per_seq: List[List[int]] = []
+    means: List[float] = []
+    flat: List[int] = []
+
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        melody_tokens, _ = _split_melody_chord_lanes(seq_list, sequence_order)
+        durations = _note_durations(melody_tokens, tokenizer)
+        durations_per_seq.append(durations)
+        flat.extend(durations)
+        means.append(float(np.mean(durations)) if durations else float("nan"))
+
+    return {
+        "durations": durations_per_seq,
+        "durations_flat": torch.tensor(flat, dtype=torch.int64),
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
+def evaluate_sequence_num_frames(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> torch.Tensor:
+    """Number of valid (non-PAD) frames per sequence -- i.e. the song's length.
+
+    Padding is applied identically to both lanes (``pad_and_get_mask``), so
+    counting non-PAD frames in either lane gives the same answer; the chord
+    lane is used here. SILENCE is real content (nothing sounding, but still
+    part of the song) and is counted, unlike PAD.
+
+    Args:
+        sequences: Tensor of shape ``[batch, seq_len]`` with alternating melody
+            and chord tokens.
+        tokenizer: Hooktheory tokenizer with ``id_to_name`` mapping.
+        sequence_order: ``"chord_first"`` or ``"melody_first"``.
+
+    Returns:
+        int64 tensor [batch] of frame counts, one per sequence.
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    counts: List[int] = []
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        _, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        num_frames = sum(
+            1 for token in chord_tokens if tokenizer.id_to_name.get(token, "") != "PAD"
+        )
+        counts.append(num_frames)
+    return torch.tensor(counts, dtype=torch.int64)
+
+
+_NON_SONG_TOKENS = frozenset({"PAD", "BOS", "EOS"})
+
+
+def _silence_ratio(
+    lane_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> float:
+    """Fraction of valid (non-PAD/BOS/EOS) frames in one lane that are SILENCE."""
+    total = 0
+    silence = 0
+    for token in lane_tokens:
+        name = tokenizer.id_to_name.get(token, "")
+        if name in _NON_SONG_TOKENS:
+            continue
+        total += 1
+        if name == "SILENCE":
+            silence += 1
+    return silence / total if total > 0 else float("nan")
+
+
+def evaluate_chord_silence_ratio(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> torch.Tensor:
+    """Fraction of chord-lane frames that are SILENCE, per sequence (e.g. 0.01 = 1%).
+
+    Denominator is valid song frames (excludes PAD/BOS/EOS, but SILENCE itself
+    counts toward the total since it's real content, not padding).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+    ratios = [
+        _silence_ratio(_split_melody_chord_lanes(seq.cpu().tolist(), sequence_order)[1], tokenizer)
+        for seq in sequences
+    ]
+    return torch.tensor(ratios, dtype=torch.float32)
+
+
+def evaluate_melody_silence_ratio(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> torch.Tensor:
+    """Fraction of melody-lane frames that are SILENCE, per sequence (e.g. 0.01 = 1%).
+
+    Denominator is valid song frames (excludes PAD/BOS/EOS, but SILENCE itself
+    counts toward the total since it's real content, not padding).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+    ratios = [
+        _silence_ratio(_split_melody_chord_lanes(seq.cpu().tolist(), sequence_order)[0], tokenizer)
+        for seq in sequences
+    ]
+    return torch.tensor(ratios, dtype=torch.float32)
 
 
 def evaluate_initial_silence(
