@@ -197,6 +197,17 @@ paired_gt_emopia_plus() {
     --seed          42
 }
 
+paired_gt_filobass() {
+  CHORD_OCTAVE=5 _paired_eval \
+    --gt_only \
+    --dataset_name  filobass \
+    --dataset_split all \
+    --save_dir      "$_PAIRED_GT_DIR/filobass_all" \
+    --batch_size    $GT_BATCH_SIZE \
+    --num_batches   $GT_NUM_BATCHES \
+    --seed          42
+}
+
 paired_gt_all() {
   paired_gt_hooktheory
   paired_gt_wikifonia
@@ -206,4 +217,5 @@ paired_gt_all() {
   paired_gt_wjd
   paired_gt_chord_melody_dataset
   paired_gt_emopia_plus
+  paired_gt_filobass
 }

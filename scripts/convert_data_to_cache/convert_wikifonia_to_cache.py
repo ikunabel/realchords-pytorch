@@ -282,11 +282,18 @@ def extract_melody_and_chords_from_musicxml(
     xml_file: Path,
     *,
     chord_symbol_transform=transform_wikifonia_chord_symbol,
+    chord_text_fn=None,
 ) -> Optional[Dict]:
     """Extract melody and chord symbols from a MusicXML file.
 
     Args:
         xml_file (Path): Path to MusicXML file
+        chord_text_fn: Optional ``ChordSymbol -> str`` override for reading the
+            chord's text off the parsed music21 object. Defaults to
+            ``chord_symbol.figure``. Needed for sources (e.g. FiloBass) that
+            encode chord quality as a generic MusicXML ``<kind text="...">
+            other</kind>`` -- music21 leaves ``.figure`` as just the root in
+            that case, but preserves the real quality in ``.chordKindStr``.
 
     Returns:
         Optional[Dict]: Dictionary with melody, chords, and metadata or None if parsing failed
@@ -371,11 +378,14 @@ def extract_melody_and_chords_from_musicxml(
                     offset = onset + duration
 
                     # Get the chord symbol text
-                    chord_text = (
-                        str(chord_symbol.figure)
-                        if hasattr(chord_symbol, "figure")
-                        else str(chord_symbol)
-                    )
+                    if chord_text_fn is not None:
+                        chord_text = chord_text_fn(chord_symbol)
+                    else:
+                        chord_text = (
+                            str(chord_symbol.figure)
+                            if hasattr(chord_symbol, "figure")
+                            else str(chord_symbol)
+                        )
 
                     # Parse chord symbol
                     (
@@ -542,6 +552,8 @@ def process_musicxml_file(
     dataset_key: str = "wikifonia",
     source_label: str = "Wikifonia Dataset",
     chord_symbol_transform=transform_wikifonia_chord_symbol,
+    chord_text_fn=None,
+    tags: Optional[List[str]] = None,
 ) -> Optional[Dict]:
     """Process a single MusicXML file into Hooktheory cache format."""
     song_id = xml_file.stem
@@ -549,6 +561,7 @@ def process_musicxml_file(
     parsed_data = extract_melody_and_chords_from_musicxml(
         xml_file,
         chord_symbol_transform=chord_symbol_transform,
+        chord_text_fn=chord_text_fn,
     )
     if not parsed_data:
         return None
@@ -579,7 +592,7 @@ def process_musicxml_file(
 
     # Create song dictionary in Hooktheory format
     song_dict = {
-        "tags": ["MELODY", "HARMONY", "NO_SWING"],
+        "tags": tags if tags is not None else ["MELODY", "HARMONY", "NO_SWING"],
         "split": "TRAIN",  # Will be reassigned later
         dataset_key: {
             "id": song_id,
