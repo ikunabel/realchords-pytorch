@@ -59,15 +59,18 @@ Outputs (all in --save_dir):
     gt_melody_silence_ratio.pt        per-sequence melody-lane SILENCE fraction for GT
     gt_num_frames.pt                  per-sequence valid (non-PAD) frame count for GT
     gt_sync_intervals.pt              chord-to-note onset intervals (synchronization) for GT
+    gt_chord_complexity.pt            distinct-pitch-class count per chord segment for GT
     {slug}_chord_durations.pt         same, per model
     {slug}_note_durations.pt          same, per model
     {slug}_chord_silence_ratio.pt     same, per model
     {slug}_melody_silence_ratio.pt    same, per model
     {slug}_num_frames.pt              same, per model
     {slug}_sync_intervals.pt          same, per model
-    extra_metrics.json                summary: rhythm/silence means per source, plus
-                                       model-vs-GT comparisons (sync EMD, chord-type JS
-                                       distance) -- see realchords/utils/eval_utils.py
+    {slug}_chord_complexity.pt        same, per model
+    means.json                        summary: rhythm/silence/note-in-chord/note-in-mode/
+                                       chord-complexity means per source, plus model-vs-GT
+                                       comparisons (sync EMD, chord-type JS distance) -- see
+                                       realchords/utils/eval_utils.py
     chord_names_augmented.json        vocab snapshot for downstream decoding
     midi/                             GT-only: 10 random sanity-check MIDIs (see --midi_samples)
 """
@@ -96,15 +99,19 @@ from realchords.lit_module.decoder_only import LitDecoder
 from realchords.utils.eval_utils import (
     chord_type_distribution,
     chord_type_js_distance,
+    duration_emd,
     duration_entropy,
+    evaluate_chord_complexity,
     evaluate_chord_durations,
     evaluate_chord_silence_ratio,
     evaluate_chord_symbols_per_frame,
     evaluate_chord_to_note_onset_intervals,
     evaluate_melody_mode_fit_per_frame,
+    evaluate_melody_mode_fit_ratio,
     evaluate_melody_silence_ratio,
     evaluate_note_durations,
     evaluate_note_in_chord_per_frame,
+    evaluate_note_in_chord_ratio,
     evaluate_sequence_num_frames,
     synchronization_emd,
 )
@@ -124,27 +131,69 @@ def _save_nicr_per_frame(
     tensor: torch.Tensor,
     tokenizer,
     path: Path,
-) -> torch.Tensor:
-    """Compute per-frame NiCR, save .pt, return per-sequence means [N]."""
+) -> Tuple[torch.Tensor, float]:
+    """Compute per-frame NiCR, save .pt, return (per-sequence means [N], pooled ratio).
+
+    The pooled ratio matches ``evaluate_generated_sequences.py`` (the original
+    repo's script): total correct frames / total valid frames across the
+    whole batch -- every *frame* weighted equally, not every *sequence*. This
+    differs from a mean of per-sequence ratios whenever sequence lengths
+    vary; kept consistent with that script rather than the paper's own
+    per-song-then-averaged recipe (Appendix K), per user preference.
+    """
     stripped = strip_bos(tensor, tokenizer)
     nicr = evaluate_note_in_chord_per_frame(stripped, tokenizer)
     torch.save(nicr, path)
-    return nicr["mean"]
+    _, valid_counts, correct_counts = evaluate_note_in_chord_ratio(
+        stripped, tokenizer, model_part="chord", return_count=True
+    )
+    total_valid = int(valid_counts.sum().item())
+    pooled_ratio = (
+        float(correct_counts.sum().item()) / total_valid
+        if total_valid > 0
+        else float("nan")
+    )
+    return nicr["mean"], pooled_ratio
 
 
 def _save_mode_per_frame(
     tensor: torch.Tensor,
     tokenizer,
     path: Path,
-) -> torch.Tensor:
-    """Compute per-frame note-in-mode, save .pt, return per-sequence means [N]."""
+) -> Tuple[torch.Tensor, torch.Tensor, float]:
+    """Compute per-frame note-in-mode, save .pt, return
+    (per-sequence per-frame means [N], per-sequence per-segment ratios [N], pooled ratio).
+
+    The pooled ratio matches ``evaluate_generated_sequences.py``: a
+    segment-weighted average of ``evaluate_melody_mode_fit_ratio``'s
+    per-sequence ratios across the whole batch -- every chord *segment*
+    weighted equally, not every *sequence*. This uses the segment-based
+    mode-fit function, not the per-frame one saved to ``path`` -- the two are
+    different measurements (per-chord-segment histogram fit vs. per-note
+    fit). The per-segment per-sequence ratios are also returned (not just the
+    per-frame ones) so a "mean of per-song ratios" can be reported on the
+    *same* segment-based definition as the pooled number, rather than mixing
+    the two different measurements.
+    """
     stripped = strip_bos(tensor, tokenizer)
     mode_fit = evaluate_melody_mode_fit_per_frame(
         stripped,
         tokenizer,
     )
     torch.save(mode_fit, path)
-    return mode_fit["mean"]
+
+    seq_ratio, _, segment_counts = evaluate_melody_mode_fit_ratio(
+        stripped, tokenizer, model_part="chord", return_count=True
+    )
+    scorable = torch.isfinite(seq_ratio) & (segment_counts > 0)
+    total_segments = int(segment_counts[scorable].sum().item()) if scorable.any() else 0
+    pooled_ratio = (
+        float((seq_ratio[scorable] * segment_counts[scorable].float()).sum().item())
+        / total_segments
+        if total_segments > 0
+        else float("nan")
+    )
+    return mode_fit["mean"], seq_ratio, pooled_ratio
 
 
 def _save_chords_per_frame(
@@ -195,7 +244,7 @@ def _nanmean(tensor: torch.Tensor) -> float:
     return float(tensor.float().nanmean().item())
 
 
-def _save_extra_metrics(
+def _save_mean_metrics(
     tensor: torch.Tensor,
     tokenizer,
     save_dir: Path,
@@ -239,27 +288,38 @@ def _save_extra_metrics(
     sync = evaluate_chord_to_note_onset_intervals(stripped, tokenizer)
     torch.save(sync, save_dir / f"{prefix}_sync_intervals.pt")
 
+    complexity = evaluate_chord_complexity(stripped, tokenizer)
+    torch.save(complexity, save_dir / f"{prefix}_chord_complexity.pt")
+
     return {
         "chord_duration_entropy": chord_duration_entropy,
         "note_duration_entropy": note_duration_entropy,
         "chord_silence_ratio_mean": _nanmean(chord_silence),
         "melody_silence_ratio_mean": _nanmean(melody_silence),
         "num_frames_mean": _nanmean(num_frames),
+        "chord_complexity_mean": _nanmean(complexity["mean"]),
         "sync_intervals_flat": sync["intervals_flat"],
+        "chord_durations_flat": chord_durations["durations_flat"],
+        "note_durations_flat": note_durations["durations_flat"],
         "chord_dist_onset": chord_type_distribution(chords, weighting="onset"),
         "chord_dist_frame": chord_type_distribution(chords, weighting="frame"),
     }
 
 
-def _compare_to_gt(model_extra: Dict[str, object], gt_extra: Dict[str, object]) -> Dict[str, Optional[float]]:
+def _compare_to_gt(model_means: Dict[str, object], gt_means: Dict[str, object]) -> Dict[str, Optional[float]]:
     """Cross-source comparison metrics: model vs. GT (this run's reference)."""
-    model_sync = model_extra["sync_intervals_flat"]
-    gt_sync = gt_extra["sync_intervals_flat"]
+    model_sync = model_means["sync_intervals_flat"]
+    gt_sync = gt_means["sync_intervals_flat"]
     sync_emd = (
         synchronization_emd(model_sync, gt_sync)
         if model_sync.numel() > 0 and gt_sync.numel() > 0
         else None
     )
+
+    def _safe_duration_emd(a: torch.Tensor, b: torch.Tensor) -> Optional[float]:
+        if a.numel() == 0 or b.numel() == 0:
+            return None
+        return duration_emd(a, b)
 
     def _safe_js(a: Dict[str, int], b: Dict[str, int]) -> Optional[float]:
         if not a or not b:
@@ -268,11 +328,17 @@ def _compare_to_gt(model_extra: Dict[str, object], gt_extra: Dict[str, object]) 
 
     return {
         "sync_emd_vs_gt": sync_emd,
+        "chord_duration_emd_vs_gt": _safe_duration_emd(
+            model_means["chord_durations_flat"], gt_means["chord_durations_flat"]
+        ),
+        "note_duration_emd_vs_gt": _safe_duration_emd(
+            model_means["note_durations_flat"], gt_means["note_durations_flat"]
+        ),
         "chord_type_js_distance_onset_vs_gt": _safe_js(
-            model_extra["chord_dist_onset"], gt_extra["chord_dist_onset"]
+            model_means["chord_dist_onset"], gt_means["chord_dist_onset"]
         ),
         "chord_type_js_distance_frame_vs_gt": _safe_js(
-            model_extra["chord_dist_frame"], gt_extra["chord_dist_frame"]
+            model_means["chord_dist_frame"], gt_means["chord_dist_frame"]
         ),
     }
 
@@ -877,17 +943,17 @@ def _run_eval(
             torch.save(tensor, save_dir / f"{slug}.pt")
             print(f"  {slug}.pt  {tuple(tensor.shape)}")
 
-    gt_nicr_means = _save_nicr_per_frame(
+    gt_nicr_means, gt_nicr_pooled = _save_nicr_per_frame(
         gt_tensor, dataset_tokenizer, save_dir / "gt_nicr_per_frame.pt"
     )
-    print(f"  gt_nicr_per_frame.pt  mean={gt_nicr_means.nanmean().item():.4f}")
+    print(f"  gt_nicr_per_frame.pt  pooled={gt_nicr_pooled:.4f}")
 
-    gt_mode_means = _save_mode_per_frame(
+    gt_mode_means, gt_mode_seg_ratios, gt_mode_pooled = _save_mode_per_frame(
         gt_tensor,
         dataset_tokenizer,
         save_dir / "gt_mode_per_frame.pt",
     )
-    print(f"  gt_mode_per_frame.pt  mean={gt_mode_means.nanmean().item():.4f}")
+    print(f"  gt_mode_per_frame.pt  pooled={gt_mode_pooled:.4f}")
 
     gt_chords = _save_chords_per_frame(
         gt_tensor, dataset_tokenizer, save_dir / "gt_chords_per_frame.pt"
@@ -904,91 +970,107 @@ def _run_eval(
     )
     print(f"  gt_chord_distribution.json  ({dist_path})")
 
-    gt_extra = _save_extra_metrics(gt_tensor, dataset_tokenizer, save_dir, "gt", gt_chords)
+    gt_means = _save_mean_metrics(gt_tensor, dataset_tokenizer, save_dir, "gt", gt_chords)
     print(
         f"  gt_chord_durations.pt / gt_note_durations.pt  "
-        f"chord_entropy={gt_extra['chord_duration_entropy']:.4f} "
-        f"note_entropy={gt_extra['note_duration_entropy']:.4f}"
+        f"chord_entropy={gt_means['chord_duration_entropy']:.4f} "
+        f"note_entropy={gt_means['note_duration_entropy']:.4f}"
     )
     print(
         f"  gt_chord_silence_ratio.pt / gt_melody_silence_ratio.pt  "
-        f"chord={gt_extra['chord_silence_ratio_mean']:.4f} "
-        f"melody={gt_extra['melody_silence_ratio_mean']:.4f}"
+        f"chord={gt_means['chord_silence_ratio_mean']:.4f} "
+        f"melody={gt_means['melody_silence_ratio_mean']:.4f}"
     )
-    print(f"  gt_num_frames.pt  mean={gt_extra['num_frames_mean']:.1f}")
+    print(f"  gt_num_frames.pt  mean={gt_means['num_frames_mean']:.1f}")
     print("  gt_sync_intervals.pt")
+    print(f"  gt_chord_complexity.pt  mean={gt_means['chord_complexity_mean']:.4f}")
 
     model_nicr_means: Dict[str, torch.Tensor] = {}
+    model_nicr_pooled: Dict[str, float] = {}
     model_mode_means: Dict[str, torch.Tensor] = {}
-    model_extras: Dict[str, Dict[str, object]] = {}
+    model_mode_seg_ratios: Dict[str, torch.Tensor] = {}
+    model_mode_pooled: Dict[str, float] = {}
+    model_means_by_label: Dict[str, Dict[str, object]] = {}
     if not args.gt_only:
         for label, rows in model_rows.items():
             slug = _slugify(label)
             tensor = torch.cat(rows, dim=0)
-            means = _save_nicr_per_frame(
+            means, pooled = _save_nicr_per_frame(
                 tensor, model_tokenizer, save_dir / f"{slug}_nicr_per_frame.pt"
             )
             model_nicr_means[label] = means
-            print(
-                f"  {slug}_nicr_per_frame.pt  mean={means.nanmean().item():.4f}"
-            )
-            mode_means = _save_mode_per_frame(
+            model_nicr_pooled[label] = pooled
+            print(f"  {slug}_nicr_per_frame.pt  pooled={pooled:.4f}")
+            mode_means, mode_seg_ratios, mode_pooled = _save_mode_per_frame(
                 tensor,
                 model_tokenizer,
                 save_dir / f"{slug}_mode_per_frame.pt",
             )
             model_mode_means[label] = mode_means
-            print(
-                f"  {slug}_mode_per_frame.pt  mean={mode_means.nanmean().item():.4f}"
-            )
+            model_mode_seg_ratios[label] = mode_seg_ratios
+            model_mode_pooled[label] = mode_pooled
+            print(f"  {slug}_mode_per_frame.pt  pooled={mode_pooled:.4f}")
             model_chords = _save_chords_per_frame(
                 tensor, model_tokenizer, save_dir / f"{slug}_chords_per_frame.pt"
             )
             print(f"  {slug}_chords_per_frame.pt")
 
-            model_extra = _save_extra_metrics(
+            model_means = _save_mean_metrics(
                 tensor, model_tokenizer, save_dir, slug, model_chords
             )
-            model_extras[label] = model_extra
+            model_means_by_label[label] = model_means
             print(
                 f"  {slug}_chord_durations.pt / {slug}_note_durations.pt  "
-                f"chord_entropy={model_extra['chord_duration_entropy']:.4f} "
-                f"note_entropy={model_extra['note_duration_entropy']:.4f}"
+                f"chord_entropy={model_means['chord_duration_entropy']:.4f} "
+                f"note_entropy={model_means['note_duration_entropy']:.4f}"
             )
             print(
                 f"  {slug}_chord_silence_ratio.pt / {slug}_melody_silence_ratio.pt  "
-                f"chord={model_extra['chord_silence_ratio_mean']:.4f} "
-                f"melody={model_extra['melody_silence_ratio_mean']:.4f}"
+                f"chord={model_means['chord_silence_ratio_mean']:.4f} "
+                f"melody={model_means['melody_silence_ratio_mean']:.4f}"
             )
-            print(f"  {slug}_num_frames.pt  mean={model_extra['num_frames_mean']:.1f}")
+            print(f"  {slug}_num_frames.pt  mean={model_means['num_frames_mean']:.1f}")
             print(f"  {slug}_sync_intervals.pt")
+            print(f"  {slug}_chord_complexity.pt  mean={model_means['chord_complexity_mean']:.4f}")
 
     # Cross-source comparison metrics (model vs. GT), one small summary file
-    extra_metrics_summary = {
+    means_summary = {
         "gt": {
-            "chord_duration_entropy": _fmt_metric(gt_extra["chord_duration_entropy"]),
-            "note_duration_entropy": _fmt_metric(gt_extra["note_duration_entropy"]),
-            "chord_silence_ratio_mean": _fmt_metric(gt_extra["chord_silence_ratio_mean"]),
-            "melody_silence_ratio_mean": _fmt_metric(gt_extra["melody_silence_ratio_mean"]),
-            "num_frames_mean": _fmt_metric(gt_extra["num_frames_mean"]),
+            "chord_duration_entropy": _fmt_metric(gt_means["chord_duration_entropy"]),
+            "note_duration_entropy": _fmt_metric(gt_means["note_duration_entropy"]),
+            "chord_silence_ratio_mean": _fmt_metric(gt_means["chord_silence_ratio_mean"]),
+            "melody_silence_ratio_mean": _fmt_metric(gt_means["melody_silence_ratio_mean"]),
+            "num_frames_mean": _fmt_metric(gt_means["num_frames_mean"]),
+            "note_in_chord_ratio_mean": _fmt_metric(gt_nicr_pooled),
+            "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(gt_nicr_means)),
+            "note_in_mode_ratio_mean": _fmt_metric(gt_mode_pooled),
+            "note_in_mode_ratio_per_song_mean": _fmt_metric(_nanmean(gt_mode_seg_ratios)),
+            "chord_complexity_mean": _fmt_metric(gt_means["chord_complexity_mean"]),
         },
         "models": {},
     }
-    for label, model_extra in model_extras.items():
+    for label, model_means in model_means_by_label.items():
         slug = _slugify(label)
-        comparison = _compare_to_gt(model_extra, gt_extra)
-        extra_metrics_summary["models"][slug] = {
-            "chord_duration_entropy": _fmt_metric(model_extra["chord_duration_entropy"]),
-            "note_duration_entropy": _fmt_metric(model_extra["note_duration_entropy"]),
-            "chord_silence_ratio_mean": _fmt_metric(model_extra["chord_silence_ratio_mean"]),
-            "melody_silence_ratio_mean": _fmt_metric(model_extra["melody_silence_ratio_mean"]),
-            "num_frames_mean": _fmt_metric(model_extra["num_frames_mean"]),
+        comparison = _compare_to_gt(model_means, gt_means)
+        means_summary["models"][slug] = {
+            "chord_duration_entropy": _fmt_metric(model_means["chord_duration_entropy"]),
+            "note_duration_entropy": _fmt_metric(model_means["note_duration_entropy"]),
+            "chord_silence_ratio_mean": _fmt_metric(model_means["chord_silence_ratio_mean"]),
+            "melody_silence_ratio_mean": _fmt_metric(model_means["melody_silence_ratio_mean"]),
+            "num_frames_mean": _fmt_metric(model_means["num_frames_mean"]),
+            "note_in_chord_ratio_mean": _fmt_metric(model_nicr_pooled[label]),
+            "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(model_nicr_means[label])),
+            "note_in_mode_ratio_mean": _fmt_metric(model_mode_pooled[label]),
+            "note_in_mode_ratio_per_song_mean": _fmt_metric(
+                _nanmean(model_mode_seg_ratios[label])
+            ),
+            "chord_complexity_mean": _fmt_metric(model_means["chord_complexity_mean"]),
             **{key: _fmt_metric(value) for key, value in comparison.items()},
         }
-    extra_metrics_path = save_dir / "extra_metrics.json"
-    with extra_metrics_path.open("w", encoding="utf-8") as fh:
-        json.dump(extra_metrics_summary, fh, indent=2, sort_keys=True)
-    print(f"  extra_metrics.json  ({extra_metrics_path})")
+    means_path = save_dir / "means.json"
+    with means_path.open("w", encoding="utf-8") as fh:
+        json.dump(means_summary, fh, indent=2, sort_keys=True)
+    print(f"  means.json  ({means_path})")
 
     # Metadata (with per-sequence NiCR / mode-fit means)
     meta_path = save_dir / "metadata.jsonl"

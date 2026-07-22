@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Aggregate per-dataset `extra_metrics.json` files from `paired_gt_all` into
+"""Aggregate per-dataset `means.json` files from `paired_gt_all` into
 one cross-dataset comparison table.
 
 `scripts/eval/custom_eval.sh`'s `paired_gt_*` functions each write to
-`logs/paired_eval/gt/<dataset>_<split>/{cropped_songs,full_songs}/extra_metrics.json`
-(produced by `realchords/utils/custom_evaluation.py`'s `_save_extra_metrics`/`_compare_to_gt`).
+`logs/paired_eval/gt/<dataset>_<split>/{cropped_songs,full_songs}/means.json`
+(produced by `realchords/utils/custom_evaluation.py`'s `_save_mean_metrics`/`_compare_to_gt`).
 Each of those files is already a per-dataset summary; this script just walks
 all of them and puts the GT-side stats side by side so datasets can be
 compared directly (e.g. "which dataset has the highest melody silence
@@ -30,21 +30,21 @@ import pandas as pd
 _MODES = ("cropped_songs", "full_songs")
 
 
-def _load_gt_row(extra_metrics_path: Path) -> Optional[Dict[str, float]]:
-    if not extra_metrics_path.exists():
+def _load_gt_row(means_path: Path) -> Optional[Dict[str, float]]:
+    if not means_path.exists():
         return None
-    with open(extra_metrics_path, encoding="utf-8") as handle:
+    with open(means_path, encoding="utf-8") as handle:
         data = json.load(handle)
     return data.get("gt")
 
 
 def _load_model_comparison_rows(
-    extra_metrics_path: Path,
+    means_path: Path,
 ) -> Dict[str, Dict[str, float]]:
     """Optional bonus: model-vs-GT comparison metrics, if this run had models."""
-    if not extra_metrics_path.exists():
+    if not means_path.exists():
         return {}
-    with open(extra_metrics_path, encoding="utf-8") as handle:
+    with open(means_path, encoding="utf-8") as handle:
         data = json.load(handle)
     return data.get("models", {})
 
@@ -57,7 +57,7 @@ def collect_gt_summary(gt_root: Path) -> Dict[str, pd.DataFrame]:
         if not dataset_dir.is_dir():
             continue
         for mode in _MODES:
-            row = _load_gt_row(dataset_dir / mode / "extra_metrics.json")
+            row = _load_gt_row(dataset_dir / mode / "means.json")
             if row is not None:
                 tables[mode][dataset_dir.name] = row
 
@@ -75,7 +75,7 @@ def collect_model_comparison_summary(gt_root: Path) -> pd.DataFrame:
         if not dataset_dir.is_dir():
             continue
         for mode in _MODES:
-            models = _load_model_comparison_rows(dataset_dir / mode / "extra_metrics.json")
+            models = _load_model_comparison_rows(dataset_dir / mode / "means.json")
             for model_label, metrics in models.items():
                 rows[f"{dataset_dir.name}/{mode}/{model_label}"] = metrics
     return pd.DataFrame.from_dict(rows, orient="index").sort_index()

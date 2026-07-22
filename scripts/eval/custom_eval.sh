@@ -107,7 +107,7 @@ paired_nottingham() {
 # ---------------------------------------------------------------------------
 
 GT_BATCH_SIZE=64
-GT_NUM_BATCHES=-1
+GT_NUM_BATCHES=5
 
 paired_gt_hooktheory() {
   _paired_eval \

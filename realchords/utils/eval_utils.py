@@ -16,6 +16,7 @@ import note_seq.chord_symbols_lib as chord_symbols_lib
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import entropy as _scipy_entropy
 from scipy.stats import wasserstein_distance
+from scipy.stats import wasserstein_distance_nd
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.modes import (
@@ -638,6 +639,75 @@ def chord_type_js_distance(
     return float(jensenshannon(a, b, base=base))
 
 
+def chord_root_pitch_class_distribution(counts: Dict[str, int]) -> Dict[int, int]:
+    """Collapse a chord-symbol usage histogram down to root pitch class (0-11).
+
+    Same input/purpose as ``chord_type_distribution``'s output, but discards
+    chord quality entirely -- useful when quality itself isn't the thing being
+    compared (see ``chord_root_distribution_emd``, which needs *some* ordered
+    axis to move mass along, and root pitch class is the natural one: chord
+    symbols themselves have no inherent distance between them).
+    """
+    root_counts: Counter = Counter()
+    for symbol, count in counts.items():
+        try:
+            root_pc = chord_symbols_lib.chord_symbol_root(symbol) % 12
+        except Exception:
+            continue
+        root_counts[root_pc] += count
+    return dict(root_counts)
+
+
+# Unit-circle embedding of the 12 pitch classes -- consecutive pitch classes
+# (and pc 11 <-> pc 0) are adjacent on the circle, so Euclidean distance
+# between two embedded points respects chromatic-circle proximity instead of
+# treating pitch classes as an arbitrary, unordered 0-11 integer labeling.
+_PITCH_CLASS_CIRCLE = np.stack(
+    [np.cos(2 * np.pi * np.arange(12) / 12), np.sin(2 * np.pi * np.arange(12) / 12)],
+    axis=1,
+)
+
+
+def chord_root_distribution_emd(
+    counts_a: Dict[str, int],
+    counts_b: Dict[str, int],
+) -> float:
+    """Circular Earth Mover's Distance between two chord-root usage distributions.
+
+    Unlike ``chord_type_js_distance`` (categorical -- every distinct chord
+    symbol is equally "different" from every other), this compares only the
+    *root* pitch class each chord uses, on the chromatic circle: moving mass
+    from C to C# costs less than moving it from C to F#. Complements
+    JS-distance rather than replacing it -- this is blind to chord quality
+    (a Cmaj7 and a Cm7 are indistinguishable here), JS-distance is blind to
+    harmonic proximity between different roots.
+
+    Args:
+        counts_a: Chord symbol -> count, e.g. ``chord_type_distribution(...)``.
+        counts_b: Chord symbol -> count, same format, other source.
+
+    Returns:
+        Wasserstein-1 distance on the unit circle (0 = identical root usage
+        proportions; max possible is 2, two point masses on opposite sides).
+    """
+    root_a = chord_root_pitch_class_distribution(counts_a)
+    root_b = chord_root_pitch_class_distribution(counts_b)
+    weights_a = np.array([root_a.get(pc, 0) for pc in range(12)], dtype=np.float64)
+    weights_b = np.array([root_b.get(pc, 0) for pc in range(12)], dtype=np.float64)
+    if weights_a.sum() == 0 or weights_b.sum() == 0:
+        raise ValueError(
+            "Cannot compute root-distribution EMD: a distribution has zero total count."
+        )
+    return float(
+        wasserstein_distance_nd(
+            _PITCH_CLASS_CIRCLE,
+            _PITCH_CLASS_CIRCLE,
+            u_weights=weights_a,
+            v_weights=weights_b,
+        )
+    )
+
+
 def evaluate_note_in_chord_ratio(
     sequences: torch.Tensor,
     tokenizer: HooktheoryTokenizer,
@@ -778,53 +848,74 @@ def evaluate_chord_to_note_onset_intervals(
     }
 
 
+def _as_numpy(values: torch.Tensor | Sequence[int]) -> np.ndarray:
+    return np.asarray(values.cpu().numpy() if isinstance(values, torch.Tensor) else values)
+
+
 def synchronization_emd(
     model_intervals: torch.Tensor | Sequence[int],
     reference_intervals: torch.Tensor | Sequence[int],
+    max_interval: int = 18,
 ) -> float:
     """Earth Mover's Distance between two chord-to-note onset interval distributions.
 
     Compares the full distribution of chord-to-note onset intervals (see
     ``evaluate_chord_to_note_onset_intervals``) between a model's output and a
     reference (e.g. test-set GT) -- lower is better, 0 means identical
-    distributions. Operates directly on the interval samples (exact 1D
-    Wasserstein distance), not a lossily-binned histogram.
+    distributions.
+
+    Matches the paper's methodology: intervals are binned into
+    ``[0, 1, ..., max_interval - 1, inf]`` (an exact bin per frame gap up to
+    ``max_interval - 1``, then one overflow bin for everything at or beyond
+    ``max_interval`` -- same ``max_interval`` convention as
+    ``chord_to_note_onset_interval_histogram``: paper default 18, i.e. exact
+    bins ``0..17`` then an overflow bin for ``>=18``), and EMD is computed on
+    the resulting histograms. In practice this is implemented as
+    clip-then-Wasserstein rather than literally building histograms first --
+    for 1D data the two give an identical result (both only depend on the
+    empirical CDF of the clipped values), but clipping first is simpler and
+    avoids a redundant intermediate representation. This *does* change the
+    result vs. computing EMD on raw unclipped samples: an outlier beyond the
+    cutoff no longer contributes its true magnitude, only "beyond the cutoff"
+    -- deliberately capping how much any single extreme event can skew the
+    score. Note the paper reports this value multiplied by 1000 (``x10^3``)
+    purely for table readability; this function returns the unscaled value in
+    frames.
 
     Args:
         model_intervals: Flattened chord-to-note onset intervals from the model.
         reference_intervals: Flattened chord-to-note onset intervals from the
             reference distribution (e.g. GT test set).
+        max_interval: Number of exact-gap bins (``0..max_interval-1``); gaps
+            ``>= max_interval`` are folded into one overflow bin.
 
     Returns:
-        The Earth Mover's Distance (Wasserstein-1) between the two distributions,
-        in frames.
+        The Earth Mover's Distance (Wasserstein-1) between the two clipped
+        distributions, in frames (unscaled -- multiply by 1000 to match the
+        paper's table convention).
     """
-    model_arr = np.asarray(
-        model_intervals.cpu().numpy() if isinstance(model_intervals, torch.Tensor) else model_intervals
-    )
-    reference_arr = np.asarray(
-        reference_intervals.cpu().numpy()
-        if isinstance(reference_intervals, torch.Tensor)
-        else reference_intervals
-    )
+    model_arr = _as_numpy(model_intervals)
+    reference_arr = _as_numpy(reference_intervals)
     if model_arr.size == 0 or reference_arr.size == 0:
         raise ValueError(
             "Cannot compute EMD: both model_intervals and reference_intervals "
             "must be non-empty."
         )
-    return float(wasserstein_distance(model_arr, reference_arr))
+    model_clipped = np.minimum(model_arr, max_interval)
+    reference_clipped = np.minimum(reference_arr, max_interval)
+    return float(wasserstein_distance(model_clipped, reference_clipped))
 
 
 def chord_to_note_onset_interval_histogram(
     intervals: torch.Tensor | Sequence[int],
-    max_interval: int = 16,
+    max_interval: int = 18,
     density: bool = True,
 ) -> np.ndarray:
     """Histogram of chord-to-note onset intervals, one bin per frame gap.
 
-    For visualization/inspection alongside ``synchronization_emd`` -- the EMD
-    itself is computed on the raw samples (exact), not on this histogram, so
-    the bin count here only affects what you *see*, not the metric value.
+    For visualization/inspection alongside ``synchronization_emd`` -- same
+    ``max_interval`` binning convention as that function (default 18 matches
+    its default), so this histogram now actually reflects what the EMD sees.
 
     Args:
         intervals: Flattened chord-to-note onset intervals (frames), e.g.
@@ -915,7 +1006,7 @@ def evaluate_chord_durations(
 
 def duration_entropy(
     durations: torch.Tensor | Sequence[int],
-    base: float = 2.0,
+    base: float = np.e,
 ) -> float:
     """Shannon entropy of a distribution of segment durations (rhythmic diversity
     / rhythmic regularity).
@@ -939,7 +1030,8 @@ def duration_entropy(
         durations: Segment durations in frames, e.g.
             ``evaluate_chord_durations(...)["durations_flat"]`` or
             ``evaluate_note_durations(...)["durations_flat"]``.
-        base: Logarithm base. 2.0 (default) gives entropy in bits.
+        base: Logarithm base. Defaults to natural log (``nats``), matching
+            the paper's convention; pass ``2.0`` for bits instead.
 
     Returns:
         Shannon entropy of the empirical duration distribution.
@@ -951,6 +1043,49 @@ def duration_entropy(
         raise ValueError("Cannot compute entropy of an empty duration distribution.")
     _, counts = np.unique(arr, return_counts=True)
     return float(_scipy_entropy(counts, base=base))
+
+
+def duration_emd(
+    model_durations: torch.Tensor | Sequence[int],
+    reference_durations: torch.Tensor | Sequence[int],
+    max_duration: int = 34,
+) -> float:
+    """Earth Mover's Distance between two segment-duration distributions.
+
+    Same idea as ``synchronization_emd``, generic over chord or note
+    durations (see ``duration_entropy``'s docstring for that generality).
+    Matches the paper's chord-length methodology: durations are binned into
+    ``[0, 1, ..., max_duration - 1, inf]`` (paper default 34, i.e. exact bins
+    ``0..33`` then an overflow bin for ``>=34``), implemented as
+    clip-then-Wasserstein (see ``synchronization_emd`` for why this is
+    equivalent to histogram-then-EMD for 1D data). As with
+    ``synchronization_emd``, the paper reports this multiplied by 1000 for
+    table readability; this function returns the unscaled value in frames.
+
+    Args:
+        model_durations: Flattened segment durations from the model, e.g.
+            ``evaluate_chord_durations(...)["durations_flat"]``.
+        reference_durations: Flattened segment durations from the reference
+            distribution (e.g. GT test set), same kind (chord or note) as
+            ``model_durations``.
+        max_duration: Number of exact-length bins (``0..max_duration-1``);
+            durations ``>= max_duration`` are folded into one overflow bin.
+
+    Returns:
+        The Earth Mover's Distance (Wasserstein-1) between the two clipped
+        distributions, in frames (unscaled -- multiply by 1000 to match the
+        paper's table convention).
+    """
+    model_arr = _as_numpy(model_durations)
+    reference_arr = _as_numpy(reference_durations)
+    if model_arr.size == 0 or reference_arr.size == 0:
+        raise ValueError(
+            "Cannot compute EMD: both model_durations and reference_durations "
+            "must be non-empty."
+        )
+    model_clipped = np.minimum(model_arr, max_duration)
+    reference_clipped = np.minimum(reference_arr, max_duration)
+    return float(wasserstein_distance(model_clipped, reference_clipped))
 
 
 def _note_durations(
@@ -1010,6 +1145,80 @@ def evaluate_note_durations(
     return {
         "durations": durations_per_seq,
         "durations_flat": torch.tensor(flat, dtype=torch.int64),
+        "mean": torch.tensor(means, dtype=torch.float32),
+    }
+
+
+def _chord_pitch_counts(
+    chord_tokens: Sequence[int],
+    tokenizer: HooktheoryTokenizer,
+) -> List[int]:
+    """Number of distinct pitch classes in each chord segment, onset to next onset.
+
+    E.g. a triad (maj/min/dim/aug) has 3, a 7th chord has 4, a 9th chord has 5.
+    Same segment convention as ``_chord_durations``: one value per chord
+    change, not per frame.
+    """
+    onsets = _chord_onset_indices(chord_tokens, tokenizer)
+    counts: List[int] = []
+    for start in onsets:
+        chord_name = tokenizer.id_to_name.get(chord_tokens[start], "")
+        chord_symbol = _parse_chord_symbol(chord_name)
+        if chord_symbol is None:
+            continue
+        try:
+            pitches = chord_symbols_lib.chord_symbol_pitches(chord_symbol)
+        except Exception:
+            continue
+        counts.append(len(set(p % 12 for p in pitches)))
+    return counts
+
+
+def evaluate_chord_complexity(
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    sequence_order: str = "chord_first",
+) -> Dict[str, object]:
+    """Chord complexity: how many distinct pitch classes each chord uses.
+
+    One value per chord segment (a change, not a frame -- a long 9th chord
+    counts once, the same as a short one), pooled and averaged the same way
+    as ``evaluate_chord_durations``. Left unnormalized on purpose -- the raw
+    count is directly readable (a mean of 3 means the song is mostly triads,
+    3.7 means a mix with some richer chords, etc.), which a rescaled [0, 1]
+    version would obscure. Verified empirically against the full chord
+    vocabulary that raw counts fall in ``[1, 7]`` (1 = single-note/pedal, 7 =
+    fully-stacked 13th chord), so that range is a real fact about the data,
+    not a guessed bound.
+
+    Returns a dict with:
+        pitch_counts: list[list[int]] — one list of pitch counts per
+            sequence, ragged since chord counts vary; empty if no chord
+            onset was found or none parsed.
+        pitch_counts_flat: int64 tensor [total_segments] — all pitch counts
+            across the batch, flattened.
+        mean: float tensor [batch] — per-sequence mean pitch count (NaN if none).
+    """
+    if sequence_order not in {"chord_first", "melody_first"}:
+        raise ValueError(
+            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
+        )
+
+    counts_per_seq: List[List[int]] = []
+    means: List[float] = []
+    flat: List[int] = []
+
+    for seq in sequences:
+        seq_list = seq.cpu().tolist()
+        _, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
+        counts = _chord_pitch_counts(chord_tokens, tokenizer)
+        counts_per_seq.append(counts)
+        flat.extend(counts)
+        means.append(float(np.mean(counts)) if counts else float("nan"))
+
+    return {
+        "pitch_counts": counts_per_seq,
+        "pitch_counts_flat": torch.tensor(flat, dtype=torch.int64),
         "mean": torch.tensor(means, dtype=torch.float32),
     }
 
