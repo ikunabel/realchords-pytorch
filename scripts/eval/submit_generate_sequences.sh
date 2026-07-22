@@ -1,13 +1,13 @@
 #!/usr/bin/zsh
 #
 # Submit:
-#   sbatch scripts/jobscripts/submit_generate_sequences.sh
+#   sbatch scripts/eval/submit_generate_sequences.sh
 #
 # Single SLURM job, one GPU. Add any functions to gen_fns below.
 # Up to MAX_PARALLEL of them run concurrently on that same GPU.
 #
 # Override parallelism at submit time, e.g.:
-#   MAX_PARALLEL=2 sbatch scripts/jobscripts/submit_generate_sequences.sh
+#   MAX_PARALLEL=2 sbatch scripts/eval/submit_generate_sequences.sh
 #
 #SBATCH --partition=c23g
 #SBATCH --job-name=generate_sequences
@@ -29,7 +29,7 @@ source scripts/jobscripts/_common_env.sh
 mkdir -p "scripts/jobscripts/slurm_logs/${SLURM_JOB_NAME}"
 LOG_DIR="scripts/jobscripts/slurm_logs/${SLURM_JOB_NAME}"
 
-source scripts/jobscripts/generate_sequences_functions.sh
+source scripts/eval/generate_sequences_functions.sh
 
 gen_fns=(
   hooktheory_melody_vs_gapt_multiscale_chord
@@ -49,7 +49,7 @@ gen_fns=(
 )
 
 if (( ${#gen_fns[@]} == 0 )); then
-  echo "ERROR: gen_fns is empty. Add function names to scripts/jobscripts/submit_generate_sequences.sh"
+  echo "ERROR: gen_fns is empty. Add function names to scripts/eval/submit_generate_sequences.sh"
   exit 2
 fi
 

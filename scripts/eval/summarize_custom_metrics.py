@@ -2,9 +2,9 @@
 """Aggregate per-dataset `extra_metrics.json` files from `paired_gt_all` into
 one cross-dataset comparison table.
 
-`scripts/jobscripts/paired_eval.sh`'s `paired_gt_*` functions each write to
+`scripts/eval/custom_eval.sh`'s `paired_gt_*` functions each write to
 `logs/paired_eval/gt/<dataset>_<split>/{cropped_songs,full_songs}/extra_metrics.json`
-(produced by `paired_chord_evaluation.py`'s `_save_extra_metrics`/`_compare_to_gt`).
+(produced by `realchords/utils/custom_evaluation.py`'s `_save_extra_metrics`/`_compare_to_gt`).
 Each of those files is already a per-dataset summary; this script just walks
 all of them and puts the GT-side stats side by side so datasets can be
 compared directly (e.g. "which dataset has the highest melody silence
@@ -13,8 +13,8 @@ FiloBass's").
 
 Usage::
 
-    python scripts/summarize_paired_gt_metrics.py
-    python scripts/summarize_paired_gt_metrics.py --gt_root logs/paired_eval/gt \\
+    python scripts/eval/summarize_custom_metrics.py
+    python scripts/eval/summarize_custom_metrics.py --gt_root logs/paired_eval/gt \\
         --out_dir logs/paired_eval/gt_summary
 """
 

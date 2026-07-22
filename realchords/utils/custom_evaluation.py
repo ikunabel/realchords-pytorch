@@ -7,7 +7,7 @@ melodic context and can be compared row-by-row.  Full provenance (song URL, data
 index) is saved alongside the tensors.
 
 Usage:
-    python scripts/paired_chord_evaluation.py \
+    python realchords/utils/custom_evaluation.py \
         --base_model logs/mle_chord/step=10000.ckpt \
         --model "MLE=base" \
         --model "RealJam=logs/realchords/actor.pth" \
@@ -19,7 +19,7 @@ Usage:
         --batch_size 64 \
         --seed 42
 
-    python scripts/paired_chord_evaluation.py \
+    python realchords/utils/custom_evaluation.py \
         --gt_only \
         --dataset_name hooktheory \
         --dataset_split test \

@@ -5,7 +5,7 @@ This script is the recommended public entry point for reproducing the Figure 4
 evaluation workflow from user-generated checkpoints.
 
 Usage example:
-    python scripts/evaluate_generated_sequences.py \
+    python scripts/eval/evaluate_generated_sequences.py \
         --system "Online MLE=logs/generated/online_mle" \
         --system "ReaLchords=logs/generated/realchords" \
         --system "GAPT w/o Adv.=logs/generated/gapt_no_gail" \

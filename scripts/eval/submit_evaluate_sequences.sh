@@ -1,7 +1,7 @@
 #!/usr/bin/zsh
 #
 # Submit:
-#   sbatch scripts/jobscripts/submit_evaluate_sequences.sh
+#   sbatch scripts/eval/submit_evaluate_sequences.sh
 #
 # Pick systems via ONE of:
 #   EVAL_GROUP=gapt_multiscale_batch   (default below)
@@ -9,8 +9,8 @@
 #   edit eval_fn to call eval_systems with explicit args
 #
 # Examples:
-#   EVAL_GROUP=melody_vs_mle sbatch scripts/jobscripts/submit_evaluate_sequences.sh
-#   EVAL_GROUP=all sbatch scripts/jobscripts/submit_evaluate_sequences.sh
+#   EVAL_GROUP=melody_vs_mle sbatch scripts/eval/submit_evaluate_sequences.sh
+#   EVAL_GROUP=all sbatch scripts/eval/submit_evaluate_sequences.sh
 #
 #SBATCH --partition=c23g
 #SBATCH --job-name=evaluate_sequences
@@ -29,7 +29,7 @@ source scripts/jobscripts/_common_env.sh
 
 mkdir -p "scripts/jobscripts/slurm_logs/${SLURM_JOB_NAME}"
 
-source scripts/jobscripts/evaluate_sequences_functions.sh
+source scripts/eval/evaluate_sequences_functions.sh
 
 : "${EVAL_GROUP:=gapt_multiscale_batch}"
 

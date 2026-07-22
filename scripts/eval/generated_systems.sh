@@ -2,10 +2,10 @@
 # Canonical registry of generated-sequence system names.
 #
 # Names match folders under logs/generated/ and functions in
-# scripts/jobscripts/generate_sequences_functions.sh.
+# scripts/eval/generate_sequences_functions.sh.
 #
-# Used by scripts/jobscripts/evaluate_sequences_functions.sh and
-# scripts/jobscripts/submit_evaluate_sequences.sh.
+# Used by scripts/eval/evaluate_sequences_functions.sh and
+# scripts/eval/submit_evaluate_sequences.sh.
 
 setopt extendedglob
 

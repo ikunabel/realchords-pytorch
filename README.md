@@ -383,13 +383,13 @@ Output formats:
 
 ### Evaluate Harmony and Diversity
 
-Use `scripts/evaluate_generated_sequences.py` as the public entry point for the
+Use `scripts/eval/evaluate_generated_sequences.py` as the public entry point for the
 Figure 4 evaluation chain. It computes note-in-chord harmony, rule-based
 penalties, chord entropy, and Vendi score, then aggregates them into one summary
 JSON.
 
 ```bash
-python scripts/evaluate_generated_sequences.py \
+python scripts/eval/evaluate_generated_sequences.py \
   --system "Online MLE=logs/generated/online_mle" \
   --system "ReaLchords=logs/generated/realchords" \
   --system "GAPT w/o Adv.=logs/generated/gapt_no_gail" \
@@ -415,7 +415,7 @@ artifacts, add `--skip_intermediate_artifacts`.
 
 Use `scripts/plot_chord_embedding_tsne.py` to compare chord-sequence embeddings
 between two or more generated systems. You can either point it at a summary JSON
-produced by `scripts/evaluate_generated_sequences.py`, or pass groups directly.
+produced by `scripts/eval/evaluate_generated_sequences.py`, or pass groups directly.
 
 Example: read systems from the evaluation summary
 

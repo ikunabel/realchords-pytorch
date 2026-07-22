@@ -4,7 +4,7 @@
 # corresponds to the same song and can be compared directly.
 #
 # Usage:
-#   source scripts/jobscripts/paired_eval.sh
+#   source scripts/eval/custom_eval.sh
 #   paired_hooktheory
 #   paired_wikifonia
 #   paired_pop909
@@ -28,7 +28,7 @@ CHORD_OCTAVE=4    # octave for naive chord voicings
 #   cropped_songs/  legacy 256-frame (8-bar melody + 8-bar chord) crop
 #   full_songs/     whole songs, uncropped
 _paired_eval() {
-  python scripts/paired_chord_evaluation.py \
+  python realchords/utils/custom_evaluation.py \
     --midi_samples "$NUM_MIDIS" \
     --melody_octave "$MELODY_OCTAVE" \
     --chord_octave "$CHORD_OCTAVE" \

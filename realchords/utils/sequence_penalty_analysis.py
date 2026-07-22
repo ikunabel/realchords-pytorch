@@ -1,7 +1,7 @@
 """Shared helpers for rule-based penalty and harmony analysis on generated sequences.
 
-This module is the reusable core behind `scripts/analyze_sequence_penalties.py` and
-the combined `scripts/evaluate_generated_sequences.py` entry point. Keeping these
+This module is the reusable core behind `scripts/eval/analyze_sequence_penalties.py` and
+the combined `scripts/eval/evaluate_generated_sequences.py` entry point. Keeping these
 helpers inside the package (rather than in a sibling script) means other scripts
 and downstream users can import them without relying on the `scripts/` directory
 being on `sys.path`.

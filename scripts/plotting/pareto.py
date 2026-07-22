@@ -234,7 +234,7 @@ def plot_harmony_vs_diversity_one(
         warnings.warn(
             "No metrics in summary for requested variant(s): "
             + ", ".join(missing)
-            + ". Re-run evaluate_generated_sequences.py for those systems.",
+            + ". Re-run scripts/eval/evaluate_generated_sequences.py for those systems.",
             stacklevel=1,
         )
 
@@ -343,7 +343,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--summary",
         type=Path,
         default=Path("logs/eval/summary.json"),
-        help="Path to summary.json produced by evaluate_generated_sequences.py",
+        help="Path to summary.json produced by scripts/eval/evaluate_generated_sequences.py",
     )
     parser.add_argument(
         "--variant",

@@ -2,7 +2,7 @@
 # Evaluate generated sequence folders under logs/generated/.
 #
 # Usage:
-#   source scripts/jobscripts/evaluate_sequences_functions.sh
+#   source scripts/eval/evaluate_sequences_functions.sh
 #
 #   eval_all                              # all known systems that exist on disk
 #   eval_group melody_vs_mle melody_vs_gapt   # one or more named groups
@@ -11,8 +11,8 @@
 #   list_eval_systems                     # show registry + on-disk status
 #
 # Slurm:
-#   EVAL_GROUP=gapt_multiscale_batch sbatch scripts/jobscripts/submit_evaluate_sequences.sh
-#   EVAL_SYSTEMS='hooktheory_gt wikifonia_gt' sbatch scripts/jobscripts/submit_evaluate_sequences.sh
+#   EVAL_GROUP=gapt_multiscale_batch sbatch scripts/eval/submit_evaluate_sequences.sh
+#   EVAL_SYSTEMS='hooktheory_gt wikifonia_gt' sbatch scripts/eval/submit_evaluate_sequences.sh
 
 typeset -g RPROMPT="${RPROMPT-}"
 
@@ -140,7 +140,7 @@ eval_systems() {
     return 1
   fi
 
-  local -a cmd=(python scripts/evaluate_generated_sequences.py)
+  local -a cmd=(python scripts/eval/evaluate_generated_sequences.py)
   local name dir
   for name in "${ready[@]}"; do
     dir="$(_generated_system_dir "${name}")"

@@ -8,7 +8,7 @@ This script supports two input modes:
 2. Summary-derived groups: provide `--summary SUMMARY_JSON` together with one or
    more `--group_from_summary LABEL` arguments to load the source tensors listed
    for those systems in a summary JSON produced by
-   `scripts/evaluate_generated_sequences.py`.
+   `scripts/eval/evaluate_generated_sequences.py`.
 
 Example with direct folders:
     python scripts/plot_chord_embedding_tsne.py \
@@ -112,7 +112,7 @@ def parse_args() -> argparse.Namespace:
         "--summary",
         type=Path,
         default=None,
-        help="Summary JSON produced by scripts/evaluate_generated_sequences.py.",
+        help="Summary JSON produced by scripts/eval/evaluate_generated_sequences.py.",
     )
     parser.add_argument(
         "--group_from_summary",
