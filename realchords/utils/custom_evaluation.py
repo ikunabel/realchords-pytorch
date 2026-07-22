@@ -136,17 +136,12 @@ def _save_mode_per_frame(
     tensor: torch.Tensor,
     tokenizer,
     path: Path,
-    *,
-    scoring: str,
-    sigma: float,
 ) -> torch.Tensor:
     """Compute per-frame note-in-mode, save .pt, return per-sequence means [N]."""
     stripped = strip_bos(tensor, tokenizer)
     mode_fit = evaluate_melody_mode_fit_per_frame(
         stripped,
         tokenizer,
-        scoring=scoring,
-        sigma=sigma,
     )
     torch.save(mode_fit, path)
     return mode_fit["mean"]
@@ -609,18 +604,6 @@ def _parse_args() -> argparse.Namespace:
         help="Octave for naive chord-tone voicings (default: 4).",
     )
     parser.add_argument(
-        "--mode_scoring",
-        choices=("strict", "coverage", "distance"),
-        default="strict",
-        help="Per-frame note-in-mode scoring (default: strict).",
-    )
-    parser.add_argument(
-        "--mode_sigma",
-        type=float,
-        default=1.5,
-        help="Gaussian kernel width when --mode_scoring=distance.",
-    )
-    parser.add_argument(
         "--no_chord_bass",
         action="store_true",
         help="Omit the separate bass note from chord voicings (default for wjd).",
@@ -903,8 +886,6 @@ def _run_eval(
         gt_tensor,
         dataset_tokenizer,
         save_dir / "gt_mode_per_frame.pt",
-        scoring=args.mode_scoring,
-        sigma=args.mode_sigma,
     )
     print(f"  gt_mode_per_frame.pt  mean={gt_mode_means.nanmean().item():.4f}")
 
@@ -955,8 +936,6 @@ def _run_eval(
                 tensor,
                 model_tokenizer,
                 save_dir / f"{slug}_mode_per_frame.pt",
-                scoring=args.mode_scoring,
-                sigma=args.mode_sigma,
             )
             model_mode_means[label] = mode_means
             print(
