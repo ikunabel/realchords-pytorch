@@ -1,0 +1,1425 @@
+{
+  "table_of_contents": [
+    {
+      "title": "CLaMP 2: Multimodal Music Information Retrieval\nAcross 101 Languages Using Large Language Models",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          132.5064420531919,
+          68.80179939032237
+        ],
+        [
+          461.0638615298331,
+          68.80179939032237
+        ],
+        [
+          461.0638615298331,
+          103.36236572265625
+        ],
+        [
+          132.5064420531919,
+          103.36236572265625
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          154.86530263598078,
+          218.92797096096183
+        ],
+        [
+          202.6143831113724,
+          218.92797096096183
+        ],
+        [
+          202.6143831113724,
+          233.4747314453125
+        ],
+        [
+          154.86530263598078,
+          233.4747314453125
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          68.41997483875649,
+          522.818523729686
+        ],
+        [
+          154.24316052645818,
+          522.818523729686
+        ],
+        [
+          154.24316052645818,
+          538.1186218261719
+        ],
+        [
+          68.41997483875649,
+          538.1186218261719
+        ]
+      ]
+    },
+    {
+      "title": "2 Related Work",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          68.24790589455093,
+          420.86559471612725
+        ],
+        [
+          160.8748073625925,
+          420.86559471612725
+        ],
+        [
+          160.8748073625925,
+          436.0226135253906
+        ],
+        [
+          68.24790589455093,
+          436.0226135253906
+        ]
+      ]
+    },
+    {
+      "title": "2.1 Multilingual Language Models",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          68.25119883347519,
+          442.00237009892584
+        ],
+        [
+          240.57444382674748,
+          442.00237009892584
+        ],
+        [
+          240.57444382674748,
+          456.95098876953125
+        ],
+        [
+          68.25119883347519,
+          456.95098876953125
+        ]
+      ]
+    },
+    {
+      "title": "2.2 Applications of LLMs in Music",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          303.65088936063444,
+          309.48226105307003
+        ],
+        [
+          476.75483576777,
+          309.48226105307003
+        ],
+        [
+          476.75483576777,
+          323.80303955078125
+        ],
+        [
+          303.65088936063444,
+          323.80303955078125
+        ]
+      ]
+    },
+    {
+      "title": "3 CLaMP 2",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          68.21304082990594,
+          266.58150851079
+        ],
+        [
+          139.95651306613567,
+          266.58150851079
+        ],
+        [
+          139.95651306613567,
+          281.20367431640625
+        ],
+        [
+          68.21304082990594,
+          281.20367431640625
+        ]
+      ]
+    },
+    {
+      "title": "3.1 Contrastive Learning",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          68.06419426367925,
+          392.0458893066841
+        ],
+        [
+          196.43426406053212,
+          392.0458893066841
+        ],
+        [
+          196.43426406053212,
+          405.468994140625
+        ],
+        [
+          68.06419426367925,
+          405.468994140625
+        ]
+      ]
+    },
+    {
+      "title": "3.2 Multilingual Text Encoder",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          302.85004661425535,
+          267.71644832784324
+        ],
+        [
+          454.91757671058326,
+          267.71644832784324
+        ],
+        [
+          454.91757671058326,
+          280.9849853515625
+        ],
+        [
+          302.85004661425535,
+          280.9849853515625
+        ]
+      ]
+    },
+    {
+      "title": "3.3 Multimodal Music Encoder",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          303.1296085386492,
+          607.2097114705657
+        ],
+        [
+          459.9630692719812,
+          607.2097114705657
+        ],
+        [
+          459.9630692719812,
+          621.5559997558594
+        ],
+        [
+          303.1296085386492,
+          621.5559997558594
+        ]
+      ]
+    },
+    {
+      "title": "3.4 Data Sources",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          303.70435523506376,
+          250.9430395790433
+        ],
+        [
+          392.72471545625393,
+          250.9430395790433
+        ],
+        [
+          392.72471545625393,
+          264.6650390625
+        ],
+        [
+          303.70435523506376,
+          264.6650390625
+        ]
+      ]
+    },
+    {
+      "title": "3.5 LLM-Based Metadata Processing",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          69.33969554372638,
+          320.01634954111125
+        ],
+        [
+          252.96924919685728,
+          320.01634954111125
+        ],
+        [
+          252.96924919685728,
+          334.0700378417969
+        ],
+        [
+          69.33969554372638,
+          334.0700378417969
+        ]
+      ]
+    },
+    {
+      "title": "4 Experiments",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          303.32901746620155,
+          319.8230017970315
+        ],
+        [
+          390.27980852487406,
+          319.8230017970315
+        ],
+        [
+          390.27980852487406,
+          334.28863525390625
+        ],
+        [
+          303.32901746620155,
+          334.28863525390625
+        ]
+      ]
+    },
+    {
+      "title": "4.1 Settings",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          303.3853238583812,
+          344.66891911575436
+        ],
+        [
+          368.7880847075724,
+          344.66891911575436
+        ],
+        [
+          368.7880847075724,
+          358.7550048828125
+        ],
+        [
+          303.3853238583812,
+          358.7550048828125
+        ]
+      ]
+    },
+    {
+      "title": "4.2 Music Classification Across Modalities",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          68.58400328513657,
+          271.723528840769
+        ],
+        [
+          276.16528366434784,
+          271.723528840769
+        ],
+        [
+          276.16528366434784,
+          285.70501708984375
+        ],
+        [
+          68.58400328513657,
+          285.70501708984375
+        ]
+      ]
+    },
+    {
+      "title": "4.3 Semantic Search on Native English Data",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          68.98543831082975,
+          237.8393938942669
+        ],
+        [
+          284.43808544552894,
+          237.8393938942669
+        ],
+        [
+          284.43808544552894,
+          250.3900146484375
+        ],
+        [
+          68.98543831082975,
+          250.3900146484375
+        ]
+      ]
+    },
+    {
+      "title": "4.4 Semantic Search Across Multilingual Data",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          67.92731681458595,
+          70.63961546058009
+        ],
+        [
+          290.6439295079306,
+          70.63961546058009
+        ],
+        [
+          290.6439295079306,
+          84.21502685546875
+        ],
+        [
+          67.92731681458595,
+          84.21502685546875
+        ]
+      ]
+    },
+    {
+      "title": "5 Conclusions",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          303.4612618933997,
+          70.86838931646712
+        ],
+        [
+          386.6995649746143,
+          70.86838931646712
+        ],
+        [
+          386.6995649746143,
+          84.4337158203125
+        ],
+        [
+          303.4612618933997,
+          84.4337158203125
+        ]
+      ]
+    },
+    {
+      "title": "6 Excluded Approaches",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          303.3199232279203,
+          495.10495046749776
+        ],
+        [
+          436.81720201314545,
+          495.10495046749776
+        ],
+        [
+          436.81720201314545,
+          509.9886474609375
+        ],
+        [
+          303.3199232279203,
+          509.9886474609375
+        ]
+      ]
+    },
+    {
+      "title": "7 Limitations",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          67.67094863391944,
+          68.86109079172435
+        ],
+        [
+          148.6926857590375,
+          68.86109079172435
+        ],
+        [
+          148.6926857590375,
+          84.43365478515625
+        ],
+        [
+          67.67094863391944,
+          84.43365478515625
+        ]
+      ]
+    },
+    {
+      "title": "Core Contributors",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          68.00431431691052,
+          470.69270413025936
+        ],
+        [
+          166.22668641520386,
+          470.69270413025936
+        ],
+        [
+          166.22668641520386,
+          486.2976379394531
+        ],
+        [
+          68.00431431691052,
+          486.2976379394531
+        ]
+      ]
+    },
+    {
+      "title": "Contributors",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          67.65341301829147,
+          547.2043649430585
+        ],
+        [
+          138.4203198334432,
+          547.2043649430585
+        ],
+        [
+          138.4203198334432,
+          562.9806213378906
+        ],
+        [
+          67.65341301829147,
+          562.9806213378906
+        ]
+      ]
+    },
+    {
+      "title": "Correspondence",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          67.60916164599978,
+          736.8815679915335
+        ],
+        [
+          154.70382836483586,
+          736.8815679915335
+        ],
+        [
+          154.70382836483586,
+          752.9996109008789
+        ],
+        [
+          67.60916164599978,
+          752.9996109008789
+        ]
+      ]
+    },
+    {
+      "title": "Affiliations",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          303.1387485917329,
+          69.35817182478051
+        ],
+        [
+          363.1714419117502,
+          69.35817182478051
+        ],
+        [
+          363.1714419117502,
+          84.43365478515625
+        ],
+        [
+          303.1387485917329,
+          84.43365478515625
+        ]
+      ]
+    },
+    {
+      "title": "Acknowlegdements",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          303.3044607321021,
+          155.91303522886173
+        ],
+        [
+          405.4194932452377,
+          155.91303522886173
+        ],
+        [
+          405.4194932452377,
+          171.54266357421875
+        ],
+        [
+          303.3044607321021,
+          171.54266357421875
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          303.0932315855242,
+          364.25278033344
+        ],
+        [
+          362.08991477831785,
+          364.25278033344
+        ],
+        [
+          362.08991477831785,
+          379.9786071777344
+        ],
+        [
+          303.0932315855242,
+          379.9786071777344
+        ]
+      ]
+    },
+    {
+      "title": "A Interleaved ABC Notation",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          68.02663185254151,
+          431.9880094995269
+        ],
+        [
+          225.83405801691396,
+          431.9880094995269
+        ],
+        [
+          225.83405801691396,
+          447.1866149902344
+        ],
+        [
+          68.02663185254151,
+          447.1866149902344
+        ]
+      ]
+    },
+    {
+      "title": "B MIDI Text Format",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          303.1451626640723,
+          359.6911235751579
+        ],
+        [
+          422.0182877932147,
+          359.6911235751579
+        ],
+        [
+          422.0182877932147,
+          375.2746276855469
+        ],
+        [
+          303.1451626640723,
+          375.2746276855469
+        ]
+      ]
+    },
+    {
+      "title": "C Prompt and Text Examples",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          67.89184470380884,
+          69.30920565054019
+        ],
+        [
+          231.46050518045496,
+          69.30920565054019
+        ],
+        [
+          231.46050518045496,
+          84.43365478515625
+        ],
+        [
+          67.89184470380884,
+          84.43365478515625
+        ]
+      ]
+    },
+    {
+      "title": "System",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          385.8491047972095,
+          74.85122699686595
+        ],
+        [
+          431.37362463348154,
+          74.85122699686595
+        ],
+        [
+          431.37362463348154,
+          87.85333251953125
+        ],
+        [
+          385.8491047972095,
+          87.85333251953125
+        ]
+      ]
+    },
+    {
+      "title": "{\n\"title\": \"Brejeiro\",",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          349.0343017578125,
+          231.627685546875
+        ],
+        [
+          395.27294921875,
+          231.627685546875
+        ],
+        [
+          395.27294921875,
+          246.98199462890625
+        ],
+        [
+          349.0343017578125,
+          246.98199462890625
+        ]
+      ]
+    },
+    {
+      "title": "D t-SNE Visualizations of CLaMP 2\nRepresentations",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          67.63065451518715,
+          69.30617958673493
+        ],
+        [
+          263.5583328516117,
+          69.30617958673493
+        ],
+        [
+          263.5583328516117,
+          98.38165283203125
+        ],
+        [
+          67.63065451518715,
+          98.38165283203125
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          215
+        ],
+        [
+          "Line",
+          91
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          262
+        ],
+        [
+          "Line",
+          101
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          219
+        ],
+        [
+          "Line",
+          97
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Diagram",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          256
+        ],
+        [
+          "Line",
+          123
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Footnote",
+          2
+        ],
+        [
+          "Reference",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          223
+        ],
+        [
+          "Line",
+          144
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          225
+        ],
+        [
+          "Line",
+          85
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "ListItem",
+          5
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          266
+        ],
+        [
+          "Line",
+          116
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          192
+        ],
+        [
+          "Line",
+          103
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          244
+        ],
+        [
+          "Line",
+          100
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "Reference",
+          8
+        ],
+        [
+          "SectionHeader",
+          7
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Footnote",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          288
+        ],
+        [
+          "Line",
+          113
+        ],
+        [
+          "Reference",
+          17
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          297
+        ],
+        [
+          "Line",
+          108
+        ],
+        [
+          "Reference",
+          20
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          110
+        ],
+        [
+          "Line",
+          42
+        ],
+        [
+          "Reference",
+          6
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Text",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          213
+        ],
+        [
+          "Line",
+          110
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Diagram",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          183
+        ],
+        [
+          "Line",
+          91
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Text",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          315
+        ],
+        [
+          "Line",
+          127
+        ],
+        [
+          "Text",
+          18
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Picture",
+          3
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          437
+        ],
+        [
+          "Line",
+          59
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 16,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          178
+        ],
+        [
+          "Line",
+          87
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Figure",
+          3
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "FigureGroup",
+          3
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/clamp2_paper"
+}

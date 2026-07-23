@@ -20,7 +20,7 @@
 #   gt/wjd_all/cropped_songs,  gt/wjd_all/full_songs
 #
 _PAIRED_GT_DIR="logs/paired_eval/gt"
-NUM_MIDIS=50      # -1 = export all sequences
+NUM_MIDIS=-1      # -1 = export all sequences
 MELODY_OCTAVE=0   # offset added to stored melody octaves in MIDI export
 CHORD_OCTAVE=4    # octave for naive chord voicings
 
@@ -107,7 +107,7 @@ paired_nottingham() {
 # ---------------------------------------------------------------------------
 
 GT_BATCH_SIZE=64
-GT_NUM_BATCHES=5
+GT_NUM_BATCHES=-1  # -1 = iterate the full dataloader (all songs)
 
 paired_gt_hooktheory() {
   _paired_eval \

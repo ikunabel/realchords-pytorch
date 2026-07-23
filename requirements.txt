@@ -13,6 +13,7 @@ scikit-learn
 seaborn
 pqdm
 vendi-score
+frechet_music_distance  # CLaMP2 wrapper (embedding pilot, scripts/eval/embed_midi_clamp2.py)
 rapidfuzz
 pyyaml
 note_seq
