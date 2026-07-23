@@ -152,6 +152,9 @@ class WeightedJointDataset(Dataset):
             "wikifonia": os.path.join(CACHE_DIR, "wikifonia"),
             "jazzmus": os.path.join(CACHE_DIR, "jazzmus"),
             "wjd": os.path.join(CACHE_DIR, "wjd"),
+            "chord_melody_dataset": os.path.join(CACHE_DIR, "chord_melody_dataset"),
+            "emopia_plus": os.path.join(CACHE_DIR, "emopia_plus"),
+            "filobass": os.path.join(CACHE_DIR, "filobass"),
         }
 
         # Load individual datasets

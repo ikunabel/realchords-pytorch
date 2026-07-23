@@ -25,8 +25,12 @@ Usage:
         --dataset_split test \
         --save_dir logs/paired_eval/gt/hooktheory
 
+MIDI export is a separate step -- see scripts/eval/export_paired_midis.py,
+which reads this script's saved tensors/metadata and writes MIDI without
+re-running generation or metrics.
+
 Every run produces two variants under --save_dir, each with its own full set
-of outputs (gt.pt, {slug}.pt, midi/, etc.):
+of outputs (gt.pt, {slug}.pt, etc.):
     <save_dir>/cropped_songs/   legacy 256-frame (8-bar melody + 8-bar chord)
                                 random crop, aligned to a chord onset
     <save_dir>/full_songs/      whole songs, uncropped (sized to the longest
@@ -72,7 +76,8 @@ Outputs (all in --save_dir):
                                        comparisons (sync EMD, chord-type JS distance) -- see
                                        realchords/utils/eval_utils.py
     chord_names_augmented.json        vocab snapshot for downstream decoding
-    midi/                             GT-only: 10 random sanity-check MIDIs (see --midi_samples)
+    model_labels.json                 {label: slug} map + dataset_name, for
+                                       scripts/eval/export_paired_midis.py
 """
 
 from __future__ import annotations
@@ -80,13 +85,10 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import random
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import pretty_midi
-import note_seq.chord_symbols_lib as _chord_lib
 import types
 
 import torch
@@ -94,7 +96,6 @@ from lightning import seed_everything
 from tqdm import tqdm
 
 from realchords.constants import FRAME_PER_BEAT
-from realchords.dataset.hooktheory_tokenizer import to_midi_pitch
 from realchords.lit_module.decoder_only import LitDecoder
 from realchords.utils.eval_utils import (
     chord_type_distribution,
@@ -244,6 +245,12 @@ def _nanmean(tensor: torch.Tensor) -> float:
     return float(tensor.float().nanmean().item())
 
 
+def _nansum(tensor: torch.Tensor) -> float:
+    if tensor.numel() == 0:
+        return 0.0
+    return float(tensor.float().nansum().item())
+
+
 def _save_mean_metrics(
     tensor: torch.Tensor,
     tokenizer,
@@ -297,6 +304,7 @@ def _save_mean_metrics(
         "chord_silence_ratio_mean": _nanmean(chord_silence),
         "melody_silence_ratio_mean": _nanmean(melody_silence),
         "num_frames_mean": _nanmean(num_frames),
+        "num_frames_total": _nansum(num_frames),
         "chord_complexity_mean": _nanmean(complexity["mean"]),
         "sync_intervals_flat": sync["intervals_flat"],
         "chord_durations_flat": chord_durations["durations_flat"],
@@ -357,231 +365,6 @@ def _fmt_metric(value: Optional[float]) -> Optional[float]:
 
 
 # ---------------------------------------------------------------------------
-# MIDI rendering constants and helpers
-# ---------------------------------------------------------------------------
-
-_CHORD_OCTAVE   = 4   # default chord-tone octave (MIDI 48–59)
-_BASS_OCTAVE    = 3   # bass note one octave below chord root voicing
-_MELODY_VEL     = 90
-_CHORD_VEL      = 64
-
-
-def _dedup(pitches: List[int]) -> List[int]:
-    seen: set = set()
-    out = []
-    for p in pitches:
-        if p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
-
-
-def _naive_pitches(
-    chord_name: str,
-    *,
-    include_bass: bool = True,
-    chord_octave: int = _CHORD_OCTAVE,
-) -> List[int]:
-    chord_pcs = _chord_lib.chord_symbol_pitches(chord_name)
-    pitches = [p % 12 + chord_octave * 12 for p in chord_pcs]
-    if include_bass:
-        bass_pc = _chord_lib.chord_symbol_bass(chord_name) % 12
-        pitches.append(bass_pc + _BASS_OCTAVE * 12)
-    return _dedup(pitches)
-
-
-def _lenient_decode_chord_frames(chord_frames, tokenizer):
-    """Decode chord frames leniently: only CHORD_ON tokens start a chord.
-
-    Unlike ``tokenizer.decode_chord_frames``, this never raises for
-    hold-only transitions or crops that start mid-chord.  Hold tokens
-    that don't belong to the current ongoing chord are simply skipped,
-    so the output starts cleanly from the first genuine chord onset.
-    """
-    fpb = tokenizer.frame_per_beat
-    chords = []
-    ongoing = None
-    for i, tok in enumerate(chord_frames):
-        name = tokenizer.id_to_name.get(int(tok), "")
-        if "CHORD_ON_" in name:
-            if ongoing is not None:
-                ongoing["offset"] = i / fpb
-                chords.append(ongoing)
-            ongoing = {
-                "chord_name": name[len("CHORD_ON_"):],
-                "onset": i / fpb,
-            }
-        elif name == "SILENCE" and ongoing is not None:
-            ongoing["offset"] = i / fpb
-            chords.append(ongoing)
-            ongoing = None
-        # CHORD_HOLD tokens for a different chord, PAD, BOS, EOS → silently skip
-    if ongoing is not None:
-        ongoing["offset"] = len(chord_frames) / fpb
-        chords.append(ongoing)
-    return chords
-
-
-def _decode_chord_anns(chord_frames, tokenizer, *, strict: bool):
-    """Decode chord frames, using strict tokenizer decode when possible."""
-    if strict:
-        try:
-            return tokenizer.decode_chord_frames(chord_frames)
-        except ValueError:
-            pass
-    return _lenient_decode_chord_frames(chord_frames, tokenizer)
-
-
-def _append_section(
-    seq: torch.Tensor,          # 1-D, BOS already stripped
-    tokenizer,
-    spb: float,
-    t0: float,
-    label: str,
-    melody_instr: pretty_midi.Instrument,
-    chord_instr: pretty_midi.Instrument,
-    midi_obj: pretty_midi.PrettyMIDI,
-    *,
-    strict_chords: bool = False,
-    include_chord_bass: bool = True,
-    chord_octave: int = _CHORD_OCTAVE,
-    melody_octave: int = 0,
-) -> float:
-    """Render one section (melody + chords) into instruments.  Returns section duration (s)."""
-    chord_frames = seq[0::2].numpy()
-    melody_frames = seq[1::2].numpy()
-
-    chord_anns = _decode_chord_anns(chord_frames, tokenizer, strict=strict_chords)
-    try:
-        melody_anns = tokenizer.decode_melody_frames(melody_frames)
-    except ValueError:
-        melody_anns = []
-
-    for note in melody_anns:
-        melody_instr.notes.append(pretty_midi.Note(
-            velocity=_MELODY_VEL,
-            pitch=to_midi_pitch(note["octave"] + melody_octave, note["pitch_class"]),
-            start=note["onset"] * spb + t0,
-            end=note["offset"] * spb + t0,
-        ))
-
-    for chord in chord_anns:
-        for p in _naive_pitches(
-            chord["chord_name"],
-            include_bass=include_chord_bass,
-            chord_octave=chord_octave,
-        ):
-            chord_instr.notes.append(pretty_midi.Note(
-                velocity=_CHORD_VEL,
-                pitch=max(0, min(127, p)),
-                start=chord["onset"] * spb + t0,
-                end=chord["offset"] * spb + t0,
-            ))
-        midi_obj.lyrics.append(pretty_midi.Lyric(
-            text=chord["chord_name"],
-            time=chord["onset"] * spb + t0,
-        ))
-
-    all_offsets = [c["offset"] for c in chord_anns] + [m["offset"] for m in melody_anns]
-    return max(all_offsets) * spb if all_offsets else 0.0
-
-
-def _select_midi_indices(
-    num_sequences: int,
-    midi_samples: Optional[int],
-    *,
-    gt_only: bool,
-    seed: int,
-) -> List[int]:
-    """Pick which sequence indices to export as MIDI."""
-    if num_sequences <= 0:
-        return []
-    if midi_samples is None:
-        target = 10 if gt_only else num_sequences
-    elif midi_samples < 0:
-        target = num_sequences
-    else:
-        target = midi_samples
-    target = min(target, num_sequences)
-    if target >= num_sequences:
-        return list(range(num_sequences))
-    rng = random.Random(seed)
-    return sorted(rng.sample(range(num_sequences), target))
-
-
-def write_paired_midis(
-    gt_tensor: torch.Tensor,
-    model_tensors: Dict[str, torch.Tensor],
-    ordered_labels: List[str],
-    metadata: List[Dict],
-    gt_tokenizer,
-    model_tokenizer,
-    midi_dir: Path,
-    bpm: int = 120,
-    pause_bars: float = 0.5,
-    indices: Optional[List[int]] = None,
-    include_chord_bass: bool = True,
-    chord_octave: int = _CHORD_OCTAVE,
-    melody_octave: int = 0,
-) -> None:
-    """Write one MIDI file per song.
-
-    Layout:
-        [GT melody + GT chords]
-        [pause]
-        [GT melody + Model-A chords]
-        [pause]
-        [GT melody + Model-B chords]  …
-
-    The melody track is identical in every section (GT melody used as
-    conditioning for all models).  Naive fixed-octave voicings are used
-    throughout so the only difference between sections is the chord symbols.
-    """
-    midi_dir.mkdir(parents=True, exist_ok=True)
-    spb       = 60.0 / bpm
-    pause_sec = pause_bars * 4 * spb  # 4 beats per bar
-
-    export_indices = indices if indices is not None else list(range(gt_tensor.size(0)))
-    for out_idx, i in enumerate(tqdm(export_indices, desc="Writing MIDIs")):
-        midi_obj     = pretty_midi.PrettyMIDI(initial_tempo=float(bpm))
-        melody_instr = pretty_midi.Instrument(program=0, name="Melody")
-        chord_instr  = pretty_midi.Instrument(program=0, name="Chords")
-
-        t_cursor = 0.0
-
-        # GT section: decode with the dataset vocab that encoded gt.pt
-        gt_seq = gt_tensor[i, 1:]
-        dur = _append_section(
-            gt_seq, gt_tokenizer, spb, t_cursor, "GT",
-            melody_instr, chord_instr, midi_obj, strict_chords=True,
-            include_chord_bass=include_chord_bass,
-            chord_octave=chord_octave,
-            melody_octave=melody_octave,
-        )
-        t_cursor += dur + pause_sec
-
-        # Model sections: decode with the model checkpoint vocab
-        for label in ordered_labels:
-            model_seq = model_tensors[label][i, 1:]
-            dur = _append_section(
-                model_seq, model_tokenizer, spb, t_cursor, label,
-                melody_instr, chord_instr, midi_obj, strict_chords=False,
-                include_chord_bass=include_chord_bass,
-                chord_octave=chord_octave,
-                melody_octave=melody_octave,
-            )
-            t_cursor += dur + pause_sec
-
-        midi_obj.instruments.extend([melody_instr, chord_instr])
-
-        song_url = metadata[i].get("song_url", "unknown")
-        safe     = re.sub(r"[^a-zA-Z0-9_-]", "_", song_url)[-60:]
-        midi_obj.write(str(midi_dir / f"{out_idx:04d}_seq{i:04d}_{safe}.mid"))
-
-    print(f"  Wrote {len(export_indices)} MIDI files to {midi_dir}")
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -634,60 +417,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto")
-    parser.add_argument(
-        "--midi_dir",
-        type=Path,
-        default=None,
-        metavar="PATH",
-        help="Directory for MIDI output. Defaults to <save_dir>/midi.",
-    )
-    parser.add_argument(
-        "--midi_samples",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Export N randomly chosen sequences as MIDI (seeded by --seed). "
-             "Default: 10 for --gt_only, all sequences otherwise. Use -1 for all.",
-    )
-    parser.add_argument(
-        "--bpm", type=int, default=120,
-        help="Tempo for MIDI rendering (default: 120).",
-    )
-    parser.add_argument(
-        "--pause_bars", type=float, default=0.5,
-        help="Silence between sections in bars (default: 0.5).",
-    )
-    parser.add_argument(
-        "--melody_octave",
-        type=int,
-        default=0,
-        help="Offset added to each melody note's stored octave for MIDI export.",
-    )
-    parser.add_argument(
-        "--chord_octave",
-        type=int,
-        default=_CHORD_OCTAVE,
-        help="Octave for naive chord-tone voicings (default: 4).",
-    )
-    parser.add_argument(
-        "--no_chord_bass",
-        action="store_true",
-        help="Omit the separate bass note from chord voicings (default for wjd).",
-    )
-    parser.add_argument(
-        "--include_chord_bass",
-        action="store_true",
-        help="Force the separate chord bass note even for wjd.",
-    )
     return parser.parse_args()
-
-
-def _resolve_include_chord_bass(args: argparse.Namespace) -> bool:
-    if args.include_chord_bass:
-        return True
-    if args.no_chord_bass:
-        return False
-    return args.dataset_name != "wjd"
 
 
 def _validate_args(args: argparse.Namespace) -> None:
@@ -981,7 +711,10 @@ def _run_eval(
         f"chord={gt_means['chord_silence_ratio_mean']:.4f} "
         f"melody={gt_means['melody_silence_ratio_mean']:.4f}"
     )
-    print(f"  gt_num_frames.pt  mean={gt_means['num_frames_mean']:.1f}")
+    print(
+        f"  gt_num_frames.pt  mean={gt_means['num_frames_mean']:.1f} "
+        f"total={gt_means['num_frames_total']:.0f}"
+    )
     print("  gt_sync_intervals.pt")
     print(f"  gt_chord_complexity.pt  mean={gt_means['chord_complexity_mean']:.4f}")
 
@@ -1029,7 +762,10 @@ def _run_eval(
                 f"chord={model_means['chord_silence_ratio_mean']:.4f} "
                 f"melody={model_means['melody_silence_ratio_mean']:.4f}"
             )
-            print(f"  {slug}_num_frames.pt  mean={model_means['num_frames_mean']:.1f}")
+            print(
+                f"  {slug}_num_frames.pt  mean={model_means['num_frames_mean']:.1f} "
+                f"total={model_means['num_frames_total']:.0f}"
+            )
             print(f"  {slug}_sync_intervals.pt")
             print(f"  {slug}_chord_complexity.pt  mean={model_means['chord_complexity_mean']:.4f}")
 
@@ -1041,6 +777,7 @@ def _run_eval(
             "chord_silence_ratio_mean": _fmt_metric(gt_means["chord_silence_ratio_mean"]),
             "melody_silence_ratio_mean": _fmt_metric(gt_means["melody_silence_ratio_mean"]),
             "num_frames_mean": _fmt_metric(gt_means["num_frames_mean"]),
+            "num_frames_total": _fmt_metric(gt_means["num_frames_total"]),
             "note_in_chord_ratio_mean": _fmt_metric(gt_nicr_pooled),
             "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(gt_nicr_means)),
             "note_in_mode_ratio_mean": _fmt_metric(gt_mode_pooled),
@@ -1058,6 +795,7 @@ def _run_eval(
             "chord_silence_ratio_mean": _fmt_metric(model_means["chord_silence_ratio_mean"]),
             "melody_silence_ratio_mean": _fmt_metric(model_means["melody_silence_ratio_mean"]),
             "num_frames_mean": _fmt_metric(model_means["num_frames_mean"]),
+            "num_frames_total": _fmt_metric(model_means["num_frames_total"]),
             "note_in_chord_ratio_mean": _fmt_metric(model_nicr_pooled[label]),
             "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(model_nicr_means[label])),
             "note_in_mode_ratio_mean": _fmt_metric(model_mode_pooled[label]),
@@ -1096,44 +834,21 @@ def _run_eval(
     snapshot = save_vocab_snapshot(str(save_dir))
     print(f"  vocab snapshot → {snapshot}")
 
-    # ---- MIDI output --------------------------------------------------------
-    # If the caller passed an explicit --midi_dir, nest it per run_label so
-    # the cropped_songs/full_songs variants don't overwrite each other.
-    midi_dir = (args.midi_dir / run_label) if args.midi_dir is not None else save_dir / "midi"
-    ordered_labels = [label for label, _ in model_specs]
-    model_tensors = {
-        label: torch.cat(model_rows[label], dim=0) for label in ordered_labels
-    } if not args.gt_only else {}
-    midi_indices = _select_midi_indices(
-        gt_tensor.size(0),
-        args.midi_samples,
-        gt_only=args.gt_only,
-        seed=args.seed,
-    )
-
-    print(f"\nWriting MIDI files to {midi_dir} …")
-    include_chord_bass = _resolve_include_chord_bass(args)
-    write_paired_midis(
-        gt_tensor=gt_tensor,
-        model_tensors=model_tensors,
-        ordered_labels=ordered_labels,
-        metadata=metadata,
-        gt_tokenizer=dataset_tokenizer,
-        model_tokenizer=model_tokenizer or dataset_tokenizer,
-        midi_dir=midi_dir,
-        bpm=args.bpm,
-        pause_bars=args.pause_bars,
-        indices=midi_indices,
-        include_chord_bass=include_chord_bass,
-        chord_octave=args.chord_octave,
-        melody_octave=args.melody_octave,
-    )
+    # Label→slug mapping (and dataset_name) so scripts/eval/export_paired_midis.py
+    # can find each model's {slug}.pt without re-running generation.
+    model_labels_path = save_dir / "model_labels.json"
+    with model_labels_path.open("w", encoding="utf-8") as fh:
+        json.dump(
+            {
+                "dataset_name": args.dataset_name,
+                "labels": {label: _slugify(label) for label, _ in model_specs},
+            },
+            fh,
+            indent=2,
+        )
+    print(f"  model_labels.json  ({model_labels_path})")
 
     print(f"\nDone with {run_label}.")
-    if not args.gt_only:
-        print("Model labels saved:")
-        for label, _ in model_specs:
-            print(f"  {label}  →  {_slugify(label)}.pt")
 
 
 def main() -> None:

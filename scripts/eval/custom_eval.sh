@@ -14,6 +14,11 @@
 #   paired_gt_all
 #   paired_gt_hooktheory
 #
+# MIDI export is a separate step (realchords/utils/custom_evaluation.py no
+# longer writes MIDI itself — see scripts/eval/export_paired_midis.py):
+#   paired_gt_midi_all
+#   paired_gt_midi_hooktheory
+#
 # --save_dir is suffixed with the dataset split (e.g. "wjd_test", "wjd_all")
 # so cropped_songs/ and full_songs/ from different splits never collide:
 #   gt/wjd_test/cropped_songs, gt/wjd_test/full_songs
@@ -28,11 +33,21 @@ CHORD_OCTAVE=4    # octave for naive chord voicings
 #   cropped_songs/  legacy 256-frame (8-bar melody + 8-bar chord) crop
 #   full_songs/     whole songs, uncropped
 _paired_eval() {
-  python realchords/utils/custom_evaluation.py \
-    --midi_samples "$NUM_MIDIS" \
-    --melody_octave "$MELODY_OCTAVE" \
-    --chord_octave "$CHORD_OCTAVE" \
-    "$@"
+  python realchords/utils/custom_evaluation.py "$@"
+}
+
+# Writes MIDI for an already-evaluated --save_dir (both cropped_songs/ and
+# full_songs/ subdirs), reading the tensors/metadata custom_evaluation.py
+# already saved -- no re-generation, no metrics recomputation.
+_export_midi() {
+  local save_dir_root="$1"
+  for mode in cropped_songs full_songs; do
+    python scripts/eval/export_paired_midis.py \
+      --save_dir "$save_dir_root/$mode" \
+      --midi_samples "$NUM_MIDIS" \
+      --melody_octave "$MELODY_OCTAVE" \
+      --chord_octave "$CHORD_OCTAVE"
+  done
 }
 
 # --base_model: the MLE chord Lightning checkpoint (.ckpt).
@@ -165,7 +180,7 @@ paired_gt_jazzmus() {
 }
 
 paired_gt_wjd() {
-  CHORD_OCTAVE=5 _paired_eval \
+  _paired_eval \
     --gt_only \
     --dataset_name  wjd \
     --dataset_split all \
@@ -198,7 +213,7 @@ paired_gt_emopia_plus() {
 }
 
 paired_gt_filobass() {
-  CHORD_OCTAVE=5 _paired_eval \
+  _paired_eval \
     --gt_only \
     --dataset_name  filobass \
     --dataset_split all \
@@ -218,4 +233,31 @@ paired_gt_all() {
   paired_gt_chord_melody_dataset
   paired_gt_emopia_plus
   paired_gt_filobass
+}
+
+# ---------------------------------------------------------------------------
+# MIDI export (separate from metrics -- see scripts/eval/export_paired_midis.py)
+# wjd/filobass use a higher CHORD_OCTAVE (5) for their naive chord voicings.
+# ---------------------------------------------------------------------------
+
+paired_gt_midi_hooktheory()          { _export_midi "$_PAIRED_GT_DIR/hooktheory_all"; }
+paired_gt_midi_wikifonia()           { _export_midi "$_PAIRED_GT_DIR/wikifonia_all"; }
+paired_gt_midi_pop909()              { _export_midi "$_PAIRED_GT_DIR/pop909_all"; }
+paired_gt_midi_nottingham()          { _export_midi "$_PAIRED_GT_DIR/nottingham_all"; }
+paired_gt_midi_jazzmus()             { _export_midi "$_PAIRED_GT_DIR/jazzmus_all"; }
+paired_gt_midi_wjd()                 { CHORD_OCTAVE=5 _export_midi "$_PAIRED_GT_DIR/wjd_all"; }
+paired_gt_midi_chord_melody_dataset(){ _export_midi "$_PAIRED_GT_DIR/chord_melody_dataset_all"; }
+paired_gt_midi_emopia_plus()         { _export_midi "$_PAIRED_GT_DIR/emopia_plus_all"; }
+paired_gt_midi_filobass()            { CHORD_OCTAVE=5 _export_midi "$_PAIRED_GT_DIR/filobass_all"; }
+
+paired_gt_midi_all() {
+  paired_gt_midi_hooktheory
+  paired_gt_midi_wikifonia
+  paired_gt_midi_pop909
+  paired_gt_midi_nottingham
+  paired_gt_midi_jazzmus
+  paired_gt_midi_wjd
+  paired_gt_midi_chord_melody_dataset
+  paired_gt_midi_emopia_plus
+  paired_gt_midi_filobass
 }
