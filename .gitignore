@@ -100,5 +100,7 @@ scripts/to_midi/output/
 tests/test_cache/output/
 
 # Journal
-
 journal/
+
+# Synced files
+rsync.sh
