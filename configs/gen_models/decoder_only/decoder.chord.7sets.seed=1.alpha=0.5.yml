@@ -28,9 +28,15 @@ model_part: "chord"
 model_type: "decoder_only"
 max_len: 512
 
-
+# alpha=0.5 -> sqrt temperature-scaled sampling weights, computed at runtime from
+# data/cache/dataset_frame_counts.json via
+# realchords.dataset.dataset_weights.compute_alpha_weights. Baseline for comparison
+# is the sibling *.uniform.weights.yml config (alpha=0.0). alpha=1.0 would be pure
+# proportional-to-size (hooktheory would dominate at ~66%, jazzmus ~2%); alpha=0.5
+# is a middle ground (standard "temperature sampling", as in mT5/XLM-R) that still
+# favors bigger datasets but keeps small ones from being drowned out.
 datasets: ["hooktheory", "pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
-weights: [0.16, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]
+alpha: 0.5
 data_augmentation: true
 
 # Optimizer hyperparameters

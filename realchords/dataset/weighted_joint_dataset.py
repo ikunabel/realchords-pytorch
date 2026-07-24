@@ -27,6 +27,10 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 # Add ReaLchords to path
 sys.path.append(str(Path(__file__).parent.parent))
 from realchords.dataset.hooktheory_dataloader import HooktheoryDataset
+from realchords.dataset.dataset_weights import (
+    compute_alpha_weights,
+    DEFAULT_FRAME_COUNTS_PATH,
+)
 from realchords.constants import CACHE_DIR, DATA_PATH, FRAME_PER_BEAT
 
 
@@ -88,6 +92,8 @@ class WeightedJointDataset(Dataset):
         datasets: List[str] = ["pop909", "nottingham"],
         chord_names_path: str = None,
         weights: Optional[List[float]] = None,
+        alpha: Optional[float] = None,
+        frame_counts_path: str = DEFAULT_FRAME_COUNTS_PATH,
         split: str = "train",
         data_augmentation: bool = True,
         max_len: int = 512,
@@ -108,7 +114,13 @@ class WeightedJointDataset(Dataset):
             datasets (List[str]): List of datasets to include
             chord_names_path (str): Path to chord names file
             weights (List[float], optional): Sampling weights for each dataset.
-                If None, uses equal weights. Must sum to 1.0.
+                Must sum to 1.0. Takes precedence over `alpha` if both are given.
+            alpha (float, optional): If `weights` is None, compute weights as
+                effective_frames_i ** alpha (normalized) from `frame_counts_path`.
+                alpha=1.0 is proportional to dataset size, alpha=0.0 is uniform.
+                If both `weights` and `alpha` are None, uses equal weights.
+            frame_counts_path (str): Path to the per-dataset frame counts JSON
+                used to compute weights when `alpha` is given.
             split (str): Data split to use
             data_augmentation (bool): Enable data augmentation
             max_len (int): Maximum sequence length
@@ -121,6 +133,7 @@ class WeightedJointDataset(Dataset):
             num_workers (int): Number of workers for data loading
         """
         self.datasets = datasets
+        self.alpha = alpha
         self.split = split
         self.data_augmentation = data_augmentation
         self.seed = seed
@@ -130,8 +143,10 @@ class WeightedJointDataset(Dataset):
         self.max_train_samples = max_train_samples
         self.sampler_chunk_size = sampler_chunk_size
 
-        # Set default equal weights if not provided
-        if weights is None:
+        # Resolve sampling weights: explicit weights > alpha-derived > equal
+        if weights is None and alpha is not None:
+            weights = compute_alpha_weights(datasets, alpha, frame_counts_path)
+        elif weights is None:
             weights = [1.0 / len(datasets)] * len(datasets)
 
         if len(weights) != len(datasets):
@@ -561,6 +576,8 @@ class WeightedJointDataset(Dataset):
 def create_weighted_joint_dataset(
     datasets: List[str] = ["hooktheory"],
     weights: Optional[List[float]] = None,
+    alpha: Optional[float] = None,
+    frame_counts_path: str = DEFAULT_FRAME_COUNTS_PATH,
     chord_names_path: str = None,
     split: str = "train",
     data_augmentation: bool = True,
@@ -581,6 +598,9 @@ def create_weighted_joint_dataset(
     Args:
         datasets (List[str]): List of datasets to include
         weights (List[float], optional): Sampling weights for each dataset
+        alpha (float, optional): If `weights` is None, derive weights as
+            effective_frames_i ** alpha (normalized) from `frame_counts_path`
+        frame_counts_path (str): Path to per-dataset frame counts JSON
         chord_names_path (str): Path to chord names file
         split (str): Data split to use ('train', 'valid', 'test')
         data_augmentation (bool): Enable data augmentation
@@ -609,6 +629,8 @@ def create_weighted_joint_dataset(
     return WeightedJointDataset(
         datasets=datasets,
         weights=weights,
+        alpha=alpha,
+        frame_counts_path=frame_counts_path,
         chord_names_path=chord_names_path,
         split=split,
         data_augmentation=data_augmentation,

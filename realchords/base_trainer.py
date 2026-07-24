@@ -193,12 +193,30 @@ class BaseLightningModel(L.LightningModule):
         """
         pass
 
+    def _register_dataset_info(self, train_dataset):
+        """Stash the train dataset's resolved per-dataset sampling info for later
+        logging (see `on_train_start`). `train_dataset.dataset_info` already holds
+        the actual weight used per dataset, whether it came from an explicit
+        `weights` list, `alpha`-derived scaling, or the equal-weight default.
+        `train_dataset.alpha` is the raw alpha passed in (None if not used).
+        """
+        self._dataset_info = getattr(train_dataset, "dataset_info", None)
+        self._dataset_alpha = getattr(train_dataset, "alpha", None)
+
     def on_train_start(self):
         """
         Hook that is called at the very beginning of training (before any epochs).
         You can set up things like timers, experiment tracking, etc. here.
         """
-        pass
+        if getattr(self, "_dataset_info", None):
+            resolved_weights = {
+                f"dataset_weights/{info['name']}": info["weight"]
+                for info in self._dataset_info
+            }
+            resolved_weights["dataset_weights/alpha"] = self._dataset_alpha
+            self.logger.experiment.config.update(
+                resolved_weights, allow_val_change=True
+            )
 
     def on_train_end(self):
         """

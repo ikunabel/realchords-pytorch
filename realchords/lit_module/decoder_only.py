@@ -43,6 +43,7 @@ class LitDecoder(BaseLightningModel):
         val_dataset = create_weighted_joint_dataset(split="valid")
         self.train_dataloader = get_dataloader(train_dataset)
         self.val_dataloader = get_dataloader(val_dataset, shuffle=False)
+        self._register_dataset_info(train_dataset)
 
         self.sample_interval = sample_interval
         self.max_log_examples = max_log_examples
