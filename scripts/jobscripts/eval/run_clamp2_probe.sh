@@ -21,4 +21,4 @@ srun python scripts/eval/clamp2_dataset_probe.py \
   --gt_root logs/paired_eval/gt \
   --split_mode full_songs \
   --out_dir logs/paired_eval/clamp2_probe_full \
-  "$@"
+  --max_per_dataset 100 \

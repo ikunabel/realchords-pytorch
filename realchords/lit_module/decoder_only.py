@@ -14,6 +14,7 @@ from realchords.dataset.weighted_joint_dataset import (
     get_dataloader,
 )
 from realchords.utils.logging_utils import logger
+from realchords.utils.loss_utils import per_sample_cross_entropy
 
 from functools import partial
 
@@ -35,6 +36,7 @@ class LitDecoder(BaseLightningModel):
         sample_interval: int = 1000,
         max_log_examples: int = 8,
         disable_midi_logging: bool = False,
+        warmup_steps: int = 1000,
     ):
         super(LitDecoder, self).__init__()
 
@@ -46,6 +48,7 @@ class LitDecoder(BaseLightningModel):
         self._register_dataset_info(train_dataset)
 
         self.sample_interval = sample_interval
+        self.warmup_steps = warmup_steps
         self.max_log_examples = max_log_examples
         self.disable_midi_logging = disable_midi_logging
         tokenizer = train_dataset.tokenizer
@@ -118,6 +121,9 @@ class LitDecoder(BaseLightningModel):
 
         # Log validation loss (step-based logging)
         self._log_dict({"val/loss": loss, "val/acc": acc})
+
+        per_sample_loss = per_sample_cross_entropy(output, targets, self.pad_token)
+        self._log_per_dataset_loss(per_sample_loss, batch["dataset_name"])
 
         # Sample from model and log them
         # Only sample for the first validation batch
@@ -226,4 +232,6 @@ class LitDecoder(BaseLightningModel):
         Configures and returns the optimizer(s).
         """
         optimizer = AdamW(filter(lambda p: p.requires_grad, self.parameters()))
-        return optimizer
+        return self._configure_optimizer_with_schedule(
+            optimizer, warmup_steps=self.warmup_steps
+        )

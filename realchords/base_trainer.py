@@ -25,6 +25,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.utilities import grad_norm
 
 from realchords.utils.log_utils import midi_to_audio_image
+from realchords.utils.lr_scheduler import LinearWarmupCosineDecay
 from realchords.constants import MIDI_SYNTH_SR, LOG_WANDB_MIDI_IMAGE
 
 
@@ -53,6 +54,8 @@ class Trainer:
         # Logging args
         wandb_project: str = "realchords",
         log_every_n_steps: int = 1,
+        auto_export_wandb: bool = True,
+        wandb_export_dir: str = "scripts/wandb/exports",
         # Checkpointing args
         checkpoint_interval: int = 0,  # set to 0 to disable
         checkpoint_metric: str = "val/loss",
@@ -139,6 +142,20 @@ class Trainer:
             config=args,
         )
 
+        # Capture the run path now (pre-training) rather than after `.fit()`,
+        # since touching `logger.experiment` post-finish can implicitly start
+        # a new run in some wandb versions. Offline runs (non-rank-0, or
+        # WANDB_MODE=offline) aren't synced to the server, so there's nothing
+        # for the W&B API to fetch -- skip those.
+        self.auto_export_wandb = auto_export_wandb
+        self.wandb_export_dir = wandb_export_dir
+        self._wandb_run_path = None
+        if auto_export_wandb and not self.wandb_offline:
+            experiment = logger.experiment
+            self._wandb_run_path = (
+                f"{experiment.entity}/{experiment.project}/{experiment.id}"
+            )
+
         self.trainer = L.Trainer(
             max_steps=train_steps,
             val_check_interval=val_interval,
@@ -161,6 +178,28 @@ class Trainer:
         self.trainer.fit(
             self.lit_module, self.train_dataloader, self.val_dataloader
         )
+        if self._wandb_run_path is not None:
+            self._export_wandb_run()
+
+    def _export_wandb_run(self):
+        """Dump this run's history/config/summary locally right after training
+        finishes, so results are available for offline analysis without a
+        manual export step (see scripts/wandb/export_run.py for the same logic
+        as a standalone CLI, e.g. to backfill older runs).
+        """
+        try:
+            import wandb
+
+            from realchords.utils.wandb_export import export_run
+
+            api = wandb.Api()
+            run_dir = export_run(api, self._wandb_run_path, self.wandb_export_dir)
+            print(f"Exported W&B run to {run_dir}")
+        except Exception as e:
+            print(
+                f"Warning: failed to auto-export W&B run "
+                f"{self._wandb_run_path}: {e}"
+            )
 
 
 class BaseLightningModel(L.LightningModule):
@@ -192,6 +231,40 @@ class BaseLightningModel(L.LightningModule):
         Configures and returns the optimizer(s).
         """
         pass
+
+    def _configure_optimizer_with_schedule(self, optimizer, warmup_steps: int = 1000):
+        """Wrap `optimizer` with linear-warmup + cosine decay over the full
+        training run (`self.trainer.max_steps`), in Lightning's dict format.
+        Without this, LR stays flat for the whole run, so the optimizer never
+        slows down as training approaches overfitting -- it keeps taking
+        full-sized steps into sharper minima that fit noise right up to the
+        last step.
+        """
+        scheduler = LinearWarmupCosineDecay(
+            optimizer,
+            warmup_iters=warmup_steps,
+            total_iters=self.trainer.max_steps,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+        }
+
+    def _log_per_dataset_loss(
+        self, per_sample_loss, dataset_names, key_prefix: str = "val/loss_by_dataset"
+    ):
+        """Log mean `per_sample_loss` grouped by `dataset_names` (parallel,
+        both length batch_size). Uses the same per-step mean-of-means
+        aggregation Lightning's default on_epoch reduction already applies to
+        the aggregate `val/loss` metric, so the two are directly comparable.
+        """
+        per_dataset = {}
+        for name in set(dataset_names):
+            mask = torch.tensor(
+                [n == name for n in dataset_names], device=per_sample_loss.device
+            )
+            per_dataset[f"{key_prefix}/{name}"] = per_sample_loss[mask].mean()
+        self._log_dict(per_dataset)
 
     def _register_dataset_info(self, train_dataset):
         """Stash the train dataset's resolved per-dataset sampling info for later

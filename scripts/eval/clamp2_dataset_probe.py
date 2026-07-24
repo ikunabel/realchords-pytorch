@@ -81,13 +81,26 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def discover_dataset_midi_dirs(gt_root: Path, split_mode: str) -> Dict[str, Path]:
-    """Find ``<dataset>/<split_mode>/midi`` directories under ``gt_root``."""
+    """Find ``<dataset>/<split_mode>/midi`` directories under ``gt_root``.
+
+    Some dataset names appear both bare (e.g. ``hooktheory``, a stale sample
+    from an older eval run) and with an ``_all`` suffix (``hooktheory_all``,
+    the full export ``custom_eval.sh``'s ``paired_gt_*`` functions currently
+    write). When both exist for the same base name, keep only the ``_all``
+    one -- it's a superset, so keeping both double-counts the same songs.
+    """
     dirs: Dict[str, Path] = {}
     for dataset_dir in sorted(gt_root.iterdir()):
         midi_dir = dataset_dir / split_mode / "midi"
         if midi_dir.is_dir() and any(midi_dir.glob("*.mid")):
             dirs[dataset_dir.name] = midi_dir
-    return dirs
+
+    deduped: Dict[str, Path] = {}
+    for name, midi_dir in dirs.items():
+        base = name[: -len("_all")] if name.endswith("_all") else name
+        if base not in deduped or name.endswith("_all"):
+            deduped[base] = midi_dir
+    return deduped
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,8 +120,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max_per_dataset",
         type=int,
-        default=None,
-        help="Cap on number of MIDI files embedded per dataset (default: all available).",
+        default=-1,
+        help="Cap on number of MIDI files embedded per dataset (-1 = all available).",
     )
     parser.add_argument(
         "--genres",
@@ -122,7 +135,7 @@ def parse_args() -> argparse.Namespace:
         "--out_dir",
         type=str,
         default="logs/paired_eval/clamp2_probe",
-        help="Where to save the embeddings (.npz) and t-SNE plot (.png).",
+        help="Where to save the embeddings (.npz) and t-SNE plot (.pdf).",
     )
     return parser.parse_args()
 
@@ -130,6 +143,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     genre_prompts = args.genres or DEFAULT_GENRE_PROMPTS
+    max_per_dataset = None if args.max_per_dataset == -1 else args.max_per_dataset
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -156,8 +170,8 @@ def main() -> None:
 
     for name, midi_dir in dataset_midi_dirs.items():
         print(f"\nEmbedding {name} ...")
-        if args.max_per_dataset is not None:
-            files = sorted(midi_dir.glob("*.mid"))[: args.max_per_dataset]
+        if max_per_dataset is not None:
+            files = sorted(midi_dir.glob("*.mid"))[:max_per_dataset]
             feats = np.vstack([extractor.extract_feature(str(f)) for f in files])
         else:
             feats = extractor.extract_features(str(midi_dir))
@@ -177,16 +191,36 @@ def main() -> None:
     predicted_genre_idx = similarities.argmax(axis=1)
     predicted_genres = np.array([genre_prompts[i] for i in predicted_genre_idx])
 
-    print("\n=== Zero-shot genre vote distribution per dataset ===")
+    report_lines = ["=== Zero-shot genre vote distribution per dataset ==="]
+    vote_distribution = {}
     for name in dataset_midi_dirs:
         mask = dataset_labels == name
         n = int(mask.sum())
         votes = predicted_genres[mask]
-        print(f"\n{name} (n={n}):")
+        report_lines.append(f"\n{name} (n={n}):")
+        vote_distribution[name] = {"n": n, "votes": {}}
         for genre in genre_prompts:
             count = int((votes == genre).sum())
             if count > 0:
-                print(f"    {genre:30s} {count:3d}  ({count / n:.0%})")
+                report_lines.append(f"    {genre:30s} {count:3d}  ({count / n:.0%})")
+            vote_distribution[name]["votes"][genre] = {
+                "count": count,
+                "fraction": count / n if n > 0 else 0.0,
+            }
+
+    report = "\n".join(report_lines)
+    print("\n" + report)
+
+    report_path = out_dir / "genre_vote_distribution.txt"
+    report_path.write_text(report + "\n")
+    print(f"\nSaved genre vote distribution to {report_path}")
+
+    import json
+
+    json_path = out_dir / "genre_vote_distribution.json"
+    with open(json_path, "w") as f:
+        json.dump(vote_distribution, f, indent=2)
+    print(f"Saved genre vote distribution (JSON) to {json_path}")
 
     # ---- Save raw embeddings + labels for further analysis ----
     npz_path = out_dir / "clamp2_embeddings.npz"
@@ -200,6 +234,11 @@ def main() -> None:
     )
     print(f"\nSaved embeddings to {npz_path}")
 
+    import matplotlib.pyplot as plt
+
+    unique_datasets = sorted(dataset_midi_dirs.keys())
+    cmap = plt.get_cmap("tab10")
+
     # ---- t-SNE projection, colored by dataset ----
     print("\nRunning t-SNE ...")
     from sklearn.manifold import TSNE
@@ -209,11 +248,7 @@ def main() -> None:
     tsne = TSNE(n_components=2, perplexity=perplexity, init="pca", random_state=42)
     projected = tsne.fit_transform(music_embeddings)
 
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(9, 7), dpi=150)
-    unique_datasets = sorted(dataset_midi_dirs.keys())
-    cmap = plt.get_cmap("tab10")
     for i, name in enumerate(unique_datasets):
         mask = dataset_labels == name
         ax.scatter(
@@ -230,7 +265,7 @@ def main() -> None:
     ax.set_yticks([])
     fig.tight_layout()
 
-    plot_path = out_dir / "tsne_by_dataset.png"
+    plot_path = out_dir / "tsne_by_dataset.pdf"
     fig.savefig(plot_path)
     plt.close(fig)
     print(f"Saved t-SNE plot to {plot_path}")

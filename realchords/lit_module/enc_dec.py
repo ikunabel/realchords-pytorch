@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 
 from realchords.base_trainer import BaseLightningModel
-from realchords.utils.lr_scheduler import LinearWarmupCosineDecay
+from realchords.utils.loss_utils import per_sample_cross_entropy
 from realchords.utils.eval_utils import evaluate_note_in_chord_ratio
 from realchords.model.gen_model import EncoderDecoderTransformer
 from realchords.dataset.weighted_joint_dataset import (
@@ -45,6 +45,7 @@ class LitEncoderDecoder(BaseLightningModel):
         max_log_examples: int = 8,
         random_truncate: bool = False,
         disable_midi_logging: bool = False,
+        warmup_steps: int = 1000,
     ):
         super(LitEncoderDecoder, self).__init__()
 
@@ -56,6 +57,7 @@ class LitEncoderDecoder(BaseLightningModel):
         self._register_dataset_info(train_dataset)
 
         self.sample_interval = sample_interval
+        self.warmup_steps = warmup_steps
         self.max_log_examples = max_log_examples
         self.disable_midi_logging = disable_midi_logging
         tokenizer = train_dataset.tokenizer
@@ -204,6 +206,9 @@ class LitEncoderDecoder(BaseLightningModel):
         # Log validation loss (step-based logging)
         self._log_dict({"val/loss": loss, "val/acc": acc, "val/nll": nll})
 
+        per_sample_loss = per_sample_cross_entropy(output, targets, self.pad_token)
+        self._log_per_dataset_loss(per_sample_loss, batch["dataset_name"])
+
         # Sample from model and log them
         # Only sample for the first validation batch
         if batch_idx == 0 and self.global_step % self.sample_interval == 0:
@@ -316,4 +321,6 @@ class LitEncoderDecoder(BaseLightningModel):
         Configures and returns the optimizer(s).
         """
         optimizer = AdamW(filter(lambda p: p.requires_grad, self.parameters()))
-        return optimizer
+        return self._configure_optimizer_with_schedule(
+            optimizer, warmup_steps=self.warmup_steps
+        )

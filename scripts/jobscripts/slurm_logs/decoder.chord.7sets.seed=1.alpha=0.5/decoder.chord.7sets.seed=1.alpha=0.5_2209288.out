@@ -166,3 +166,44 @@ Time to generate: 7.968964576721191
 2026-07-24 12:15:54 - realchords - ERROR - Error converting to MIDI: Invalid chord frame: NOTE_114
 2026-07-24 12:15:54 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: D+7 -> Aped(addb7)
 2026-07-24 12:15:54 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Ab5(addb2)/A -> Db9(add6)/Bb
+targets shape: torch.Size([64, 513])
+Time to generate: 7.677014112472534
+2026-07-24 12:27:34 - realchords - ERROR - Error converting to MIDI: Note off without note on: 72 -> 60
+2026-07-24 12:27:34 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Dbped(addb7)(add3)(addb5) -> Dbsus7
+2026-07-24 12:27:34 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Bm -> Gm
+2026-07-24 12:27:34 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: D7 -> Dm
+2026-07-24 12:27:34 - realchords - ERROR - Error converting to MIDI: Note off without note on: 72 -> 75
+targets shape: torch.Size([64, 513])
+Time to generate: 7.74240517616272
+2026-07-24 12:38:51 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Bo -> B11
+2026-07-24 12:38:51 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Am7 -> Fm
+2026-07-24 12:38:51 - realchords - ERROR - Error converting to MIDI: Note off without note on: 87 -> 84
+2026-07-24 12:38:52 - realchords - ERROR - Error converting to MIDI: Invalid chord frame: NOTE_61
+targets shape: torch.Size([64, 513])
+Time to generate: 7.310274600982666
+2026-07-24 12:50:03 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Ab -> G
+2026-07-24 12:50:03 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Ebmaj9 -> Bbm9
+2026-07-24 12:50:03 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Am -> Dm
+targets shape: torch.Size([64, 513])
+Time to generate: 7.189582347869873
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: D -> Dbm7
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Abo -> Bped(addb3)
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Gbm -> Bm
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Note off without note on: 66 -> 67
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: G -> D
+2026-07-24 13:01:13 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Dm7 -> Am7
+targets shape: torch.Size([64, 513])
+Time to generate: 7.2072999477386475
+2026-07-24 13:12:25 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: F -> B
+2026-07-24 13:12:25 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Cm7 -> Fm7
+2026-07-24 13:12:25 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: Cm -> Cm7
+2026-07-24 13:12:25 - realchords - ERROR - Error converting to MIDI: Chord off without chord on: G7 -> G
+Epoch 0/-2 ━━━━━━━━━━━━━   26000/30000 0:58:42 •       7.74it/s v_num: elt4     
+                                       0:08:37                  train/loss:     
+                                                                0.214 grad_norm:
+                                                                0.367 val/loss: 
+                                                                0.529 val/acc:  
+                                                                0.633           
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33mdecoder.chord.7sets.seed=1.alpha=0.5[0m at: [34mhttps://wandb.ai/ikunabel/realchords/runs/qkdkelt4[0m
+[1;34mwandb[0m: Find logs at: [1;35m../../../../../../hpcwork/thes2192/realchords/logs/my_logs/decoder.chord.7sets.seed=1.alpha=0.5/wandb/run-20260724_121528-qkdkelt4/logs[0m

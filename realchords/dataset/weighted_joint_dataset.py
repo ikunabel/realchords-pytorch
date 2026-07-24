@@ -392,7 +392,9 @@ class WeightedJointDataset(Dataset):
             if info["start_idx"] <= idx < info["end_idx"]:
                 local_idx = idx - info["start_idx"]
                 dataset_idx = self.datasets.index(info["name"])
-                return self.individual_datasets[dataset_idx][local_idx]
+                item = self.individual_datasets[dataset_idx][local_idx]
+                item["dataset_name"] = info["name"]
+                return item
 
         raise IndexError(f"Index {idx} out of range")
 

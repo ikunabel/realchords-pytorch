@@ -31,3 +31,4 @@ W0724 12:18:24.338000 405619 .venv/lib/python3.12/site-packages/torch/fx/experim
 W0724 12:18:26.267000 405619 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [7/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
 W0724 12:18:26.369000 405619 .venv/lib/python3.12/site-packages/torch/fx/experimental/symbolic_shapes.py:6823] [8/2] _maybe_guard_rel() was called on non-relation expression Eq(s31, 1) | Eq(s85, s31)
 /rwthfs/rz/cluster/home/yh522379/realchords-pytorch/.venv/lib/python3.12/site-packages/lightning/pytorch/utilities/data.py:79: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 6. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+wandb: WARNING Artifact "run-qkdkelt4-song_url" already exists with the same content. No new version will be created.
