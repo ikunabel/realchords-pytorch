@@ -243,6 +243,7 @@ class WeightedJointDataset(Dataset):
                     frame_per_beat=frame_per_beat,
                     load_augmented_chord_names=load_augmented_chord_names,
                     num_workers=num_workers,
+                    seed=self.seed,
                 )
 
                 self.individual_datasets.append(dataset)

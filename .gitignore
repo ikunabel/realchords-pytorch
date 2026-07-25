@@ -105,3 +105,5 @@ journal/
 
 # Synced files
 rsync.sh
+
+scripts/jobscripts/slurm_logs/

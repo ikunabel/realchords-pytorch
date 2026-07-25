@@ -38,6 +38,7 @@ class HooktheoryDataset(Dataset):
         data_augmentation: bool = True,
         load_augmented_chord_names: bool = False,
         num_workers: int = 8,
+        seed: int = 0,
         **kwargs,
     ):
         """Initialize the Hooktheory dataset.
@@ -58,6 +59,10 @@ class HooktheoryDataset(Dataset):
             load_augmented_chord_names (bool, optional): Whether to load the augmented chord names
                 (even if data_augmentation is False). Defaults to False.
             num_workers (int, optional): Number of workers for parallel data processing. Defaults to 4.
+            seed (int, optional): Seed for deterministic random_crop on non-train
+                splits (valid/test/all), so the same sample index always gets the
+                same crop window across repeated validation passes. Train crops
+                stay genuinely random regardless of this seed. Defaults to 0.
 
         Raises:
             ValueError: If the split is not in ["train", "valid", "test", "all"].
@@ -94,6 +99,7 @@ class HooktheoryDataset(Dataset):
         self.data_augmentation = data_augmentation
         self.load_augmented_chord_names = load_augmented_chord_names
         self.num_workers = num_workers
+        self.seed = seed
 
         self.cache_dir = cache_dir
         self.load_data()
@@ -220,13 +226,24 @@ class HooktheoryDataset(Dataset):
         return self.tokenizer.num_tokens
 
     def random_crop(
-        self, melody: torch.Tensor, chord: torch.Tensor
+        self, melody: torch.Tensor, chord: torch.Tensor, idx: int = 0
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Randomly crop the sequences based on the max_len and frame_per_beat.
+
+        On the train split, the crop start is drawn from the global RNG, so
+        repeated draws of the same song (sampling is with replacement) land on
+        different windows each time -- this is the intended augmentation.
+        On every other split (valid/test/all), the crop is instead seeded by
+        `idx`, so the same sample always gets the same window across repeated
+        validation passes: otherwise part of the change in `val/loss` between
+        checks would reflect which random slice got sampled that pass rather
+        than the model actually improving or not.
 
         Args:
             melody (torch.Tensor): Melody sequence.
             chord (torch.Tensor): Chord sequence.
+            idx (int, optional): Sample index, used to seed the crop on
+                non-train splits. Unused for train. Defaults to 0.
 
         Returns:
             tuple: Cropped melody and chord sequences.
@@ -242,7 +259,11 @@ class HooktheoryDataset(Dataset):
         start_allowed = list(
             range(0, melody.shape[0] - max_len + 1, self.frame_per_beat)
         )
-        start = np.random.choice(start_allowed)
+        if self.split == "train":
+            start = np.random.choice(start_allowed)
+        else:
+            rng = np.random.RandomState(self.seed + idx)
+            start = rng.choice(start_allowed)
         end = start + max_len
         return melody[start:end], chord[start:end]
 
@@ -391,7 +412,7 @@ class HooktheoryDataset(Dataset):
         chord = torch.tensor(item["chord"])
 
         # Random crop
-        melody, chord = self.random_crop(melody, chord)
+        melody, chord = self.random_crop(melody, chord, idx)
 
         # Serialize
         output = self.serialize(melody, chord)

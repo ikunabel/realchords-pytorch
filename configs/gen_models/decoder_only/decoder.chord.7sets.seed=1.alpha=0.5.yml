@@ -1,6 +1,6 @@
 # Trainer hyperparameters, for Trainer and lit_module
 seed: 1
-train_steps: 30000
+train_steps: 50000
 val_interval: 1000
 sample_interval: 5000
 overfit_batches: 0
