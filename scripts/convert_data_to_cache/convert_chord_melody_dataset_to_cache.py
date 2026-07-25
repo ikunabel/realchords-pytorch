@@ -3,18 +3,27 @@
 
 Source: https://github.com/shiehn/chord-melody-dataset (``data/chord-melody-dataset``).
 Reuses the Wikifonia MusicXML pipeline (``extract_melody_and_chords_from_musicxml``,
-quantization, chord parsing) -- the format is standard MusicXML with ``<harmony>``
-chord symbols, same as Wikifonia/JAZZMUS.
+quantization, chord parsing, splitting, and transposition augmentation) --
+the format is standard MusicXML with ``<harmony>`` chord symbols, same as
+Wikifonia/JAZZMUS.
 
 Layout differs from Wikifonia/JAZZMUS though: each *song* is a folder
 (``data/chord-melody-dataset/<song>/``) containing one MusicXML file per
 transposed key (``c.xml``, ``cs.xml``, ..., up to 12 -- some songs have fewer;
-file stems and counts aren't perfectly uniform across the corpus). Rather than
-re-deriving our own +-N semitone augmentation like the other converters, we
-treat the corpus's own 12-key duplication as the augmentation: every available
-key is used for TRAIN, but only one canonical key per song goes into
-VALID/TEST, to avoid near-duplicate transposed copies of the same song
-leaking across the eval split.
+file stems and counts aren't perfectly uniform across the corpus). We used to
+treat this built-in 12-key duplication as the augmentation (every key for
+TRAIN, one canonical key for VALID/TEST), but that made TRAIN's *row* count
+~12x its *song* count while VALID/TEST stayed 1:1 -- a split that looked like
+80/10/10 by song was ~98/1/1 by row, inconsistent with every other dataset.
+
+Instead we now pick exactly **one** representative file per song folder --
+prefer ``d.xml``, falling back to the alphabetically-first available file for
+the ~10% of songs (49/474) that don't have one -- and feed that flat list of
+one-file-per-song into the same generic ``convert_musicxml_corpus`` pipeline
+Wikifonia uses: a plain 80/10/10 split by song, and (if ``--augmentation`` is
+passed) the standard [-6, +6] semitone transposition augmentation applied to
+TRAIN only. This keeps row counts equal to song counts in every split, same
+as every other dataset.
 
 All songs were engraved for guitar ("Nylon Guitar"), and about half the files
 declare ``<transpose><octave-change>-1</octave-change>`` (written a full
@@ -25,7 +34,7 @@ a full octave too high.
 
 Usage::
 
-    python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py
+    python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py --augmentation
     python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py --report_only
     python scripts/convert_data_to_cache/convert_chord_melody_dataset_to_cache.py --max_songs 20
 """
@@ -33,8 +42,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import json
-import random
 import sys
 import xml.etree.ElementTree as ET
 from copy import deepcopy
@@ -48,7 +55,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from convert_wikifonia_to_cache import (
-    collect_chord_names,
+    convert_musicxml_corpus,
     extract_melody_and_chords_from_musicxml,
     filter_zero_duration_chords,
     quantize_timing_to_beat_grid,
@@ -56,10 +63,8 @@ from convert_wikifonia_to_cache import (
     set_chord_symbol_parse_verbose,
     transform_wikifonia_chord_symbol,
 )
-from realchords.utils.data_utils import update_global_chord_names
-from realchords.utils.io_utils import save_jsonl
 
-_EVAL_KEY_PREFERENCE = "c"  # canonical, unaugmented key used for VALID/TEST
+_REPRESENTATIVE_KEY_PREFERENCE = "d"  # single canonical key used for every song
 
 
 def _default_data_path() -> Path:
@@ -75,17 +80,28 @@ def discover_song_dirs(data_path: Path) -> List[Path]:
     )
 
 
-def _pick_eval_key_file(xml_files: List[Path]) -> Path:
-    """Choose one representative key file for VALID/TEST.
+def _pick_representative_file(xml_files: List[Path]) -> Path:
+    """Choose one file per song, used for every split.
 
-    Prefers the "c" (concert C) key if present; otherwise falls back to the
-    alphabetically-first available file (``xml_files`` is pre-sorted), so the
-    choice is deterministic across runs.
+    Prefers the preference key (default "d") if present; otherwise falls back
+    to the alphabetically-first available file (``xml_files`` is pre-sorted),
+    so the choice is deterministic across runs. About 10% of songs (49/474)
+    lack a file in the preference key and use the fallback.
     """
     for f in xml_files:
-        if f.stem.lower() == _EVAL_KEY_PREFERENCE:
+        if f.stem.lower() == _REPRESENTATIVE_KEY_PREFERENCE:
             return f
     return xml_files[0]
+
+
+def discover_representative_xml_files(data_path: Path) -> List[Path]:
+    """One representative MusicXML file per song folder (flat list, 1:1 with songs)."""
+    xml_files = []
+    for song_dir in discover_song_dirs(data_path):
+        candidates = sorted(song_dir.glob("*.xml"), key=lambda p: p.stem)
+        if candidates:
+            xml_files.append(_pick_representative_file(candidates))
+    return xml_files
 
 
 def _raw_harmony_offsets(xml_file: Path) -> List[float]:
@@ -221,131 +237,11 @@ def process_chord_melody_file(
     }
 
 
-def _split_song_names(song_names: List[str]) -> Dict[str, str]:
-    """Assign each song to TRAIN/VALID/TEST (80/10/10, seed 42).
-
-    Splitting by song (not by file) keeps every key-transposition of a song
-    in the same split -- otherwise a transposed copy of a test song could
-    leak into train.
+def process_chord_melody_xml_file(xml_file: Path) -> Optional[Dict]:
+    """`process_file` callable for `convert_musicxml_corpus`: derives the song
+    slug from the parent folder name, since each folder is one song here.
     """
-    shuffled = list(song_names)
-    random.seed(42)
-    random.shuffle(shuffled)
-
-    total = len(shuffled)
-    train_end = int(total * 0.8)
-    valid_end = train_end + int(total * 0.1)
-
-    split_by_song = {}
-    for name in shuffled[:train_end]:
-        split_by_song[name] = "TRAIN"
-    for name in shuffled[train_end:valid_end]:
-        split_by_song[name] = "VALID"
-    for name in shuffled[valid_end:]:
-        split_by_song[name] = "TEST"
-    return split_by_song
-
-
-def convert_chord_melody_corpus(
-    song_dirs: List[Path],
-    output_dir: Path,
-    *,
-    max_songs: Optional[int] = None,
-) -> Dict[str, int]:
-    """Convert Chord Melody Dataset song folders to cache JSONL splits."""
-    if max_songs is not None:
-        song_dirs = song_dirs[:max_songs]
-    if not song_dirs:
-        print("No song folders found for Chord Melody Dataset")
-        return {"total_songs": 0, "processed": 0, "failed": 0}
-
-    print(f"Found {len(song_dirs)} Chord Melody Dataset song folders")
-
-    split_by_song = _split_song_names([d.name for d in song_dirs])
-
-    all_songs: List[Dict] = []
-    failed_songs = 0
-    for song_dir in tqdm(song_dirs, desc="Processing Chord Melody Dataset"):
-        split = split_by_song[song_dir.name]
-        xml_files = sorted(song_dir.glob("*.xml"), key=lambda p: p.stem)
-        if not xml_files:
-            failed_songs += 1
-            continue
-
-        # TRAIN gets every available key (the corpus's built-in
-        # augmentation); VALID/TEST get exactly one canonical key each.
-        keys_to_process = (
-            xml_files if split == "TRAIN" else [_pick_eval_key_file(xml_files)]
-        )
-
-        processed_any = False
-        for xml_file in keys_to_process:
-            try:
-                song = process_chord_melody_file(xml_file, song_dir.name)
-            except Exception as exc:
-                print(f"Error processing {xml_file}: {exc}")
-                continue
-            if song:
-                song["split"] = split
-                all_songs.append(song)
-                processed_any = True
-        if not processed_any:
-            failed_songs += 1
-
-    print(
-        f"Successfully processed {len(all_songs)} examples from "
-        f"{len(song_dirs) - failed_songs} songs ({failed_songs} songs failed/skipped)"
-    )
-    if not all_songs:
-        print("No songs were successfully processed!")
-        return {"total_songs": len(song_dirs), "processed": 0, "failed": failed_songs}
-
-    splits: Dict[str, List[Dict]] = {"train": [], "valid": [], "test": []}
-    for song in all_songs:
-        splits[song["split"].lower()].append(song)
-
-    print("Dataset splits:")
-    print(f"  Train: {len(splits['train'])} examples")
-    print(f"  Valid: {len(splits['valid'])} examples")
-    print(f"  Test:  {len(splits['test'])} examples")
-
-    chord_names = collect_chord_names(all_songs)
-    print(f"Found {len(chord_names)} unique chord names")
-
-    cache_dir = str(output_dir.parent)
-
-    for split_name, split_songs in splits.items():
-        cache_path = output_dir / f"{split_name}.jsonl"
-        save_jsonl(split_songs, cache_path)
-        print(f"Saved {split_name} split to {cache_path}")
-
-    # No separate transposition augmentation here -- TRAIN already contains
-    # every available key. Still write "_augmented" files (identical to the
-    # plain ones) so HooktheoryDataset(data_augmentation=True) can load this
-    # dataset the same way it loads any other.
-    for split_name, split_songs in splits.items():
-        cache_path = output_dir / f"{split_name}_augmented.jsonl"
-        save_jsonl(split_songs, cache_path)
-        print(f"Saved {split_name} augmented split (identical) to {cache_path}")
-
-    chord_names_path = output_dir / "chord_names.json"
-    with open(chord_names_path, "w", encoding="utf-8") as handle:
-        json.dump(chord_names, handle, indent=2)
-    print(f"Saved chord names to {chord_names_path}")
-
-    chord_names_aug_path = output_dir / "chord_names_augmented.json"
-    with open(chord_names_aug_path, "w", encoding="utf-8") as handle:
-        json.dump(chord_names, handle, indent=2)
-    print(f"Saved augmented chord names to {chord_names_aug_path}")
-
-    update_global_chord_names(chord_names, cache_dir, augmented=False)
-    update_global_chord_names(chord_names, cache_dir, augmented=True)
-
-    return {
-        "total_songs": len(song_dirs),
-        "processed": len(all_songs),
-        "failed": failed_songs,
-    }
+    return process_chord_melody_file(xml_file, song_slug=xml_file.parent.name)
 
 
 def parse_args() -> argparse.Namespace:
@@ -366,7 +262,12 @@ def parse_args() -> argparse.Namespace:
         "--max_songs",
         type=int,
         default=None,
-        help="Maximum number of song folders to process (for testing)",
+        help="Maximum number of songs to process (for testing)",
+    )
+    parser.add_argument(
+        "--augmentation",
+        action="store_true",
+        help="Create augmented (train-only, [-6, +6] semitone) dataset, same as Wikifonia/JAZZMUS",
     )
     parser.add_argument(
         "--report_only",
@@ -386,32 +287,25 @@ def main() -> None:
     set_chord_symbol_parse_verbose(args.verbose_chord_warnings)
 
     data_path = Path(args.data_path) if args.data_path else _default_data_path()
-    song_dirs = discover_song_dirs(data_path)
-    if args.max_songs is not None:
-        song_dirs = song_dirs[: args.max_songs]
+    xml_files = discover_representative_xml_files(data_path)
 
     if args.report_only:
-        split_by_song = _split_song_names([d.name for d in song_dirs])
+        if args.max_songs is not None:
+            xml_files = xml_files[: args.max_songs]
         ok = 0
         failed: List[str] = []
-        for song_dir in tqdm(song_dirs, desc="Scanning Chord Melody Dataset"):
-            xml_files = sorted(song_dir.glob("*.xml"), key=lambda p: p.stem)
-            if not xml_files:
-                failed.append(song_dir.name)
-                continue
-            split = split_by_song[song_dir.name]
-            probe_file = xml_files if split == "TRAIN" else [_pick_eval_key_file(xml_files)]
+        for xml_file in tqdm(xml_files, desc="Scanning Chord Melody Dataset"):
             try:
-                song = process_chord_melody_file(probe_file[0], song_dir.name)
+                song = process_chord_melody_xml_file(xml_file)
                 if song:
                     ok += 1
                 else:
-                    failed.append(song_dir.name)
+                    failed.append(xml_file.parent.name)
             except Exception as exc:
-                failed.append(f"{song_dir.name}: {exc}")
+                failed.append(f"{xml_file.parent.name}: {exc}")
 
-        print(f"Found {len(song_dirs)} song folders")
-        print(f"Parsed successfully (first key checked): {ok}")
+        print(f"Found {len(xml_files)} songs (one representative key each)")
+        print(f"Parsed successfully: {ok}")
         print(f"Failed/skipped: {len(failed)}")
         if failed:
             preview = failed[:20]
@@ -425,10 +319,13 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    stats = convert_chord_melody_corpus(
-        song_dirs,
+    stats = convert_musicxml_corpus(
+        xml_files,
         output_dir,
-        max_songs=args.max_songs,
+        process_chord_melody_xml_file,
+        augmentation=args.augmentation,
+        max_files=args.max_songs,
+        dataset_name="Chord Melody Dataset",
     )
     if stats["processed"]:
         print("Chord Melody Dataset conversion completed!")

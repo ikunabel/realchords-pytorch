@@ -12,15 +12,22 @@ from typing import Dict, List
 
 from realchords.constants import CACHE_DIR
 
-DEFAULT_FRAME_COUNTS_PATH = os.path.join(CACHE_DIR, "dataset_frame_counts.json")
+# Sourced from scripts/write_dataset_statistics.py's output rather than a
+# separate hand-maintained file: that script computes frame counts from the
+# per-song cache and cross-checks them against the GT MIDI export, so this
+# can't silently drift out of sync the way a second derived file could (as
+# happened when the chord_melody_dataset converter changed and a standalone
+# dataset_frame_counts.json was left stale).
+DEFAULT_FRAME_COUNTS_PATH = os.path.join(CACHE_DIR, "dataset_stats.json")
 
 
 def load_effective_frame_counts(
     frame_counts_path: str = DEFAULT_FRAME_COUNTS_PATH,
 ) -> Dict[str, float]:
+    """Per-dataset total frame count, from the "all" (train+valid+test) split."""
     with open(frame_counts_path) as f:
         data = json.load(f)
-    return {name: info["effective_frames"] for name, info in data["datasets"].items()}
+    return {name: info["all"]["total_frames"] for name, info in data.items()}
 
 
 def compute_alpha_weights(
@@ -38,7 +45,7 @@ def compute_alpha_weights(
     used as-is).
 
     alpha=0.5 -> sqrt temperature-scaled sampling weights, computed at runtime from
-    data/cache/dataset_frame_counts.json via
+    data/cache/dataset_stats.json via
     realchords.dataset.dataset_weights.compute_alpha_weights. Baseline for comparison
     is the sibling *.uniform.weights.yml config (alpha=0.0). alpha=1.0 would be pure
     proportional-to-size (hooktheory would dominate at ~66%, jazzmus ~2%); alpha=0.5
