@@ -19,7 +19,7 @@ fi
 
 CONFIG_YML="$1"
 
-RUN_DIR="${RUNS_ROOT}/${SLURM_JOB_NAME}"
+RUN_DIR="${RUNS_ROOT}/decoder_only/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
 srun python scripts/train/train_decoder_only.py \

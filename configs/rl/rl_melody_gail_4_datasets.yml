@@ -1,20 +1,20 @@
 $include:
-  - configs/gen_models/decoder_only_online_melody_4_datasets.yml
+  - configs/decoder_only/decoder_only_online_melody_4_datasets.yml
   - configs/single_agent_rl/rl_realchords_base.yml
 
-pretrain_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only_online_melody_4_datasets/step=11000.ckpt"
+pretrain_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_melody_4_datasets/step=11000.ckpt"
 contrastive_reward_model_path: 
-  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_4_datasets/step=8000.ckpt"
-  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_2_4_datasets/step=8000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_4_datasets/step=8000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_4_datasets/step=8000.ckpt"
 discriminative_reward_model_path:
-  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward_128_bs_4_datasets/step=3000.ckpt"
-  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward_128_bs_2_4_datasets/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_4_datasets/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2_4_datasets/step=3000.ckpt"
 contrastive_reward_rhythm_model_path:
-  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_no_augmentation_rhythm_4_datasets/step=2500.ckpt"
-  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward_no_augmentation_rhythm_2_4_datasets/step=2500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_4_datasets/step=2500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_2_4_datasets/step=2500.ckpt"
 discriminative_reward_rhythm_model_path:
-  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward_no_augmentation_rhythm_4_datasets/step=3000.ckpt"
-  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward_no_augmentation_rhythm_2_4_datasets/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_4_datasets/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_2_4_datasets/step=3000.ckpt"
 
 # Reward weights
 contrastive_reward_weight: 1.0
@@ -29,7 +29,7 @@ long_note_penalty_weight: 0.0
 repetition_penalty_weight: 1.0
 
 # Paper-correct offline anchor (13K steps per GAPT paper C.1)
-anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec_base_melody_4_datasets/step=13000.ckpt"
+anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec_base_melody_4_datasets/step=13000.ckpt"
 
 # realchords specific
 model_part: "melody"

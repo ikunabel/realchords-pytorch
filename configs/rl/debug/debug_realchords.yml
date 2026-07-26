@@ -1,6 +1,6 @@
 $include:
-  - configs/gen_models/decoder_only_online_chord.yml
-  - configs/thesis/debug/debug_rl_realchords_base.yml
+  - configs/decoder_only/decoder_only_online_chord.yml
+  - configs/rl/debug/debug_rl_realchords_base.yml
 
 pretrain_model_path: "logs/decoder_only_online_chord/step=11000.ckpt"
 contrastive_reward_model_path: 

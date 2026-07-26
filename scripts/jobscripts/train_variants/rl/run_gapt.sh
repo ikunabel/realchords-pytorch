@@ -19,7 +19,7 @@ fi
 
 CONFIG_YML="$1"
 
-RUN_DIR="${RUNS_ROOT}/${SLURM_JOB_NAME}"
+RUN_DIR="${RUNS_ROOT}/rl/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
 module load CUDA/12.8.0

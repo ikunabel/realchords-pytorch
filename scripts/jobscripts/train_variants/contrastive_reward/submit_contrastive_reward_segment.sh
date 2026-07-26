@@ -3,9 +3,9 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <config_yml> [sbatch args...]"
-  echo "Example: $0 configs/reward_models/multiscale/contrastive_reward_w64_3_datasets.yml"
-  echo "Example: $0 configs/reward_models/multiscale/contrastive_reward_w64_sliding_3_datasets.yml --time=02:00:00"
-  echo "Example: $0 configs/reward_models/multiscale/contrastive_reward_w64_3_datasets.yml --time=02:00:00 --gres=gpu:1"
+  echo "Example: $0 configs/contrastive_reward/multiscale/contrastive_reward_w64_3_datasets.yml"
+  echo "Example: $0 configs/contrastive_reward/multiscale/contrastive_reward_w64_sliding_3_datasets.yml --time=02:00:00"
+  echo "Example: $0 configs/contrastive_reward/multiscale/contrastive_reward_w64_3_datasets.yml --time=02:00:00 --gres=gpu:1"
   exit 2
 fi
 

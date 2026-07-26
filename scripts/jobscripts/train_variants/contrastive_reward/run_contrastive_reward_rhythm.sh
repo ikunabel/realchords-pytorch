@@ -19,7 +19,7 @@ fi
 
 CONFIG_YML="$1"
 
-RUN_DIR="${RUNS_ROOT}/${SLURM_JOB_NAME}"
+RUN_DIR="${RUNS_ROOT}/contrastive_reward/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
 srun python scripts/train/train_contrastive_reward_rhythm.py \

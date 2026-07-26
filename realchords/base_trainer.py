@@ -75,7 +75,22 @@ class Trainer:
     ):
         super().__init__()
         self.args = args  # the overall arguments
-        self.save_dir = Path(save_dir)
+
+        # `save_dir` (the config name, e.g. "decoder.chord.7sets.seed=1.alpha=0.5")
+        # is a label, not a unique run identity -- reusing the same config name
+        # for a second run used to silently overwrite the first run's args.yml
+        # and wandb_export/, and collide with it in the W&B UI (two different
+        # runs, same name). Appending the W&B run ID to the directory name
+        # makes each run unique and directly traceable to its W&B run; `group=`
+        # (set below on WandbLogger) keeps the config name itself as a
+        # queryable label instead of the unique key. Generated up front (rather
+        # than read back from the logger after construction) so it's available
+        # for the directory name before WandbLogger/wandb.init() ever runs.
+        self.config_name = Path(save_dir).name
+        self.run_tag = wandb.util.generate_id()
+        self.save_dir = Path(save_dir).with_name(f"{self.config_name}_{self.run_tag}")
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
 
@@ -132,10 +147,17 @@ class Trainer:
                 )
             )
 
-        # No wandb logging for processes other than rank 0
+        # No wandb logging for processes other than rank 0.
+        # id is forced to self.run_tag (generated above) so the local
+        # directory name and the actual W&B run ID always match; name is
+        # unique per run (config_name + id); group is the config name alone,
+        # so runs of the same config can still be filtered/compared as a
+        # family in the W&B UI without sharing an identity.
         logger = WandbLogger(
-            name=self.save_dir.name,
+            id=self.run_tag,
+            name=f"{self.config_name}_{self.run_tag}",
             project=wandb_project,
+            group=self.config_name,
             log_model=False,
             save_dir=self.save_dir,
             offline=self.wandb_offline,
