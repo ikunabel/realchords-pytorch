@@ -194,7 +194,10 @@ def generate_save_paths(
 
 
 def _random_crop_on_chord_onset(
-    self: "HooktheoryDataset", melody: torch.Tensor, chord: torch.Tensor
+    self: "HooktheoryDataset",
+    melody: torch.Tensor,
+    chord: torch.Tensor,
+    idx: int = 0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Like ``HooktheoryDataset.random_crop``, but restricts the crop start to
     frames where a chord onset begins.
@@ -206,6 +209,10 @@ def _random_crop_on_chord_onset(
     tokenizer's strict ``decode_to_midi``/``decode_chord_frames`` cannot
     represent (it raises "Chord off without chord on"). Restricting starts
     to chord-onset frames keeps every exported ground-truth crop decodable.
+
+    Seeded by `idx` on non-train splits (this is only ever used for
+    valid/test/all GT exports in practice), same rationale as
+    ``HooktheoryDataset.random_crop``: reproducible crops across re-exports.
     """
     assert melody.shape[0] == chord.shape[0]
 
@@ -219,7 +226,12 @@ def _random_crop_on_chord_onset(
     onset_starts = [
         s for s in start_allowed if self.tokenizer.is_chord_on(int(chord[s]))
     ]
-    start = np.random.choice(onset_starts if onset_starts else start_allowed)
+    candidates = onset_starts if onset_starts else start_allowed
+    if self.split == "train":
+        start = np.random.choice(candidates)
+    else:
+        rng = np.random.RandomState(self.seed + idx)
+        start = rng.choice(candidates)
     end = start + max_len
     return melody[start:end], chord[start:end]
 

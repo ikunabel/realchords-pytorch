@@ -4,6 +4,16 @@
 Reuses the Wikifonia MusicXML pipeline in ``convert_wikifonia_to_cache.py``.
 JAZZMUS files under ``data/jazzmus/*.musicxml`` are flat, uncompressed MusicXML
 exports (many sourced from Wikifonia) with jazz-style chord spelling.
+
+Per the JAZZMUS webpage, the 293 files are handwritten transcriptions of only
+163 unique pieces -- many pieces have several independent transcriptions
+under different filenames (confirmed: exactly 163 unique ``<movement-title>``
+values across the 293 files). Splitting the raw 293 files directly let the
+same piece land in both train and valid/test under different filenames --
+found by comparing chord+melody content across splits: 34% of the "valid"
+songs and 23% of "test" songs turned out to be exact-content duplicates of a
+training song. We deduplicate by movement-title before splitting, so each
+unique piece is used exactly once and can only ever end up in one split.
 """
 
 from __future__ import annotations
@@ -11,7 +21,9 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import List
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -25,6 +37,37 @@ from convert_wikifonia_to_cache import (
     set_chord_symbol_parse_verbose,
     transform_wikifonia_chord_symbol,
 )
+
+
+def _extract_title(xml_file: Path) -> str:
+    """Read <movement-title> via a lightweight XML parse (cheaper than a full
+    music21 parse), used only for deduplication grouping.
+    """
+    title_el = ET.parse(xml_file).getroot().find("movement-title")
+    if title_el is not None and title_el.text:
+        return title_el.text.strip()
+    return xml_file.stem
+
+
+def _normalize_title(title: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", title.lower())
+
+
+def deduplicate_by_title(xml_files: List[Path]) -> List[Path]:
+    """Keep exactly one file per unique (normalized) movement-title.
+
+    Files are pre-sorted by filename, so this deterministically keeps the
+    lowest-numbered file for each piece and drops the rest.
+    """
+    seen = set()
+    deduped = []
+    for xml_file in xml_files:
+        title = _normalize_title(_extract_title(xml_file))
+        if title in seen:
+            continue
+        seen.add(title)
+        deduped.append(xml_file)
+    return deduped
 
 
 def transform_jazzmus_chord_symbol(chord_symbol: str) -> str:
@@ -97,7 +140,12 @@ def main() -> None:
     args = parse_args()
     set_chord_symbol_parse_verbose(args.verbose_chord_warnings)
     jazzmus_path = Path(args.jazzmus_path)
-    xml_files = sorted(jazzmus_path.glob("*.musicxml"))
+    all_xml_files = sorted(jazzmus_path.glob("*.musicxml"))
+    xml_files = deduplicate_by_title(all_xml_files)
+    print(
+        f"Found {len(all_xml_files)} files, "
+        f"deduplicated to {len(xml_files)} unique pieces (by movement-title)"
+    )
 
     if args.report_only:
         from tqdm import tqdm
