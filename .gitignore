@@ -82,7 +82,6 @@ notebooks/
 data/
 logs/
 wandb/
-scripts/wandb/exports/
 soundfonts/
 checkpoints/
 

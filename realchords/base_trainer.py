@@ -55,7 +55,7 @@ class Trainer:
         wandb_project: str = "realchords",
         log_every_n_steps: int = 1,
         auto_export_wandb: bool = True,
-        wandb_export_dir: str = "scripts/wandb/exports",
+        wandb_export_dir: Optional[str] = None,  # defaults to save_dir/wandb_export
         # Checkpointing args
         checkpoint_interval: int = 0,  # set to 0 to disable
         checkpoint_metric: str = "val/loss",
@@ -148,7 +148,11 @@ class Trainer:
         # WANDB_MODE=offline) aren't synced to the server, so there's nothing
         # for the W&B API to fetch -- skip those.
         self.auto_export_wandb = auto_export_wandb
-        self.wandb_export_dir = wandb_export_dir
+        # Lives alongside this run's checkpoints/args.yml/wandb/ folder, not a
+        # separate global location -- so it stays with the run it belongs to.
+        self.wandb_export_dir = (
+            Path(wandb_export_dir) if wandb_export_dir else self.save_dir / "wandb_export"
+        )
         self._wandb_run_path = None
         if auto_export_wandb and not self.wandb_offline:
             experiment = logger.experiment
@@ -184,8 +188,8 @@ class Trainer:
     def _export_wandb_run(self):
         """Dump this run's history/config/summary locally right after training
         finishes, so results are available for offline analysis without a
-        manual export step (see scripts/wandb/export_run.py for the same logic
-        as a standalone CLI, e.g. to backfill older runs).
+        manual export step (see scripts/wandb/export_wandb_run.py for the same
+        logic as a standalone CLI, e.g. to backfill older runs).
         """
         try:
             import wandb
