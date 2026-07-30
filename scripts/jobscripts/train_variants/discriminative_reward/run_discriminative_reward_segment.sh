@@ -1,6 +1,6 @@
 #!/usr/bin/zsh
 #SBATCH --partition=c23g
-#SBATCH --job-name=contrastive_reward_segment
+#SBATCH --job-name=discriminative_reward_segment
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-gpu=24
@@ -19,9 +19,9 @@ fi
 
 CONFIG_YML="$1"
 
-RUN_DIR="${RUNS_ROOT}/contrastive_reward/${SLURM_JOB_NAME}"
+RUN_DIR="${RUNS_ROOT}/discriminative_reward/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
-srun python scripts/train/train_contrastive_reward_segment.py \
+srun python scripts/train/train_discriminative_reward_segment.py \
   --args.load "${CONFIG_YML}" \
   --save_dir "${RUN_DIR}"

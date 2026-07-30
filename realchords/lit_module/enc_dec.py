@@ -45,7 +45,10 @@ class LitEncoderDecoder(BaseLightningModel):
         max_log_examples: int = 8,
         random_truncate: bool = False,
         disable_midi_logging: bool = False,
+        lr_schedule: str = "cosine",  # "none", "cosine", or "plateau"
         warmup_steps: int = 1000,
+        lr_plateau_factor: float = 0.5,
+        lr_plateau_patience: int = 5,
     ):
         super(LitEncoderDecoder, self).__init__()
 
@@ -57,7 +60,10 @@ class LitEncoderDecoder(BaseLightningModel):
         self._register_dataset_info(train_dataset)
 
         self.sample_interval = sample_interval
+        self.lr_schedule = lr_schedule
         self.warmup_steps = warmup_steps
+        self.lr_plateau_factor = lr_plateau_factor
+        self.lr_plateau_patience = lr_plateau_patience
         self.max_log_examples = max_log_examples
         self.disable_midi_logging = disable_midi_logging
         tokenizer = train_dataset.tokenizer
@@ -322,5 +328,9 @@ class LitEncoderDecoder(BaseLightningModel):
         """
         optimizer = AdamW(filter(lambda p: p.requires_grad, self.parameters()))
         return self._configure_optimizer_with_schedule(
-            optimizer, warmup_steps=self.warmup_steps
+            optimizer,
+            lr_schedule=self.lr_schedule,
+            warmup_steps=self.warmup_steps,
+            lr_plateau_factor=self.lr_plateau_factor,
+            lr_plateau_patience=self.lr_plateau_patience,
         )

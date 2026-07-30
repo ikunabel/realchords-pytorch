@@ -6,6 +6,7 @@
 # https://lightning.ai/docs/pytorch/stable/model/train_model_basic.html
 # https://lightning.ai/docs/fabric/stable/guide/lightning_module.html
 
+import argbind
 import lightning as L
 import torch
 import torch.nn as nn
@@ -90,6 +91,13 @@ class Trainer:
         self.run_tag = wandb.util.generate_id()
         self.save_dir = Path(save_dir).with_name(f"{self.config_name}_{self.run_tag}")
         self.save_dir.mkdir(parents=True, exist_ok=True)
+
+        # Each training script's own `__main__` block dumps args.yml to the
+        # *original* save_dir (before this rename), so without this it never
+        # ends up next to the checkpoints -- load_lit_model (and anything else
+        # that resolves args.yml from the checkpoint's own directory) would
+        # find nothing there. Re-dump here, now that self.save_dir is final.
+        argbind.dump_args(args, self.save_dir / "args.yml")
 
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -258,23 +266,78 @@ class BaseLightningModel(L.LightningModule):
         """
         pass
 
-    def _configure_optimizer_with_schedule(self, optimizer, warmup_steps: int = 1000):
-        """Wrap `optimizer` with linear-warmup + cosine decay over the full
-        training run (`self.trainer.max_steps`), in Lightning's dict format.
-        Without this, LR stays flat for the whole run, so the optimizer never
-        slows down as training approaches overfitting -- it keeps taking
-        full-sized steps into sharper minima that fit noise right up to the
-        last step.
+    def _configure_optimizer_with_schedule(
+        self,
+        optimizer,
+        lr_schedule: str = "cosine",
+        warmup_steps: int = 1000,
+        lr_monitor_metric: str = "val/loss",
+        lr_monitor_mode: str = "min",
+        lr_plateau_factor: float = 0.5,
+        lr_plateau_patience: int = 5,
+    ):
+        """Wrap `optimizer` with the selected LR schedule, in Lightning's dict
+        (or bare-optimizer) format.
+
+        lr_schedule:
+            "none"    -- flat LR for the whole run (the original behavior --
+                         no scheduler at all). The optimizer never slows down
+                         as training approaches overfitting, so it keeps
+                         taking full-sized steps into sharper minima that fit
+                         noise right up to the last step.
+            "cosine"  -- linear warmup then cosine decay to 0 over
+                         `self.trainer.max_steps`. Fixes the "none" problem,
+                         but the decay horizon is tied to `train_steps`: if
+                         early stopping fires first (as it usually does here),
+                         the run ends partway down the curve, at a higher LR
+                         than the schedule's intended floor.
+            "plateau" -- ReduceLROnPlateau: multiplies LR by `lr_plateau_factor`
+                         whenever `lr_monitor_metric` hasn't improved for
+                         `lr_plateau_patience` validation checks. Reacts to the
+                         actual validation trend instead of a step count fixed
+                         in advance, so it can't run out early the way "cosine"
+                         can -- pair with a patience shorter than
+                         EarlyStopping's so LR drops before the run is ended,
+                         giving the model a chance to recover first. No warmup
+                         phase (ReduceLROnPlateau doesn't compose with a
+                         separate warmup scheduler without extra glue code).
         """
-        scheduler = LinearWarmupCosineDecay(
-            optimizer,
-            warmup_iters=warmup_steps,
-            total_iters=self.trainer.max_steps,
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
-        }
+        if lr_schedule == "none":
+            return optimizer
+        elif lr_schedule == "cosine":
+            scheduler = LinearWarmupCosineDecay(
+                optimizer,
+                warmup_iters=warmup_steps,
+                total_iters=self.trainer.max_steps,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+            }
+        elif lr_schedule == "plateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode=lr_monitor_mode,
+                factor=lr_plateau_factor,
+                patience=lr_plateau_patience,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "monitor": lr_monitor_metric,
+                    "interval": "step",
+                    # val/loss is only updated every val_check_interval steps
+                    # (matches Trainer's val_interval); stepping the scheduler
+                    # at that same frequency keeps it in sync with when the
+                    # monitored metric actually changes.
+                    "frequency": self.trainer.val_check_interval,
+                },
+            }
+        else:
+            raise ValueError(
+                f"Unknown lr_schedule {lr_schedule!r}; expected 'none', 'cosine', or 'plateau'."
+            )
 
     def _log_per_dataset_loss(
         self, per_sample_loss, dataset_names, key_prefix: str = "val/loss_by_dataset"

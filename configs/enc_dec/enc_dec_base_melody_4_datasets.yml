@@ -34,6 +34,11 @@ data_augmentation: true
 AdamW.lr: 0.0001
 AdamW.weight_decay: 0.0
 
+# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
+# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+lr_schedule: "cosine"
+warmup_steps: 1000
+
 # Model hyperparameters
 EncoderDecoderTransformer.enc_dim: 512
 EncoderDecoderTransformer.dec_dim: 512

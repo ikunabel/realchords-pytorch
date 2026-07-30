@@ -1,0 +1,13 @@
+# A/B variant of realchords.yml -- swaps the global contrastive_reward_model_path
+# from the hooktheory-only checkpoints to the 3-dataset-trained ones (same
+# checkpoints gapt.yml uses), so it can serve as the baseline for
+# realchords_multiscale.yml: both configs then use the same reward-model
+# training data, isolating single-scale vs. multi-scale as the only variable
+# between them (rather than also varying which data trained the reward model).
+
+$include:
+  - configs/rl/realchords.yml
+
+contrastive_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_3_datasets/step=8000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_3_datasets/step=8000.ckpt"

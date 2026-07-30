@@ -29,15 +29,14 @@ model_type: "decoder_only"
 max_len: 512
 
 datasets: ["hooktheory", "pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
-alpha: 0.5
+alpha: 0
 data_augmentation: true
 
 # Optimizer hyperparameters
 AdamW.lr: 0.0001
 AdamW.weight_decay: 0.0
 
-# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
-# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+# LR schedule: "none", "cosine" (cosine decay to 0 over train steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
 lr_schedule: "cosine"
 warmup_steps: 1000
 

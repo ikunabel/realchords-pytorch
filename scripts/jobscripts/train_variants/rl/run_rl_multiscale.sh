@@ -1,11 +1,11 @@
 #!/usr/bin/zsh
 #SBATCH --partition=c23g
-#SBATCH --job-name=contrastive_reward_segment
+#SBATCH --job-name=rl
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-gpu=24
 #SBATCH --gres=gpu:1
-#SBATCH --time=02:00:00
+#SBATCH --time=05:00:00
 #SBATCH --output=scripts/jobscripts/slurm_logs/%x/%x_%j.out
 #SBATCH --error=scripts/jobscripts/slurm_logs/%x/%x_%j.err
 #SBATCH --account=thes2192
@@ -19,9 +19,15 @@ fi
 
 CONFIG_YML="$1"
 
-RUN_DIR="${RUNS_ROOT}/contrastive_reward/${SLURM_JOB_NAME}"
+RUN_DIR="${RUNS_ROOT}/rl/${SLURM_JOB_NAME}"
 mkdir -p "${RUN_DIR}"
 
-srun python scripts/train/train_contrastive_reward_segment.py \
+module load CUDA/12.8.0
+
+export CC=gcc
+export CXX=g++
+export CUDAHOSTCXX=g++
+
+srun python scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_multiscale.py \
   --args.load "${CONFIG_YML}" \
   --save_dir "${RUN_DIR}"

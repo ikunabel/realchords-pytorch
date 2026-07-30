@@ -1,0 +1,18 @@
+# A/B variant of realchords.yml -- option 1 from the reward-coefficient
+# discussion in journal/CONFIGS.md: sets each of the four reward-model weight
+# fields (contrastive/discriminative, and their rhythm-only variants) to 50,
+# the literal per-field reading of the ReaLchords paper's "coefficient of 50
+# to the reward produced by reward models" (Appendix H). Since
+# ExperienceMaker.compute_rewards() sums rather than averages reward terms
+# (realchords/rl/experience_maker.py), this makes the combined coherence
+# signal contribute up to 4x50=200 relative to the penalty terms -- likely an
+# over-weighting relative to the paper's intent. Kept as the "naive" baseline
+# to compare against reward_model_weight=12.5.
+
+$include:
+  - configs/rl/realchords.yml
+
+contrastive_reward_weight: 50.0
+discriminative_reward_weight: 50.0
+contrastive_reward_rhythm_weight: 50.0
+discriminative_reward_rhythm_weight: 50.0
