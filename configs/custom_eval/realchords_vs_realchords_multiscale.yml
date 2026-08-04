@@ -1,0 +1,12 @@
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+model:
+  - "realchords=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords/actor.pth"
+  - "realchords_multiscale=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale/actor.pth"
+seed: 42
+
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/realchords_vs_realchords_multiscale_test
+batch_size: 64
+num_batches: -1
+run_full_songs: false

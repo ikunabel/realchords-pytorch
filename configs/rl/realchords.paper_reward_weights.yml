@@ -1,0 +1,44 @@
+# A/B variant of the already-finished realchords run
+# (/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords) -- swaps the
+# uniform 1.0 reward/penalty weights for the original ReaLchords paper's
+# stated coefficients (Appendix H):
+#   "We apply a coefficient of 50 to the reward produced by reward models.
+#    We apply a coefficient of 20 to the ending early penalty... To train
+#    ReaLchords, we apply a coefficient of 2 to both repetition and silence
+#    penalty."
+#
+# The paper describes the "reward produced by reward models" as a single
+# score: "we train two seeds and ensemble their normalized scores, then
+# average across all components to obtain the per-episode reward R(x,y)"
+# (GAPT paper, which this repo's reward ensemble follows). This repo's
+# ExperienceMaker.compute_rewards() sums per-term weighted rewards rather
+# than averaging them, so applying 50 to *each* of the 4 reward-model terms
+# (contrastive/discriminative x full/rhythm) would over-weight coherence by
+# ~4x relative to the paper's intent. Using 50/4=12.5 per term reproduces
+# "average the ensemble, then scale by 50" given the sum-based code, without
+# a code change -- see journal/CONFIGS.md for the full reasoning (this is
+# the same open question flagged when auditing realchords.yml, now resolved
+# with an actual run rather than left as a config-only exercise).
+#
+# invalid_output_penalty_weight / long_note_penalty_weight are left at
+# realchords.yml's existing values -- the paper doesn't mention either.
+#
+# actor_learning_rate/critic_learning_rate are pinned to the base defaults
+# (5e-6/9e-5), matching what the already-finished baseline run actually used
+# -- NOT the "paper-correct" 5e-7/9e-6 override now in realchords.yml (added
+# after that baseline was trained). Overriding back here so this A/B isolates
+# reward weighting only, not also the LR fix.
+
+$include:
+  - configs/rl/realchords.yml
+
+actor_learning_rate: !!float 5e-6
+critic_learning_rate: !!float 9e-5
+
+contrastive_reward_weight: 12.5
+discriminative_reward_weight: 12.5
+contrastive_reward_rhythm_weight: 12.5
+discriminative_reward_rhythm_weight: 12.5
+early_stop_penalty_weight: 20.0
+repetition_penalty_weight: 2.0
+silence_penalty_weight: 2.0

@@ -6,6 +6,10 @@ This CLI supports three generation regimes:
 1. Model-vs-model MARL generation
    Example:
        python scripts/generate_sequences.py \
+           --args.load configs/generate_sequences/model_vs_model/mle_melody_vs_mle_chord_free_generation.yml
+
+   Or equivalently, without a config file:
+       python scripts/generate_sequences.py \
            --mode rl_melody_vs_rl_chord \
            --rl_melody_model_path logs/melody_rl/actor.pth \
            --rl_chord_model_path logs/chord_rl/actor.pth \
@@ -15,6 +19,10 @@ This CLI supports three generation regimes:
 2. Data-conditioned generation with optional perturbation
    Example:
        python scripts/generate_sequences.py \
+           --args.load configs/generate_sequences/gt_vs_gapt/hooktheory.yml
+
+   Or equivalently, without a config file:
+       python scripts/generate_sequences.py \
            --mode melody_data_vs_rl_chord \
            --rl_chord_model_path logs/chord_rl/actor.pth \
            --dataset_name wikifonia \
@@ -23,16 +31,19 @@ This CLI supports three generation regimes:
            --save_dir logs/generated/ood \
            --num_batches -1
 
-3. Agent-switching generation
+3. Agent-switching generation (no saved config preset yet -- CLI/YAML only)
    Example:
        python scripts/generate_sequences.py \
            --mode rl_chord_vs_switching_melody \
            --rl_chord_model_path logs/chord_rl/actor.pth \
-           --rl_melody_model_paths logs/melody_a/actor.pth logs/melody_b/actor.pth \
+           --rl_melody_model_paths "logs/melody_a/actor.pth logs/melody_b/actor.pth" \
            --agent_switch_frames 64 \
            --target_seq_len 257 \
            --save_dir logs/generated/switching \
            --num_batches 8
+
+See configs/generate_sequences/{gt,gt_vs_mle,gt_vs_realchords,gt_vs_gapt,model_vs_model}/ for every
+saved preset, and scripts/eval/generate_sequences/run_generate_sequences.py to run one or more of them.
 
 Generated artifacts:
   - model-vs-model and agent switching modes:
@@ -51,8 +62,11 @@ Outputs intended for downstream evaluation keep BOS at column 0 when generation
 produces it, matching the private evaluation pipeline.
 """
 
-import argparse
+from functools import partial
+from pathlib import Path
+from typing import List
 
+import argbind
 import torch
 from lightning import seed_everything
 
@@ -74,148 +88,17 @@ from realchords.utils.experiment_utils_model_model import (
     handle_model_vs_model_generation,
     load_models_for_switching,
 )
+from realchords.utils.train_utils import AttrDict
+
+GROUP = __file__
+bind = partial(argbind.bind, group=GROUP)
+
+_VALID_DATA_PERTURBATIONS = {"none", "multiple_transpose", "single_transpose_6"}
+_VALID_DATASET_NAMES = {"hooktheory", "pop909", "nottingham", "wikifonia", "jazzmus", "wjd"}
+_VALID_DATASET_SPLITS = {"train", "valid", "test", "all"}
 
 
-def get_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate sequences for evaluation from MLE/RL checkpoints."
-    )
-    parser.add_argument(
-        "--rl_melody_model_path",
-        type=str,
-        default=None,
-        help="Path to the RL melody checkpoint (.pth).",
-    )
-    parser.add_argument(
-        "--rl_chord_model_path",
-        type=str,
-        default=None,
-        help="Path to the RL chord checkpoint (.pth).",
-    )
-    parser.add_argument(
-        "--mle_melody_model_path",
-        type=str,
-        default=None,
-        help=(
-            "Path to the baseline MLE melody Lightning checkpoint. "
-            "Not required for --mode melody_data_vs_chord_data (GT dump)."
-        ),
-    )
-    parser.add_argument(
-        "--mle_chord_model_path",
-        type=str,
-        default=None,
-        help=(
-            "Path to the baseline MLE chord Lightning checkpoint. "
-            "Not required for --mode melody_data_vs_chord_data (GT dump)."
-        ),
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        required=True,
-        help="Generation mode, e.g. rl_melody_vs_rl_chord or melody_data_vs_rl_chord.",
-    )
-    parser.add_argument(
-        "--save_dir",
-        type=str,
-        required=True,
-        help="Directory where generated tensors and KL artifacts will be written.",
-    )
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument(
-        "--num_batches",
-        type=int,
-        default=1,
-        help=(
-            "Number of batches to process. Use -1 only for data-conditioned modes "
-            "to process the entire selected split."
-        ),
-    )
-    parser.add_argument(
-        "--target_seq_len",
-        type=int,
-        default=MAX_GEN_STEPS,
-        help="Target length of the final sequence in tokens, including prompts.",
-    )
-    parser.add_argument(
-        "--prompt_frames",
-        dest="prompt_steps",
-        type=int,
-        default=0,
-        help="Number of data frames used as prompts before free generation.",
-    )
-    parser.add_argument(
-        "--rl_melody_model_paths",
-        type=str,
-        nargs="*",
-        default=None,
-        help="List of RL melody checkpoints for agent switching.",
-    )
-    parser.add_argument(
-        "--mle_melody_model_paths",
-        type=str,
-        nargs="*",
-        default=None,
-        help="List of MLE melody checkpoints for agent switching.",
-    )
-    parser.add_argument(
-        "--rl_chord_model_paths",
-        type=str,
-        nargs="*",
-        default=None,
-        help="List of RL chord checkpoints for agent switching.",
-    )
-    parser.add_argument(
-        "--mle_chord_model_paths",
-        type=str,
-        nargs="*",
-        default=None,
-        help="List of MLE chord checkpoints for agent switching.",
-    )
-    parser.add_argument(
-        "--agent_switch_frames",
-        dest="agent_switch_steps",
-        type=int,
-        nargs="*",
-        default=None,
-        help="Frame counts for each switching segment. Each frame corresponds to one chord+melody pair.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed for reproducibility.",
-    )
-    parser.add_argument(
-        "--data_perturbation",
-        type=str,
-        choices=["none", "multiple_transpose", "single_transpose_6"],
-        default="none",
-        help="Optional perturbation applied to conditioning data in model-vs-data modes.",
-    )
-    parser.add_argument(
-        "--dataset_name",
-        type=str,
-        choices=["hooktheory", "pop909", "nottingham", "wikifonia", "jazzmus", "wjd"],
-        default="hooktheory",
-        help="Dataset from which conditioning examples are drawn in data modes.",
-    )
-    parser.add_argument(
-        "--dataset_split",
-        type=str,
-        choices=["train", "valid", "test", "all"],
-        default="valid",
-        help=(
-            "Dataset split used for conditioning examples. "
-            "Use 'all' to load train+valid+test combined."
-        ),
-    )
-
-    return parser.parse_args()
-
-
-def validate_args(args: argparse.Namespace, mode_parts: list[str]) -> None:
+def validate_args(args, mode_parts: list[str]) -> None:
     is_data_mode = "data" in mode_parts[0] or "data" in mode_parts[1]
     if not is_data_mode and args.num_batches < 1:
         raise ValueError(
@@ -223,8 +106,103 @@ def validate_args(args: argparse.Namespace, mode_parts: list[str]) -> None:
         )
 
 
-def main() -> None:
-    args = get_args()
+@bind(without_prefix=True)
+def main(
+    args,
+    rl_melody_model_path: str = "",
+    rl_chord_model_path: str = "",
+    mle_melody_model_path: str = "",
+    mle_chord_model_path: str = "",
+    mode: str = "",
+    save_dir: str = "",
+    batch_size: int = 64,
+    num_batches: int = 1,
+    target_seq_len: int = MAX_GEN_STEPS,
+    prompt_steps: int = 0,
+    rl_melody_model_paths: List[str] = [],
+    mle_melody_model_paths: List[str] = [],
+    rl_chord_model_paths: List[str] = [],
+    mle_chord_model_paths: List[str] = [],
+    agent_switch_steps: List[int] = [],
+    seed: int = 42,
+    data_perturbation: str = "none",
+    dataset_name: str = "hooktheory",
+    dataset_split: str = "valid",
+) -> None:
+    """
+    Args:
+        rl_melody_model_path: Path to the RL melody checkpoint (.pth).
+        rl_chord_model_path: Path to the RL chord checkpoint (.pth).
+        mle_melody_model_path: Path to the baseline MLE melody Lightning
+            checkpoint. Not required for mode melody_data_vs_chord_data (GT dump).
+        mle_chord_model_path: Path to the baseline MLE chord Lightning
+            checkpoint. Not required for mode melody_data_vs_chord_data (GT dump).
+        mode: Generation mode, e.g. rl_melody_vs_rl_chord or melody_data_vs_rl_chord.
+        save_dir: Directory where generated tensors and KL artifacts are written.
+        num_batches: Number of batches to process. Use -1 only for
+            data-conditioned modes, to process the entire selected split.
+        target_seq_len: Target length of the final sequence in tokens,
+            including prompts.
+        prompt_steps: Number of data frames used as prompts before free
+            generation (CLI/YAML key: prompt_steps; was --prompt_frames
+            under the old argparse CLI).
+        rl_melody_model_paths: RL melody checkpoints for agent switching.
+        mle_melody_model_paths: MLE melody checkpoints for agent switching.
+        rl_chord_model_paths: RL chord checkpoints for agent switching.
+        mle_chord_model_paths: MLE chord checkpoints for agent switching.
+        agent_switch_steps: Frame counts for each switching segment (one
+            frame = one chord+melody pair). Required for switching modes.
+        data_perturbation: One of none / multiple_transpose / single_transpose_6.
+        dataset_name: One of hooktheory / pop909 / nottingham / wikifonia / jazzmus / wjd.
+        dataset_split: One of train / valid / test / all ('all' loads
+            train+valid+test combined).
+    """
+    if not mode:
+        raise ValueError(
+            "mode must be provided, e.g. rl_melody_vs_rl_chord or melody_data_vs_rl_chord."
+        )
+    if not save_dir:
+        raise ValueError("save_dir must be provided.")
+    if data_perturbation not in _VALID_DATA_PERTURBATIONS:
+        raise ValueError(
+            f"Invalid data_perturbation '{data_perturbation}'. "
+            f"Expected one of: {sorted(_VALID_DATA_PERTURBATIONS)}"
+        )
+    if dataset_name not in _VALID_DATASET_NAMES:
+        raise ValueError(
+            f"Invalid dataset_name '{dataset_name}'. Expected one of: {sorted(_VALID_DATASET_NAMES)}"
+        )
+    if dataset_split not in _VALID_DATASET_SPLITS:
+        raise ValueError(
+            f"Invalid dataset_split '{dataset_split}'. Expected one of: {sorted(_VALID_DATASET_SPLITS)}"
+        )
+
+    # Downstream helpers (experiment_utils*.py) all expect a namespace-like
+    # `args` with plain attribute access -- rebuild it here from the typed
+    # params above so the rest of this function (and every helper it calls)
+    # is otherwise unchanged from the pre-argbind version.
+    args = AttrDict(
+        rl_melody_model_path=rl_melody_model_path or None,
+        rl_chord_model_path=rl_chord_model_path or None,
+        mle_melody_model_path=mle_melody_model_path or None,
+        mle_chord_model_path=mle_chord_model_path or None,
+        mode=mode,
+        save_dir=save_dir,
+        batch_size=batch_size,
+        num_batches=num_batches,
+        target_seq_len=target_seq_len,
+        prompt_steps=prompt_steps,
+        rl_melody_model_paths=rl_melody_model_paths or None,
+        mle_melody_model_paths=mle_melody_model_paths or None,
+        rl_chord_model_paths=rl_chord_model_paths or None,
+        mle_chord_model_paths=mle_chord_model_paths or None,
+        agent_switch_steps=agent_switch_steps or None,
+        seed=seed,
+        data_perturbation=data_perturbation,
+        dataset_name=dataset_name,
+        dataset_split=dataset_split,
+    )
+
     seed_everything(args.seed)
 
     mode_parts = args.mode.split("_vs_")
@@ -410,4 +388,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parsed_args = argbind.parse_args(group=GROUP)
+    if parsed_args.get("save_dir"):
+        argbind.dump_args(parsed_args, Path(parsed_args["save_dir"]) / "args.yml")
+    with argbind.scope(parsed_args):
+        main(parsed_args)

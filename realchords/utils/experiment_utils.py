@@ -81,8 +81,20 @@ def create_dataset_dataloaders(
     batch_size: int,
     max_len: int,
     num_workers: int = 0,
+    chord_names_path: Optional[str] = None,
 ) -> Tuple[Optional[torch.utils.data.DataLoader], torch.utils.data.DataLoader]:
-    """Create dataloaders for a specific dataset/split using HooktheoryDataset."""
+    """Create dataloaders for a specific dataset/split using HooktheoryDataset.
+
+    chord_names_path: If given, used as-is instead of the default
+    resolve_chord_names_path_for_dataset(cache_dir) auto-resolution. Needed
+    when the dataset must match a *specific* already-fixed vocab (e.g. a
+    pretrained checkpoint's own chord embedding table) rather than whatever
+    the current global vocab happens to be -- auto-resolution picks the
+    current global file whenever it's a superset of the dataset's local
+    chords, which silently diverges from any checkpoint trained before the
+    global vocab last grew (it gets re-sorted on every growth, so even
+    already-present chord names get new ids).
+    """
 
     dataset_key = dataset_name.lower()
     split_key = dataset_split.lower()
@@ -93,7 +105,8 @@ def create_dataset_dataloaders(
         )
 
     cache_dir = DATASET_CACHE_DIRS[dataset_key]
-    chord_names_path = resolve_chord_names_path_for_dataset(cache_dir)
+    if chord_names_path is None:
+        chord_names_path = resolve_chord_names_path_for_dataset(cache_dir)
 
     dataset = HooktheoryDataset(
         cache_dir=cache_dir,

@@ -13,12 +13,13 @@
 source scripts/jobscripts/_common_env.sh
 
 # Zero-shot genre voting + t-SNE of CLaMP2 embeddings across ALL songs in
-# every dataset's full-songs GT MIDI export (logs/paired_eval/gt/<dataset>_all/full_songs/midi).
-# Run scripts/eval/custom_eval.sh's `paired_gt_all` first (with NUM_MIDIS=-1,
-# GT_NUM_BATCHES=-1, already the defaults) to populate those MIDI directories.
+# every dataset's full-songs GT MIDI export (logs/custom_eval/gt/<dataset>_all/full_songs/midi).
+# Run `python scripts/eval/custom_eval/run_custom_eval.py gt_all midi_gt_all` first
+# (default midi_samples=-1/num_batches=-1, i.e. every sequence) to populate
+# those MIDI directories.
 
-srun python scripts/eval/clamp2_dataset_probe.py \
-  --gt_root logs/paired_eval/gt \
+srun python scripts/eval/custom_eval/clamp2_dataset_probe.py \
+  --gt_root logs/custom_eval/gt \
   --split_mode full_songs \
-  --out_dir logs/paired_eval/clamp2_probe_full \
+  --out_dir logs/custom_eval/clamp2_probe_full \
   --max_per_dataset 100 \

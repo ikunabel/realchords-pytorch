@@ -1,0 +1,5 @@
+mode: "melody_data_vs_chord_data"
+dataset_name: "wikifonia"
+dataset_split: "all"
+num_batches: -1
+save_dir: "logs/generated/wikifonia_gt"

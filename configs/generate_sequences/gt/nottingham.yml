@@ -1,0 +1,5 @@
+mode: "melody_data_vs_chord_data"
+dataset_name: "nottingham"
+dataset_split: "test"
+num_batches: -1
+save_dir: "logs/generated/nottingham_gt"

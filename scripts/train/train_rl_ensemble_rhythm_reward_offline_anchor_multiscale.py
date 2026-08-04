@@ -1,10 +1,11 @@
-"""RL training with multiscale contrastive reward (legacy + sliding windows), no GAIL.
+"""RL training with multiscale contrastive AND discriminative reward (legacy +
+sliding windows for both), no GAIL.
 
-Isolates the effect of the multiscale contrastive reward on top of the plain
-realchords.yml recipe (ReaLchordsPPOTrainer, global-only discriminative/rhythm
-rewards, no GAIL discriminator) rather than on top of gapt.yml, so results
-aren't confounded with GAPT's other changes (corrected actor/critic LR, GAIL
-reward, etc.).
+Isolates the effect of the multiscale rewards on top of the plain
+realchords.yml recipe (ReaLchordsPPOTrainer, global-only rhythm rewards, no
+GAIL discriminator) rather than on top of gapt.yml, so results aren't
+confounded with GAPT's other changes (corrected actor/critic LR, GAIL reward,
+etc.).
 """
 
 import argbind
@@ -28,6 +29,9 @@ from realchords.lit_module.contrastive_reward_segment import (
     LitContrastiveRewardSegment,
 )
 from realchords.lit_module.discriminative_reward import LitDiscriminativeReward
+from realchords.lit_module.discriminative_reward_segment import (
+    LitDiscriminativeRewardSegment,
+)
 from realchords.lit_module.contrastive_reward_rhythm import (
     LitContrastiveRewardRhythm,
 )
@@ -43,12 +47,14 @@ from realchords.rl.actor import (
 from realchords.rl.critic import Critic
 from realchords.rl.rl_trainer import ReaLchordsPPOTrainer
 from realchords.rl.reward.model_based_rewards import (
-    DiscriminativeRewardFn,
     ContrastiveRewardRhythmFn,
     DiscriminativeRewardRhythmFn,
 )
 from realchords.rl.reward.multiscale_contrastive_rewards import (
     MultiscaleContrastiveRewardFn,
+)
+from realchords.rl.reward.multiscale_discriminative_rewards import (
+    MultiscaleDiscriminativeRewardFn,
 )
 from realchords.rl.reward.rule_based_rewards import (
     EarlyStopPenalty,
@@ -188,7 +194,7 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
         for model_path in args.multiscale_contrastive_reward_model_path
     ]
 
-    discriminative_reward_models = [
+    legacy_discriminative_models = [
         prepare_model_for_deepspeed(
             load_lit_model(
                 model_path,
@@ -199,6 +205,27 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
             target_dtype,
         )
         for model_path in args.discriminative_reward_model_path
+    ]
+
+    if len(args.multiscale_discriminative_reward_model_path) != len(
+        args.multiscale_discriminative_window_lens
+    ):
+        raise ValueError(
+            "multiscale_discriminative_reward_model_path and "
+            "multiscale_discriminative_window_lens must have the same length."
+        )
+
+    multiscale_discriminative_models = [
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitDiscriminativeRewardSegment,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
+        )
+        for model_path in args.multiscale_discriminative_reward_model_path
     ]
     contrastive_reward_rhythm_models = [
         prepare_model_for_deepspeed(
@@ -233,7 +260,10 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
     preparer.add_model_list(
         "multiscale_contrastive_rewards", multiscale_contrastive_models
     )
-    preparer.add_model_list("discriminative_rewards", discriminative_reward_models)
+    preparer.add_model_list("legacy_discriminative_rewards", legacy_discriminative_models)
+    preparer.add_model_list(
+        "multiscale_discriminative_rewards", multiscale_discriminative_models
+    )
     preparer.add_model_list(
         "contrastive_rhythm_rewards", contrastive_reward_rhythm_models
     )
@@ -250,7 +280,10 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
     multiscale_contrastive_models = models.get_model_list(
         "multiscale_contrastive_rewards"
     )
-    discriminative_reward_models = models.get_model_list("discriminative_rewards")
+    legacy_discriminative_models = models.get_model_list("legacy_discriminative_rewards")
+    multiscale_discriminative_models = models.get_model_list(
+        "multiscale_discriminative_rewards"
+    )
     contrastive_reward_rhythm_models = models.get_model_list(
         "contrastive_rhythm_rewards"
     )
@@ -267,29 +300,28 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
         eos_token_id=tokenizer.eos_token,
         model_part=args.model_part,
     )
+    multiscale_discriminative_reward_fn = MultiscaleDiscriminativeRewardFn(
+        legacy_models=legacy_discriminative_models,
+        multiscale_models=multiscale_discriminative_models,
+        window_lens=args.multiscale_discriminative_window_lens,
+        pad_token_id=tokenizer.pad_token,
+        bos_token_id=tokenizer.bos_token,
+        eos_token_id=tokenizer.eos_token,
+        model_part=args.model_part,
+    )
 
     reward_configs = [
         {
             "reward_fn": multiscale_contrastive_reward_fn,
             "weight": getattr(args, "contrastive_reward_weight", 1.0),
             "name": "multiscale_contrastive_reward",
-        }
+        },
+        {
+            "reward_fn": multiscale_discriminative_reward_fn,
+            "weight": getattr(args, "discriminative_reward_weight", 1.0),
+            "name": "multiscale_discriminative_reward",
+        },
     ]
-
-    for i, discriminative_reward_model in enumerate(discriminative_reward_models):
-        reward_configs.append(
-            {
-                "reward_fn": DiscriminativeRewardFn(
-                    model=discriminative_reward_model,
-                    pad_token_id=tokenizer.pad_token,
-                    bos_token_id=tokenizer.bos_token,
-                    eos_token_id=tokenizer.eos_token,
-                    model_part=args.model_part,
-                ),
-                "weight": getattr(args, "discriminative_reward_weight", 1.0),
-                "name": f"discriminative_reward_{i}",
-            }
-        )
 
     for i, contrastive_reward_rhythm_model in enumerate(
         contrastive_reward_rhythm_models

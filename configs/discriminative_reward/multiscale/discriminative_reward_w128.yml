@@ -1,0 +1,40 @@
+# Multiscale discriminative reward — fixed 128-frame segments (1/2 of 256),
+# non-overlapping. Hooktheory-only. See discriminative_reward_w16.yml for the
+# no-masking-needed rationale and the checkpoint_top_k/early_stopping_patience
+# settings.
+
+seed: 42
+train_steps: 30000
+val_interval: 100
+early_stopping_patience: 10
+sample_interval: 1000
+max_log_examples: 8
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 500
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: 5
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+
+batch_size: 128
+num_workers: 8
+cache_dir: "data/cache"
+model_part: "chord"
+model_type: "encoder_decoder"
+max_len: 256
+
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+DiscriminativeReward.dim: 512
+DiscriminativeReward.depth: 6
+DiscriminativeReward.heads: 6
+DiscriminativeReward.max_seq_len: 261
+EncoderDecoderTransformer.dropout: 0.1

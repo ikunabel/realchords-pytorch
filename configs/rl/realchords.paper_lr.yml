@@ -1,0 +1,13 @@
+# A/B variant: original ReaLchords paper's stated RL learning rate
+# (Appendix H: "we use a learning rate of 10-4 for both policy model and
+# value model") vs. the already-finished baseline / HF checkpoint's actual
+# learning rate (5e-6/9e-5) -- see realchords.hf_lr.yml for the paired
+# variant. Standard num_steps=1000, warmup_steps=100 (both unchanged from
+# realchords.yml), so this differs from the HF-LR sibling in exactly one
+# dimension: actor/critic learning rate.
+
+$include:
+  - configs/rl/realchords.yml
+
+actor_learning_rate: !!float 1e-4
+critic_learning_rate: !!float 1e-4

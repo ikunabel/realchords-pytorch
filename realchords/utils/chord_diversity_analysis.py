@@ -1,6 +1,6 @@
 """Shared helpers for chord diversity analysis on generated sequences.
 
-Used by `scripts/eval/analyze_chord_diversity.py`, `scripts/eval/evaluate_generated_sequences.py`,
+Used by `scripts/eval/evaluate_sequences/analyze_chord_diversity.py`, `scripts/eval/evaluate_sequences/evaluate_generated_sequences.py`,
 and `scripts/plot_chord_embedding_tsne.py`. Keeping this logic inside the package lets
 other scripts import it without relying on `scripts/` being on `sys.path`.
 """

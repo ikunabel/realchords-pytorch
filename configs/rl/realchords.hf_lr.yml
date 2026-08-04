@@ -1,0 +1,12 @@
+# A/B variant: explicit HF/baseline learning rate (5e-6/9e-5 -- matches the
+# already-finished realchords run and HF's own reference checkpoint exactly),
+# made explicit here (rather than relying on realchords.yml's own
+# "paper-correct" GAPT-LR override, 5e-7/9e-6) so it's directly comparable to
+# realchords.paper_lr.yml as a clean single-variable A/B. Standard
+# num_steps=1000, warmup_steps=100 (unchanged from realchords.yml).
+
+$include:
+  - configs/rl/realchords.yml
+
+actor_learning_rate: !!float 5e-6
+critic_learning_rate: !!float 9e-5

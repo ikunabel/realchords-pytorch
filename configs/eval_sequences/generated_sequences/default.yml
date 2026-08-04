@@ -1,0 +1,29 @@
+# Default settings for scripts/eval/evaluate_generated_sequences.py, used by
+# scripts/eval/run_evaluate_sequences.py for every invocation -- --system is
+# resolved dynamically per run (from configs/generate_sequences/*/*.yml) and passed on
+# top of this file, not stored here.
+#
+# `config` used to default to configs/thesis/realchords.yml, which no longer
+# exists (moved under the configs/{single_agent_rl,rl}/ reorg). Points here
+# at configs/rl/realchords.yml rather than
+# realchords/utils/chord_diversity_analysis.py's own DEFAULT_CONFIG
+# (configs/single_agent_rl/realchords.yml) deliberately: that file's own
+# contrastive_reward_model_path entries are relative paths
+# (logs/contrastive_reward/step=8000.ckpt) that don't resolve to any real
+# checkpoint -- a pre-existing bug in that frozen/historical config tree,
+# not something introduced here. configs/rl/realchords.yml has the correct
+# absolute paths and is the actively-maintained config elsewhere in this repo.
+analysis_root: logs/eval
+summary_path: logs/eval/summary.json
+config: configs/rl/realchords.yml
+
+# realchords/utils/chord_diversity_analysis.py's own DEFAULT_CHORD_NAMES
+# (data/cache/chord_names_augmented.json) is the *growing* global vocab
+# (currently 2969 entries) -- the contrastive_reward checkpoint above was
+# trained against the stable, pre-drift vocab (2821 entries), so tokenizing
+# with the current global file produces token ids the checkpoint's embedding
+# table is too small for (CUDA device-side assert on embedding lookup, seen
+# when this was first actually run end-to-end). Pinned to the same
+# reconstructed historical vocab used to fix this exact drift issue
+# elsewhere (see journal/REWARD_MODELS.md, "Chord vocabulary drift").
+chord_names_path: data/cache/old_chord_names_augmented.json

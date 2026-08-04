@@ -1,0 +1,9 @@
+mode: "rl_melody_vs_mle_chord"
+rl_melody_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_melody/actor.pth"
+mle_chord_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+mle_melody_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_melody_4_datasets/step=11000.ckpt"
+num_batches: 64
+dataset_name: "hooktheory"
+dataset_split: "test"
+prompt_steps: 64
+save_dir: "logs/generated/realchords_melody_vs_mle_chord_with_prompt"

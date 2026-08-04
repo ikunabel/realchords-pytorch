@@ -4,7 +4,7 @@ $include:
 
 pretrain_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
 contrastive_reward_model_path: 
-  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/step=8000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
   - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2/step=8000.ckpt"
 discriminative_reward_model_path:
   - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs/step=1500.ckpt"
@@ -39,8 +39,10 @@ train_batch_size: 48
 limit_eval_batches: 4
 repetition_penalty_threshold: 4
 
-# Paper-correct RL learning rates
-actor_learning_rate: !!float 5e-7
-critic_learning_rate: !!float 9e-6
+# LR: use rl_realchords_base.yml's default (5e-6/9e-5). This previously carried a
+# 5e-7/9e-6 override (apparently copy-pasted from gapt.yml's GAPT-paper value, not
+# ReaLchords paper's own 1e-4/1e-4) that didn't match the actual finished baseline run
+# (its args.yml confirms 5e-6/9e-5). Both A/B tests (this pair and gapt vs
+# gapt_paper_authentic) found the base default wins -- see journal/rl_learning_rate.md.
 
 num_steps: 1000

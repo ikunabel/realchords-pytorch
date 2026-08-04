@@ -1,0 +1,11 @@
+# GT-only chord-distribution collection (no models). Used by both
+# realchords/utils/custom_evaluation.py (metrics) and
+# scripts/eval/export_paired_midis.py (MIDI export, a separate step run
+# against this same save_dir) -- see scripts/eval/run_custom_eval.py.
+gt_only: true
+dataset_name: hooktheory
+dataset_split: all
+save_dir: logs/custom_eval/gt/hooktheory_all
+batch_size: 64
+num_batches: -1
+seed: 42

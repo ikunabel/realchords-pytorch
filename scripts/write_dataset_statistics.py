@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compute per-dataset, per-split song/beat/frame statistics from the cache,
-cross-checked against the GT tensors already exported to logs/paired_eval/.
+cross-checked against the GT tensors already exported to logs/custom_eval/.
 
 For each dataset under data/cache/ (any directory with train/valid/test.jsonl)
 and for each split plus the combined "all" (train+valid+test), computes:
@@ -11,11 +11,11 @@ and for each split plus the combined "all" (train+valid+test), computes:
 
 Uses the *non-augmented* {split}.jsonl (not {split}_augmented.jsonl) -- these
 are one row per underlying song, matching what the GT MIDI export in
-logs/paired_eval/gt/<dataset>_all/full_songs/ was built from (confirmed by
+logs/custom_eval/gt/<dataset>_all/full_songs/ was built from (confirmed by
 the cross-check below), whereas the augmented files contain ~12-13x
 duplicated (key-transposed) copies of the same songs.
 
-Cross-check: logs/paired_eval/gt/<dataset>_all/full_songs/gt_num_frames.pt
+Cross-check: logs/custom_eval/gt/<dataset>_all/full_songs/gt_num_frames.pt
 holds the actual per-song frame count tensor for the combined ("all" split)
 dataset, computed independently via the MIDI/tokenizer pipeline rather than
 from annotations.num_beats. Comparing against it catches any drift between
@@ -41,7 +41,7 @@ from typing import Dict, List, Optional
 from realchords.constants import CACHE_DIR, FRAME_PER_BEAT
 
 SPLITS = ["train", "valid", "test"]
-PAIRED_EVAL_GT_DIR = Path("logs/paired_eval/gt")
+CUSTOM_EVAL_GT_DIR = Path("logs/custom_eval/gt")
 
 # Relative difference above which the cross-check is flagged as a real mismatch
 # rather than expected floating-point/rounding noise.
@@ -94,7 +94,7 @@ def combine_stats(per_split: Dict[str, Dict]) -> Dict:
 
 def cross_check(dataset: str, computed: Dict[str, float]) -> Optional[Dict]:
     """Compare `computed` (the "all" aggregate) against the GT num_frames tensor."""
-    pt_path = PAIRED_EVAL_GT_DIR / f"{dataset}_all" / "full_songs" / "gt_num_frames.pt"
+    pt_path = CUSTOM_EVAL_GT_DIR / f"{dataset}_all" / "full_songs" / "gt_num_frames.pt"
     if not pt_path.exists():
         return None
 
@@ -148,7 +148,7 @@ def main() -> None:
         # Sanity check only -- not written to the output JSON.
         check = cross_check(dataset, all_stats)
         if check is None:
-            print(f"  (no GT export found at {PAIRED_EVAL_GT_DIR}/{dataset}_all/... -- skipping cross-check)")
+            print(f"  (no GT export found at {CUSTOM_EVAL_GT_DIR}/{dataset}_all/... -- skipping cross-check)")
         else:
             status = "OK" if check["within_tolerance"] and check["num_songs_match"] else "MISMATCH"
             print(

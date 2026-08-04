@@ -1,0 +1,7 @@
+mode: "melody_data_vs_mle_chord"
+mle_melody_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_melody_4_datasets/step=11000.ckpt"
+mle_chord_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+dataset_name: "wikifonia"
+dataset_split: "all"
+num_batches: -1
+save_dir: "logs/generated/wikifonia_melody_vs_mle_chord"

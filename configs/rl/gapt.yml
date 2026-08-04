@@ -39,9 +39,9 @@ micro_train_batch_size: 48
 train_batch_size: 48
 limit_eval_batches: 4
 
-# Paper-correct RL learning rates
-actor_learning_rate: !!float 5e-7
-critic_learning_rate: !!float 9e-6
+# LR: use rl_realchords_base.yml's default (5e-6/9e-5), not the paper's stated 5e-7/9e-6 --
+# A/B tested against gapt_paper_authentic, base default won on eval/reward and repetition_penalty
+# both (see journal/rl_learning_rate.md).
 
 entropy_loss_coef: 0.01
 

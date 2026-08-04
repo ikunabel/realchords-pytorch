@@ -6,15 +6,22 @@ conditioning for every specified model, producing predictions that share the sam
 melodic context and can be compared row-by-row.  Full provenance (song URL, dataset
 index) is saved alongside the tensors.
 
-Usage:
+Usage (argbind, config-driven -- see configs/custom_eval/ and
+scripts/eval/custom_eval/run_custom_eval.py for the presets that replace the old
+custom_eval.sh shell functions):
+    python realchords/utils/custom_evaluation.py \
+        --args.load configs/custom_eval/paired_hooktheory.yml
+
+    python realchords/utils/custom_evaluation.py \
+        --args.load configs/custom_eval/gt_hooktheory.yml
+
+Or equivalently, without a config file:
     python realchords/utils/custom_evaluation.py \
         --base_model logs/mle_chord/step=10000.ckpt \
-        --model "MLE=base" \
-        --model "RealJam=logs/realchords/actor.pth" \
-        --model "GAPT=logs/gapt/actor.pth" \
+        --model "MLE=base RealJam=logs/realchords/actor.pth GAPT=logs/gapt/actor.pth" \
         --dataset_name hooktheory \
         --dataset_split test \
-        --save_dir logs/paired_eval/hooktheory \
+        --save_dir logs/custom_eval/hooktheory \
         --num_batches 32 \
         --batch_size 64 \
         --seed 42
@@ -23,9 +30,9 @@ Usage:
         --gt_only \
         --dataset_name hooktheory \
         --dataset_split test \
-        --save_dir logs/paired_eval/gt/hooktheory
+        --save_dir logs/custom_eval/gt/hooktheory
 
-MIDI export is a separate step -- see scripts/eval/export_paired_midis.py,
+MIDI export is a separate step -- see scripts/eval/custom_eval/export_paired_midis.py,
 which reads this script's saved tensors/metadata and writes MIDI without
 re-running generation or metrics.
 
@@ -77,26 +84,31 @@ Outputs (all in --save_dir):
                                        realchords/utils/eval_utils.py
     chord_names_augmented.json        vocab snapshot for downstream decoding
     model_labels.json                 {label: slug} map + dataset_name, for
-                                       scripts/eval/export_paired_midis.py
+                                       scripts/eval/custom_eval/export_paired_midis.py
 """
 
-from __future__ import annotations
-
-import argparse
 import copy
 import json
 import re
+from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import types
 
+import argbind
+import numpy as np
 import torch
 from lightning import seed_everything
 from tqdm import tqdm
 
 from realchords.constants import FRAME_PER_BEAT
+from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.lit_module.decoder_only import LitDecoder
+from realchords.utils.chord_diversity_analysis import (
+    compute_vendi_score,
+    load_contrastive_reward,
+)
 from realchords.utils.eval_utils import (
     chord_type_distribution,
     chord_type_js_distance,
@@ -121,6 +133,7 @@ from realchords.utils.experiment_utils import (
     _random_crop_on_chord_onset,
     create_dataset_dataloaders,
     replace_eos_with_pad,
+    resolve_chord_names_path_for_dataset,
     save_vocab_snapshot,
 )
 from realchords.utils.experiment_utils_model_data import generate_from_data
@@ -251,12 +264,67 @@ def _nansum(tensor: torch.Tensor) -> float:
     return float(tensor.float().nansum().item())
 
 
+def _compute_vendi_score(
+    tensor: torch.Tensor,
+    reward_wrapper,
+    reward_model: torch.nn.Module,
+    device: torch.device,
+    batch_size: int = 128,
+) -> Optional[float]:
+    """Vendi diversity score for one population: one source's (GT, or one
+    model's) full accumulated tensor within one crop-variant run.
+
+    Vendi is a population-level metric (an eigenvalue-entropy-of-similarity-
+    kernel quantity over many embedded sequences, not defined for a single
+    sequence on its own) -- ``tensor`` here already *is* that population,
+    the same way it already is for ``chord_duration_entropy`` /
+    ``note_duration_entropy`` below. Embeds each sequence's chord lane via
+    the contrastive reward model's ``get_chord_embed``, same computation as
+    ``chord_diversity_analysis.accumulate_diversity_metrics``, just reading
+    an in-memory tensor instead of a list of .pt files.
+
+    Ignores the ``device`` argument in favor of ``reward_model``'s own
+    device: ``load_contrastive_reward`` can silently fall back to CPU on a
+    CUDA OOM, so trusting the model's actual parameter device (rather than
+    whatever device the rest of this run is using) avoids a device
+    mismatch in that case.
+    """
+    del device
+    model_device = next(reward_model.parameters()).device
+    pad = reward_wrapper.pad_token_id
+    bos = reward_wrapper.bos_token_id
+    eos = reward_wrapper.eos_token_id
+    embeddings: List[np.ndarray] = []
+    with torch.no_grad():
+        for start in range(0, tensor.size(0), batch_size):
+            batch = tensor[start : start + batch_size]
+            if batch.size(1) == 0:
+                continue
+            model_tokens, _, model_mask, _ = reward_wrapper.get_inputs_from_sequence(batch)
+            chord_mask = (
+                (model_tokens != pad) & (model_tokens != bos) & (model_tokens != eos)
+            )
+            non_empty = chord_mask.sum(dim=1) > 0
+            if not non_empty.any():
+                continue
+            embed_batch = reward_model.get_chord_embed(
+                chord=model_tokens[non_empty].to(model_device),
+                chord_mask=model_mask[non_empty].to(model_device),
+            )
+            embeddings.append(embed_batch.cpu().numpy())
+    return compute_vendi_score(embeddings)
+
+
 def _save_mean_metrics(
     tensor: torch.Tensor,
     tokenizer,
     save_dir: Path,
     prefix: str,
     chords: Dict[str, object],
+    *,
+    reward_wrapper,
+    reward_model: torch.nn.Module,
+    device: torch.device,
 ) -> Dict[str, object]:
     """Rhythm/silence/synchronization metrics for one source (GT or a model).
 
@@ -298,6 +366,11 @@ def _save_mean_metrics(
     complexity = evaluate_chord_complexity(stripped, tokenizer)
     torch.save(complexity, save_dir / f"{prefix}_chord_complexity.pt")
 
+    # Population-level (not per-sequence): the whole `tensor` (this source,
+    # this crop variant) is the population Vendi is computed over -- see
+    # _compute_vendi_score's docstring.
+    vendi_score = _compute_vendi_score(tensor, reward_wrapper, reward_model, device)
+
     return {
         "chord_duration_entropy": chord_duration_entropy,
         "note_duration_entropy": note_duration_entropy,
@@ -306,6 +379,7 @@ def _save_mean_metrics(
         "num_frames_mean": _nanmean(num_frames),
         "num_frames_total": _nansum(num_frames),
         "chord_complexity_mean": _nanmean(complexity["mean"]),
+        "vendi_score": vendi_score,
         "sync_intervals_flat": sync["intervals_flat"],
         "chord_durations_flat": chord_durations["durations_flat"],
         "note_durations_flat": note_durations["durations_flat"],
@@ -368,6 +442,12 @@ def _fmt_metric(value: Optional[float]) -> Optional[float]:
 # CLI
 # ---------------------------------------------------------------------------
 
+GROUP = __file__
+bind = partial(argbind.bind, group=GROUP)
+
+_VALID_DATASET_SPLITS = {"train", "valid", "test", "all"}
+
+
 def _slugify(label: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "_", label.strip().lower()).strip("_") or "model"
 
@@ -380,55 +460,35 @@ def _parse_model_arg(raw: str) -> Tuple[str, str]:
     return label.strip(), spec.strip()
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--base_model",
-        metavar="PATH",
-        help="Lightning checkpoint (.ckpt) for the MLE chord baseline. "
-             "Required unless --gt_only.",
-    )
-    parser.add_argument(
-        "--model",
-        action="append",
-        metavar="Label=PATH",
-        help=(
-            "Model to evaluate. Use 'Label=base' for the base MLE model, "
-            "'Label=path.ckpt' for a Lightning checkpoint, "
-            "or 'Label=path.pth' for an RL actor. Repeat for multiple models. "
-            "Not used with --gt_only."
-        ),
-    )
-    parser.add_argument(
-        "--gt_only",
-        action="store_true",
-        help="Collect GT sequences and chord distributions only (no model loading).",
-    )
-    parser.add_argument(
-        "--dataset_name",
-        default="hooktheory",
-        choices=list(DATASET_CACHE_DIRS.keys()),
-    )
-    parser.add_argument("--dataset_split", default="test",
-                        choices=["train", "valid", "test", "all"])
-    parser.add_argument("--save_dir", type=Path, required=True)
-    parser.add_argument("--num_batches", type=int, default=-1,
-                        help="Number of batches to process. -1 = all.")
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="auto")
-    return parser.parse_args()
-
-
-def _validate_args(args: argparse.Namespace) -> None:
-    if args.gt_only:
-        if args.base_model or args.model:
-            print("Note: --base_model / --model are ignored in --gt_only mode.")
+def _validate_args(
+    *,
+    base_model: str,
+    model: List[str],
+    gt_only: bool,
+    dataset_name: str,
+    dataset_split: str,
+    save_dir: str,
+) -> None:
+    if dataset_name not in DATASET_CACHE_DIRS:
+        raise ValueError(
+            f"Unknown dataset_name '{dataset_name}'. "
+            f"Expected one of: {sorted(DATASET_CACHE_DIRS)}"
+        )
+    if dataset_split not in _VALID_DATASET_SPLITS:
+        raise ValueError(
+            f"Invalid dataset_split '{dataset_split}'. "
+            f"Expected one of: {sorted(_VALID_DATASET_SPLITS)}"
+        )
+    if not save_dir:
+        raise ValueError("save_dir must be provided.")
+    if gt_only:
+        if base_model or model:
+            print("Note: base_model / model are ignored in gt_only mode.")
         return
-    if not args.base_model:
-        raise SystemExit("--base_model is required unless --gt_only is set.")
-    if not args.model:
-        raise SystemExit("At least one --model is required unless --gt_only is set.")
+    if not base_model:
+        raise ValueError("base_model is required unless gt_only is set.")
+    if not model:
+        raise ValueError("At least one --model entry is required unless gt_only is set.")
 
 
 # ---------------------------------------------------------------------------
@@ -563,7 +623,7 @@ def _load_models(
 # ---------------------------------------------------------------------------
 
 def _run_eval(
-    args: argparse.Namespace,
+    args: types.SimpleNamespace,
     *,
     device: torch.device,
     models: Dict[str, torch.nn.Module],
@@ -572,18 +632,26 @@ def _run_eval(
     max_len: int,
     save_dir: Path,
     run_label: str,
+    reward_wrapper,
+    reward_model: torch.nn.Module,
+    dataset_chord_names_path: Optional[str] = None,
 ) -> None:
     """Run one full eval pass (dataloader → generation → save) into save_dir.
 
     Called once per crop variant ("cropped_songs", "full_songs") from main().
     """
-    # Chord dataloader — shuffle=False (already the default in create_dataset_dataloaders)
+    # Chord dataloader — shuffle=False (already the default in create_dataset_dataloaders).
+    # dataset_chord_names_path pins this to the loaded models' own vocab
+    # (set by main() when models are loaded) instead of letting it
+    # auto-resolve to whatever the current global vocab is -- see the
+    # comment where main() builds it.
     _, val_loader = create_dataset_dataloaders(
         dataset_name=args.dataset_name,
         dataset_split=args.dataset_split,
         model_part="chord",
         batch_size=args.batch_size,
         max_len=max_len,
+        chord_names_path=dataset_chord_names_path,
     )
     dataset_tokenizer = val_loader.dataset.tokenizer
     tokenizer = dataset_tokenizer if args.gt_only else model_tokenizer
@@ -605,63 +673,87 @@ def _run_eval(
 
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Accumulators
-    gt_rows: List[torch.Tensor] = []
-    model_rows: Dict[str, List[torch.Tensor]] = {label: [] for label, _ in model_specs}
-    metadata: List[Dict] = []
-    seq_idx = 0
+    # Resume support: if generation already ran and saved gt.pt/{slug}.pt +
+    # metadata_raw.json (e.g. a prior run crashed later, during metrics
+    # computation), skip the slow generation loop and load those straight
+    # from disk instead of regenerating.
+    metadata_raw_path = save_dir / "metadata_raw.json"
+    model_paths = {label: save_dir / f"{_slugify(label)}.pt" for label, _ in model_specs}
+    can_resume = (
+        (save_dir / "gt.pt").exists()
+        and metadata_raw_path.exists()
+        and (args.gt_only or all(p.exists() for p in model_paths.values()))
+    )
 
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(
-            tqdm(val_loader, total=n_batches, desc="Batches")
-        ):
-            if batch_idx >= n_batches:
-                break
+    if can_resume:
+        print(f"Found existing gt.pt/{{model}}.pt + metadata_raw.json in {save_dir} -- "
+              "skipping generation, reusing saved tensors.")
+        gt_tensor = torch.load(save_dir / "gt.pt")
+        model_rows: Dict[str, List[torch.Tensor]] = {
+            label: [torch.load(model_paths[label])] for label, _ in model_specs
+        }
+        with metadata_raw_path.open(encoding="utf-8") as fh:
+            metadata: List[Dict] = json.load(fh)
+        seq_idx = len(metadata)
+    else:
+        # Accumulators
+        gt_rows: List[torch.Tensor] = []
+        model_rows = {label: [] for label, _ in model_specs}
+        metadata = []
+        seq_idx = 0
 
-            # GT sequences: [batch, seq_len] with BOS+EOS stripped to [BOS, tokens…]
-            gt_seq = batch["targets"].to(device)          # [B, seq_len] with BOS+EOS
-            gt_seq_stripped = gt_seq[:, 1:-1]             # drop leading BOS + trailing EOS
-            gt_seq_stripped = replace_eos_with_pad(gt_seq_stripped, tokenizer)
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(
+                tqdm(val_loader, total=n_batches, desc="Batches")
+            ):
+                if batch_idx >= n_batches:
+                    break
 
-            song_urls: List[str] = batch.get("song_url", ["unknown"] * gt_seq.size(0))
+                # GT sequences: [batch, seq_len] with BOS+EOS stripped to [BOS, tokens…]
+                gt_seq = batch["targets"].to(device)          # [B, seq_len] with BOS+EOS
+                gt_seq_stripped = gt_seq[:, 1:-1]             # drop leading BOS + trailing EOS
+                gt_seq_stripped = replace_eos_with_pad(gt_seq_stripped, tokenizer)
 
-            # Record metadata for each sequence in the batch
-            for b in range(gt_seq.size(0)):
-                metadata.append({
-                    "seq_idx": seq_idx + b,
-                    "song_url": song_urls[b] if isinstance(song_urls, list) else song_urls,
-                    "batch_idx": batch_idx,
-                    "batch_pos": b,
-                    "dataset_name": args.dataset_name,
-                })
+                song_urls: List[str] = batch.get("song_url", ["unknown"] * gt_seq.size(0))
 
-            # Save GT (with BOS, without EOS)
-            gt_with_bos = torch.cat([
-                torch.full((gt_seq.size(0), 1), tokenizer.bos_token,
-                           dtype=torch.long, device=device),
-                gt_seq_stripped,
-            ], dim=1)
-            gt_rows.append(gt_with_bos.cpu())
+                # Record metadata for each sequence in the batch
+                for b in range(gt_seq.size(0)):
+                    metadata.append({
+                        "seq_idx": seq_idx + b,
+                        "song_url": song_urls[b] if isinstance(song_urls, list) else song_urls,
+                        "batch_idx": batch_idx,
+                        "batch_pos": b,
+                        "dataset_name": args.dataset_name,
+                    })
 
-            if not args.gt_only:
-                target_seq_len = gt_with_bos.size(1)
-                for label, model in models.items():
-                    preds = generate_from_data(
-                        model=model,
-                        sequences=gt_seq_stripped,
-                        tokenizer=model_tokenizer,
-                        prompt_steps=0,
-                        target_seq_len=target_seq_len,
-                    )
-                    model_rows[label].append(preds.cpu())
+                # Save GT (with BOS, without EOS)
+                gt_with_bos = torch.cat([
+                    torch.full((gt_seq.size(0), 1), tokenizer.bos_token,
+                               dtype=torch.long, device=device),
+                    gt_seq_stripped,
+                ], dim=1)
+                gt_rows.append(gt_with_bos.cpu())
 
-            seq_idx += gt_seq.size(0)
+                if not args.gt_only:
+                    target_seq_len = gt_with_bos.size(1)
+                    for label, model in models.items():
+                        preds = generate_from_data(
+                            model=model,
+                            sequences=gt_seq_stripped,
+                            tokenizer=model_tokenizer,
+                            prompt_steps=0,
+                            target_seq_len=target_seq_len,
+                        )
+                        model_rows[label].append(preds.cpu())
+
+                seq_idx += gt_seq.size(0)
+
+        gt_tensor = torch.cat(gt_rows, dim=0)
 
     # ---- Save ---------------------------------------------------------------
     print(f"\nSaving {seq_idx} sequences to {save_dir} …")
 
     # GT
-    gt_tensor = torch.cat(gt_rows, dim=0)
     torch.save(gt_tensor, save_dir / "gt.pt")
     print(f"  gt.pt  {tuple(gt_tensor.shape)}")
 
@@ -672,6 +764,13 @@ def _run_eval(
             tensor = torch.cat(rows, dim=0)
             torch.save(tensor, save_dir / f"{slug}.pt")
             print(f"  {slug}.pt  {tuple(tensor.shape)}")
+
+    # Raw per-sequence metadata (song_url/batch provenance only, not yet
+    # enriched with nicr/mode_fit) -- persisted now so a crash during metrics
+    # computation below doesn't lose generation results; enables the resume
+    # path above on the next run.
+    with metadata_raw_path.open("w", encoding="utf-8") as fh:
+        json.dump(metadata, fh)
 
     gt_nicr_means, gt_nicr_pooled = _save_nicr_per_frame(
         gt_tensor, dataset_tokenizer, save_dir / "gt_nicr_per_frame.pt"
@@ -700,12 +799,16 @@ def _run_eval(
     )
     print(f"  gt_chord_distribution.json  ({dist_path})")
 
-    gt_means = _save_mean_metrics(gt_tensor, dataset_tokenizer, save_dir, "gt", gt_chords)
+    gt_means = _save_mean_metrics(
+        gt_tensor, dataset_tokenizer, save_dir, "gt", gt_chords,
+        reward_wrapper=reward_wrapper, reward_model=reward_model, device=device,
+    )
     print(
         f"  gt_chord_durations.pt / gt_note_durations.pt  "
         f"chord_entropy={gt_means['chord_duration_entropy']:.4f} "
         f"note_entropy={gt_means['note_duration_entropy']:.4f}"
     )
+    print(f"  gt vendi_score={gt_means['vendi_score']}")
     print(
         f"  gt_chord_silence_ratio.pt / gt_melody_silence_ratio.pt  "
         f"chord={gt_means['chord_silence_ratio_mean']:.4f} "
@@ -749,7 +852,8 @@ def _run_eval(
             print(f"  {slug}_chords_per_frame.pt")
 
             model_means = _save_mean_metrics(
-                tensor, model_tokenizer, save_dir, slug, model_chords
+                tensor, model_tokenizer, save_dir, slug, model_chords,
+                reward_wrapper=reward_wrapper, reward_model=reward_model, device=device,
             )
             model_means_by_label[label] = model_means
             print(
@@ -757,6 +861,7 @@ def _run_eval(
                 f"chord_entropy={model_means['chord_duration_entropy']:.4f} "
                 f"note_entropy={model_means['note_duration_entropy']:.4f}"
             )
+            print(f"  {slug} vendi_score={model_means['vendi_score']}")
             print(
                 f"  {slug}_chord_silence_ratio.pt / {slug}_melody_silence_ratio.pt  "
                 f"chord={model_means['chord_silence_ratio_mean']:.4f} "
@@ -783,6 +888,7 @@ def _run_eval(
             "note_in_mode_ratio_mean": _fmt_metric(gt_mode_pooled),
             "note_in_mode_ratio_per_song_mean": _fmt_metric(_nanmean(gt_mode_seg_ratios)),
             "chord_complexity_mean": _fmt_metric(gt_means["chord_complexity_mean"]),
+            "vendi_score": _fmt_metric(gt_means["vendi_score"]),
         },
         "models": {},
     }
@@ -803,6 +909,7 @@ def _run_eval(
                 _nanmean(model_mode_seg_ratios[label])
             ),
             "chord_complexity_mean": _fmt_metric(model_means["chord_complexity_mean"]),
+            "vendi_score": _fmt_metric(model_means["vendi_score"]),
             **{key: _fmt_metric(value) for key, value in comparison.items()},
         }
     means_path = save_dir / "means.json"
@@ -834,7 +941,7 @@ def _run_eval(
     snapshot = save_vocab_snapshot(str(save_dir))
     print(f"  vocab snapshot → {snapshot}")
 
-    # Label→slug mapping (and dataset_name) so scripts/eval/export_paired_midis.py
+    # Label→slug mapping (and dataset_name) so scripts/eval/custom_eval/export_paired_midis.py
     # can find each model's {slug}.pt without re-running generation.
     model_labels_path = save_dir / "model_labels.json"
     with model_labels_path.open("w", encoding="utf-8") as fh:
@@ -851,53 +958,154 @@ def _run_eval(
     print(f"\nDone with {run_label}.")
 
 
-def main() -> None:
-    args = _parse_args()
-    _validate_args(args)
-    seed_everything(args.seed, workers=True)
-    device = _resolve_device(args.device)
+@bind(without_prefix=True)
+def main(
+    args,
+    base_model: str = "",
+    model: List[str] = [],
+    gt_only: bool = False,
+    dataset_name: str = "hooktheory",
+    dataset_split: str = "test",
+    save_dir: str = "",
+    num_batches: int = -1,
+    batch_size: int = 64,
+    seed: int = 42,
+    device: str = "auto",
+    contrastive_config: str = "configs/rl/realchords.yml",
+    contrastive_index: int = 0,
+    run_full_songs: bool = True,
+) -> None:
+    """
+    Args:
+        base_model: Lightning checkpoint (.ckpt) for the MLE chord baseline.
+            Required unless gt_only.
+        model: Models to evaluate, as 'Label=base' (base MLE model),
+            'Label=path.ckpt' (Lightning checkpoint), or 'Label=path.pth'
+            (RL actor). Not used with gt_only.
+        gt_only: Collect GT sequences and chord distributions only (no
+            model loading).
+        dataset_name: One of the keys in DATASET_CACHE_DIRS.
+        dataset_split: One of train / valid / test / all.
+        save_dir: Output root; cropped_songs/ and full_songs/ are written
+            underneath it.
+        run_full_songs: Also run the full_songs (uncropped) variant, not
+            just cropped_songs. Cheap in gt_only mode (no generation), but
+            expensive with models loaded -- every model does two full
+            autoregressive decode passes at the split's longest-song length
+            per batch, vs. 256 tokens for cropped_songs. Set False for
+            model-comparison runs where only cropped_songs metrics matter.
+        num_batches: Number of batches to process. -1 = all.
+        contrastive_config: RL config file listing contrastive reward
+            checkpoints, used for the Vendi diversity score.
+        contrastive_index: Which contrastive reward checkpoint (of possibly
+            several ensemble seeds) to use for Vendi embeddings.
+    """
+    _validate_args(
+        base_model=base_model,
+        model=model,
+        gt_only=gt_only,
+        dataset_name=dataset_name,
+        dataset_split=dataset_split,
+        save_dir=save_dir,
+    )
+    seed_everything(seed, workers=True)
+    device_obj = _resolve_device(device)
+    save_dir_path = Path(save_dir)
 
     model_specs: List[Tuple[str, str]] = []
     models: Dict[str, torch.nn.Module] = {}
     model_tokenizer = None
-    if not args.gt_only:
-        model_specs = [_parse_model_arg(m) for m in args.model]
+    dataset_chord_names_path: Optional[str] = None
+    if not gt_only:
+        model_specs = [_parse_model_arg(m) for m in model]
         models, model_tokenizer = _load_models(
-            args.base_model, model_specs, device, args.batch_size
+            base_model, model_specs, device_obj, batch_size
         )
+        # Pin the eval dataset to the *loaded models'* own chord vocab
+        # (baked into their checkpoints at training time) instead of
+        # create_dataset_dataloaders' default auto-resolution, which picks
+        # whatever the *current* global vocab is -- silently wrong once
+        # that's grown past what these checkpoints (and any reward model
+        # used for Vendi) were actually trained on. See journal/SEQUENCE_EVALUATION.md.
+        save_dir_path.mkdir(parents=True, exist_ok=True)
+        dataset_chord_names_path = str(save_dir_path / "_model_chord_vocab.json")
+        with open(dataset_chord_names_path, "w", encoding="utf-8") as fh:
+            json.dump(model_tokenizer.chord_names, fh)
 
-    # +1 bar of margin: num_beats can under-count by a frame or two at the
-    # tail depending on quantization, and max_len must strictly exceed the
-    # longest song for random_crop's guard to skip cropping.
-    max_frames = _max_song_frames(args.dataset_name, args.dataset_split)
-    full_songs_max_len = 2 * (max_frames + FRAME_PER_BEAT * 4)
-    print(
-        f"full_songs: sizing dataloader for uncropped songs "
-        f"(longest song ~{max_frames} frames/lane, max_len={full_songs_max_len})"
+    # A tokenizer for the contrastive-reward wrapper's pad/bos/eos ids. In
+    # gt_only mode no models are loaded (so no model_tokenizer exists yet) --
+    # build a throwaway one from the dataset's own vocab resolution instead;
+    # it only needs to agree on special-token ids, not be the exact object
+    # used elsewhere.
+    if gt_only:
+        cache_dir = DATASET_CACHE_DIRS[dataset_name.lower()]
+        chord_names_path = resolve_chord_names_path_for_dataset(cache_dir)
+        with open(chord_names_path, encoding="utf-8") as fh:
+            chord_names = json.load(fh)
+        vendi_tokenizer = HooktheoryTokenizer(chord_names=chord_names)
+    else:
+        vendi_tokenizer = model_tokenizer
+
+    print(f"Loading contrastive reward ({contrastive_config}, index={contrastive_index}) for Vendi score …")
+    reward_wrapper, reward_model, contrastive_checkpoint, vendi_device = load_contrastive_reward(
+        Path(contrastive_config), contrastive_index, vendi_tokenizer, device_obj
+    )
+    print(f"  → {contrastive_checkpoint} (on {vendi_device})")
+
+    if run_full_songs:
+        # +1 bar of margin: num_beats can under-count by a frame or two at the
+        # tail depending on quantization, and max_len must strictly exceed the
+        # longest song for random_crop's guard to skip cropping.
+        max_frames = _max_song_frames(dataset_name, dataset_split)
+        full_songs_max_len = 2 * (max_frames + FRAME_PER_BEAT * 4)
+        print(
+            f"full_songs: sizing dataloader for uncropped songs "
+            f"(longest song ~{max_frames} frames/lane, max_len={full_songs_max_len})"
+        )
+    else:
+        print("run_full_songs=False -- skipping full_songs, cropped_songs only.")
+
+    run_args = types.SimpleNamespace(
+        dataset_name=dataset_name,
+        dataset_split=dataset_split,
+        batch_size=batch_size,
+        num_batches=num_batches,
+        gt_only=gt_only,
     )
 
     _run_eval(
-        args,
-        device=device,
+        run_args,
+        device=device_obj,
         models=models,
         model_tokenizer=model_tokenizer,
         model_specs=model_specs,
         max_len=256,  # legacy crop length: 8-bar melody + 8-bar chord
-        save_dir=args.save_dir / "cropped_songs",
+        save_dir=save_dir_path / "cropped_songs",
         run_label="cropped_songs",
+        reward_wrapper=reward_wrapper,
+        reward_model=reward_model,
+        dataset_chord_names_path=dataset_chord_names_path,
     )
-    _run_eval(
-        args,
-        device=device,
-        models=models,
-        model_tokenizer=model_tokenizer,
-        model_specs=model_specs,
-        max_len=full_songs_max_len,
-        save_dir=args.save_dir / "full_songs",
-        run_label="full_songs",
-    )
+    if run_full_songs:
+        _run_eval(
+            run_args,
+            device=device_obj,
+            models=models,
+            model_tokenizer=model_tokenizer,
+            model_specs=model_specs,
+            max_len=full_songs_max_len,
+            save_dir=save_dir_path / "full_songs",
+            run_label="full_songs",
+            reward_wrapper=reward_wrapper,
+            reward_model=reward_model,
+            dataset_chord_names_path=dataset_chord_names_path,
+        )
 
 
 if __name__ == "__main__":
     torch.set_grad_enabled(False)
-    main()
+    args = argbind.parse_args(group=GROUP)
+    if args.get("save_dir"):
+        argbind.dump_args(args, Path(args["save_dir"]) / "args.yml")
+    with argbind.scope(args):
+        main(args)

@@ -1,6 +1,6 @@
 # Base config for all RL RealChords experiments.
 
-chord_names_path: "data/cache/chord_names_augmented.json"
+chord_names_path: "data/cache/old_chord_names_augmented.json"
 data_path: "data/hooktheory/Hooktheory.json.gz"
 
 # Checkpoint / Validation
@@ -122,6 +122,6 @@ aux_loss_coef: 0.0
 save_eval_gen: false
 
 lit_module_override_args:
-  chord_names_path: "data/cache/chord_names_augmented.json"
+  chord_names_path: "data/cache/old_chord_names_augmented.json"
   data_path: "data/hooktheory/Hooktheory.json.gz"
   num_workers: 4
