@@ -112,7 +112,6 @@ from realchords.utils.chord_diversity_analysis import (
 from realchords.utils.eval_utils import (
     chord_type_distribution,
     chord_type_js_distance,
-    duration_emd,
     duration_entropy,
     evaluate_chord_complexity,
     evaluate_chord_durations,
@@ -138,6 +137,12 @@ from realchords.utils.experiment_utils import (
 )
 from realchords.utils.experiment_utils_model_data import generate_from_data
 from realchords.utils.inference_utils import load_lit_model, load_rl_model
+from realchords.utils.midi_export import (
+    resolve_include_chord_bass,
+    select_midi_indices,
+    write_all_source_midis,
+    write_source_midis,
+)
 from realchords.utils.sequence_penalty_analysis import strip_bos
 
 
@@ -381,8 +386,6 @@ def _save_mean_metrics(
         "chord_complexity_mean": _nanmean(complexity["mean"]),
         "vendi_score": vendi_score,
         "sync_intervals_flat": sync["intervals_flat"],
-        "chord_durations_flat": chord_durations["durations_flat"],
-        "note_durations_flat": note_durations["durations_flat"],
         "chord_dist_onset": chord_type_distribution(chords, weighting="onset"),
         "chord_dist_frame": chord_type_distribution(chords, weighting="frame"),
     }
@@ -398,11 +401,6 @@ def _compare_to_gt(model_means: Dict[str, object], gt_means: Dict[str, object]) 
         else None
     )
 
-    def _safe_duration_emd(a: torch.Tensor, b: torch.Tensor) -> Optional[float]:
-        if a.numel() == 0 or b.numel() == 0:
-            return None
-        return duration_emd(a, b)
-
     def _safe_js(a: Dict[str, int], b: Dict[str, int]) -> Optional[float]:
         if not a or not b:
             return None
@@ -410,12 +408,6 @@ def _compare_to_gt(model_means: Dict[str, object], gt_means: Dict[str, object]) 
 
     return {
         "sync_emd_vs_gt": sync_emd,
-        "chord_duration_emd_vs_gt": _safe_duration_emd(
-            model_means["chord_durations_flat"], gt_means["chord_durations_flat"]
-        ),
-        "note_duration_emd_vs_gt": _safe_duration_emd(
-            model_means["note_durations_flat"], gt_means["note_durations_flat"]
-        ),
         "chord_type_js_distance_onset_vs_gt": _safe_js(
             model_means["chord_dist_onset"], gt_means["chord_dist_onset"]
         ),
@@ -458,6 +450,45 @@ def _parse_model_arg(raw: str) -> Tuple[str, str]:
         raise ValueError(f"Invalid --model value '{raw}'. Expected Label=path or Label=base")
     label, spec = raw.split("=", 1)
     return label.strip(), spec.strip()
+
+
+# Historical chord-vocab snapshot (2821 chords / 5902 tokens) most existing
+# reward-model checkpoints were actually trained on -- the current global
+# vocab (data/cache/chord_names_augmented.json) keeps growing and re-sorting
+# as new datasets get added, so a checkpoint's fixed-size embedding table
+# silently goes out of range once the global vocab outgrows what it was
+# trained on (CUDA "device-side assert" inside the embedding lookup). See
+# journal/SEQUENCE_EVALUATION.md.
+_OLD_CHORD_NAMES_PATH = "data/cache/old_chord_names_augmented.json"
+
+
+def _resolve_vendi_chord_names_path(cache_dir: str) -> str:
+    """Chord vocab to use for gt_only mode's dataset + Vendi tokenizer.
+
+    Prefers _OLD_CHORD_NAMES_PATH (matches the contrastive reward
+    checkpoint's fixed embedding table) whenever the dataset's own chords
+    are fully covered by it, so GT tensors and the reward model agree on
+    token ids. Falls back to the current global vocab otherwise -- known
+    limitation: Vendi can still crash for datasets outside old-vocab
+    coverage (e.g. jazzmus/wjd) against this specific reward checkpoint;
+    unresolved, deferred (see journal/SEQUENCE_EVALUATION.md).
+    """
+    old_path = Path(_OLD_CHORD_NAMES_PATH)
+    with open(old_path, encoding="utf-8") as fh:
+        old_names = set(json.load(fh))
+
+    local_names: set = set()
+    for local_path in (
+        Path(cache_dir) / "chord_names_augmented.json",
+        Path(cache_dir) / "chord_names.json",
+    ):
+        if local_path.exists():
+            with open(local_path, encoding="utf-8") as fh:
+                local_names.update(json.load(fh))
+
+    if local_names.issubset(old_names):
+        return str(old_path)
+    return resolve_chord_names_path_for_dataset(cache_dir)
 
 
 def _validate_args(
@@ -635,6 +666,8 @@ def _run_eval(
     reward_wrapper,
     reward_model: torch.nn.Module,
     dataset_chord_names_path: Optional[str] = None,
+    midi_samples: int = 10,
+    seed: int = 42,
 ) -> None:
     """Run one full eval pass (dataloader → generation → save) into save_dir.
 
@@ -758,10 +791,12 @@ def _run_eval(
     print(f"  gt.pt  {tuple(gt_tensor.shape)}")
 
     # Per-model predictions
+    model_tensors: Dict[str, torch.Tensor] = {}
     if not args.gt_only:
         for label, rows in model_rows.items():
             slug = _slugify(label)
             tensor = torch.cat(rows, dim=0)
+            model_tensors[label] = tensor
             torch.save(tensor, save_dir / f"{slug}.pt")
             print(f"  {slug}.pt  {tuple(tensor.shape)}")
 
@@ -889,6 +924,10 @@ def _run_eval(
             "note_in_mode_ratio_per_song_mean": _fmt_metric(_nanmean(gt_mode_seg_ratios)),
             "chord_complexity_mean": _fmt_metric(gt_means["chord_complexity_mean"]),
             "vendi_score": _fmt_metric(gt_means["vendi_score"]),
+            # Always 0.0 by construction (GT compared against itself) -- included
+            # explicitly as the literal parallel to the ReaLchords paper's Table 1
+            # "Test set" row, which is the same trivial self-comparison.
+            "sync_emd_vs_gt": 0.0,
         },
         "models": {},
     }
@@ -955,6 +994,34 @@ def _run_eval(
         )
     print(f"  model_labels.json  ({model_labels_path})")
 
+    # MIDI preview -- a small random sample every run, not the whole split
+    # (use scripts/eval/custom_eval/export_paired_midis.py separately for a
+    # full/custom-size export without re-running generation).
+    midi_indices = select_midi_indices(
+        gt_tensor.size(0), midi_samples, default_all=False, seed=seed
+    )
+    if midi_indices:
+        midi_dir = save_dir / "midi"
+        if args.gt_only:
+            write_source_midis(
+                gt_tensor, dataset_tokenizer, midi_dir, "gt", metadata, midi_indices,
+                strict_chords=True,
+                include_chord_bass=resolve_include_chord_bass(False, False, args.dataset_name),
+            )
+        else:
+            write_all_source_midis(
+                gt_tensor=gt_tensor,
+                model_tensors=model_tensors,
+                ordered_labels=[label for label, _ in model_specs],
+                metadata=metadata,
+                gt_tokenizer=dataset_tokenizer,
+                model_tokenizer=model_tokenizer,
+                midi_dir=midi_dir,
+                indices=midi_indices,
+                include_chord_bass=resolve_include_chord_bass(False, False, args.dataset_name),
+            )
+        print(f"  midi/  ({len(midi_indices)} song(s) x {1 + len(model_tensors)} source(s))")
+
     print(f"\nDone with {run_label}.")
 
 
@@ -974,6 +1041,7 @@ def main(
     contrastive_config: str = "configs/rl/realchords.yml",
     contrastive_index: int = 0,
     run_full_songs: bool = True,
+    midi_samples: int = 10,
 ) -> None:
     """
     Args:
@@ -999,6 +1067,12 @@ def main(
             checkpoints, used for the Vendi diversity score.
         contrastive_index: Which contrastive reward checkpoint (of possibly
             several ensemble seeds) to use for Vendi embeddings.
+        midi_samples: Auto-render this many randomly chosen songs (seeded by
+            seed) to MIDI every run, one file per song per source (GT + each
+            model) under <save_dir>/<mode>/midi/<source>/. 0 disables. -1
+            renders every song (slow for large splits -- prefer running
+            scripts/eval/custom_eval/export_paired_midis.py separately for
+            that instead of setting this to -1).
     """
     _validate_args(
         base_model=base_model,
@@ -1039,8 +1113,8 @@ def main(
     # used elsewhere.
     if gt_only:
         cache_dir = DATASET_CACHE_DIRS[dataset_name.lower()]
-        chord_names_path = resolve_chord_names_path_for_dataset(cache_dir)
-        with open(chord_names_path, encoding="utf-8") as fh:
+        dataset_chord_names_path = _resolve_vendi_chord_names_path(cache_dir)
+        with open(dataset_chord_names_path, encoding="utf-8") as fh:
             chord_names = json.load(fh)
         vendi_tokenizer = HooktheoryTokenizer(chord_names=chord_names)
     else:
@@ -1085,6 +1159,8 @@ def main(
         reward_wrapper=reward_wrapper,
         reward_model=reward_model,
         dataset_chord_names_path=dataset_chord_names_path,
+        midi_samples=midi_samples,
+        seed=seed,
     )
     if run_full_songs:
         _run_eval(
@@ -1099,6 +1175,8 @@ def main(
             reward_wrapper=reward_wrapper,
             reward_model=reward_model,
             dataset_chord_names_path=dataset_chord_names_path,
+            midi_samples=midi_samples,
+            seed=seed,
         )
 
 
