@@ -14,7 +14,11 @@ from realchords.utils.experiment_utils import (
 from realchords.utils.experiment_utils_data_perturbation import (
     apply_data_perturbation,
 )
-from realchords.utils.sequence_utils import sequences_order_to_counterpart
+from realchords.utils.sequence_utils import (
+    add_bos_to_sequence,
+    add_eos_to_sequence,
+    sequences_order_to_counterpart,
+)
 
 MAX_GEN_STEPS = 512
 
@@ -126,6 +130,81 @@ def generate_from_data(
         complete_sequence.masked_fill_(~output_mask, tokenizer.pad_token)
 
     return complete_sequence
+
+
+def generate_from_data_enc_dec(
+    model: torch.nn.Module,
+    sequences: torch.Tensor,
+    tokenizer: HooktheoryTokenizer,
+    target_seq_len: Optional[int] = None,
+) -> torch.Tensor:
+    """Encoder-decoder counterpart of generate_from_data.
+
+    Encodes the *entire* melody once (encoder), then autoregressively
+    decodes chord predictions conditioned on that fixed encoding -- a
+    fundamentally different procedure from decoder-only's frame-by-frame
+    interleaved online generation (generate_online), since encoder-decoder
+    models see the whole melody up front rather than causally.
+
+    Despite the different generation mechanism, returns an identically
+    shaped/masked tensor to generate_from_data -- [BOS, chord_0, melody_0,
+    chord_1, melody_1, ...], with content past the real (non-PAD) melody
+    length masked back to PAD, matching generate_from_data's own
+    output_mask convention -- so every downstream consumer (saving to
+    {slug}.pt, strip_bos, every metric in eval_utils.py) is unchanged and
+    doesn't need to know or care which architecture generated a given
+    tensor.
+
+    Args:
+        model: The raw EncoderDecoderTransformer (i.e. lit_module.model from
+            load_lit_model with lit_module_cls=LitEncoderDecoder), not the
+            Lightning wrapper.
+        sequences: [B, S] interleaved chord-first GT sequence (BOS/EOS
+            already stripped, EOS already replaced with PAD -- same
+            `gt_seq_stripped` generate_from_data itself takes). Only the
+            melody lane (odd positions) is used; the chord lane is ignored
+            since it's the target being predicted, not conditioned on.
+        tokenizer: Shared tokenizer for pad/bos/eos ids.
+        target_seq_len: Same convention as generate_from_data -- total
+            output length including the leading BOS.
+    """
+    if target_seq_len is None:
+        target_seq_len = MAX_GEN_STEPS
+    if target_seq_len % 2 == 0:
+        target_seq_len += 1
+
+    num_frames = (target_seq_len - 1) // 2
+    melody_frames = sequences[:, 1::2][:, :num_frames]
+    conditions_mask = melody_frames != tokenizer.pad_token
+
+    enc_inputs = add_bos_to_sequence(melody_frames, tokenizer.bos_token)
+    enc_inputs = add_eos_to_sequence(enc_inputs, tokenizer.pad_token, tokenizer.eos_token)
+    enc_inputs_mask = enc_inputs != tokenizer.pad_token
+
+    gen_start = torch.full(
+        (melody_frames.shape[0], 1), tokenizer.bos_token,
+        dtype=torch.long, device=sequences.device,
+    )
+
+    with torch.no_grad():
+        chord_preds = model.generate(
+            enc_inputs, gen_start, seq_len=num_frames,
+            mask=enc_inputs_mask, cache_kv=True,
+        )
+    chord_preds = chord_preds[:, :num_frames].masked_fill(~conditions_mask, tokenizer.pad_token)
+
+    interleaved = torch.empty(
+        (melody_frames.shape[0], 2 * num_frames),
+        dtype=torch.long, device=sequences.device,
+    )
+    interleaved[:, 0::2] = chord_preds
+    interleaved[:, 1::2] = melody_frames
+
+    bos_col = torch.full(
+        (melody_frames.shape[0], 1), tokenizer.bos_token,
+        dtype=torch.long, device=sequences.device,
+    )
+    return torch.cat([bos_col, interleaved], dim=1)
 
 
 def handle_data_conditioned_generation(

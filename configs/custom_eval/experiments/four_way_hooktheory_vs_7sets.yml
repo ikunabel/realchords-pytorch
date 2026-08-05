@@ -1,0 +1,44 @@
+# Compares 4 MLE-pretrained checkpoints on the SAME hooktheory test-set
+# melodies: decoder-only vs encoder-decoder, each hooktheory-only vs 7sets
+# (hooktheory/pop909/nottingham/wikifonia/chord_melody_dataset/jazzmus/
+# emopia_plus). Checkpoints are each architecture's best checkpoint by
+# validation loss on hooktheory specifically (not aggregate -- see
+# journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md-adjacent 7sets ablation notes on
+# why aggregate val/loss isn't comparable across different dataset mixes).
+# enc_dec.7sets's checkpoint is best by *aggregate* val/loss instead -- that
+# run's wandb history has no per-dataset val/loss_by_dataset/* columns at
+# all, so the hooktheory-specific selection used for the others wasn't
+# possible there.
+#
+# Run via scripts/eval/custom_eval/run_multi_model_eval.py, not
+# run_custom_eval.py directly -- this yml isn't a custom_evaluation.py
+# argbind config, it drives 4 separate safe single-model runs (each
+# checkpoint's own correct chord vocab/architecture) that get merged into
+# one combined experiment folder afterward. See that script's docstring for
+# why (checkpoints span 2 different chord vocabs: 5902 vs 6198 tokens).
+dataset_name: hooktheory
+dataset_split: test
+batch_size: 64
+num_batches: -1
+seed: 42
+midi_samples: 10
+
+save_dir: logs/custom_eval/four_way_hooktheory_vs_7sets
+
+# contrastive_checkpoint (optional, per-model): only set for the two
+# hooktheory-only checkpoints, whose 5902-token vocab matches this reward
+# model's own training vocab (verified via embedding-table shape). No
+# reward model exists trained on the 7sets mix, so it's omitted for
+# Decoder_7sets/EncDec_7sets -- Vendi is simply not computed for those two
+# (vendi_score: null) rather than computed against a mismatched checkpoint.
+models:
+  - label: Decoder_HT
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory.seed=1_ufjf6yta/step=11000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: Decoder_7sets
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
+  - label: EncDec_HT
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec_base_chord/step=10000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: EncDec_7sets
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"

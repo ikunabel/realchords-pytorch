@@ -10,3 +10,11 @@ save_dir: logs/custom_eval/realchords_vs_realchords_multiscale_test
 batch_size: 64
 num_batches: -1
 run_full_songs: false
+
+# base_model + both RL actors are all fine-tuned from/around the same
+# hooktheory-only vocab (5902-token embedding table, verified), matching
+# this reward checkpoint's own -- Vendi is safe to compute here. Omit this
+# field entirely (not just leave it blank) to skip Vendi if you ever swap
+# in a checkpoint trained on a different vocab; see
+# realchords/utils/custom_evaluation.py's contrastive_checkpoint docstring.
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"

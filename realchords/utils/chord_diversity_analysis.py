@@ -95,6 +95,74 @@ def load_contrastive_reward(
     return wrapper, model, str(checkpoint), actual_device
 
 
+def load_contrastive_reward_direct(
+    checkpoint: str,
+    device: torch.device,
+    expected_num_tokens: int,
+) -> tuple[ContrastiveRewardFn, torch.nn.Module, torch.device]:
+    """Load a contrastive reward checkpoint by direct path, for scoring
+    tensors already known to be encoded in a specific chord vocab (e.g.
+    Vendi score in custom_evaluation.py).
+
+    Deliberately does no vocab remapping/fallback: a reward checkpoint's
+    chord embedding table is fixed at whatever vocab it was trained on, and
+    scoring tensors from a *different* vocab with it isn't just technically
+    broken (out-of-range embedding lookup, CUDA device-side assert) but
+    conceptually meaningless (the reward model never saw that vocabulary's
+    chords/patterns during its own training). expected_num_tokens is
+    checked against the checkpoint's actual embedding table size up front,
+    so a mismatch fails fast with a clear message here rather than a
+    cryptic CUDA crash deep inside get_chord_embed later. If your
+    checkpoints don't match, the fix is a reward model actually trained on
+    the same data, not a workaround here -- see
+    journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md-adjacent notes on this class
+    of bug for the full story.
+    """
+    model = load_lit_model(
+        model_path=checkpoint,
+        lit_module_cls=LitContrastiveReward,
+        compile=False,
+        return_only_model=True,
+    )
+    actual_num_tokens = model.chord_encoder.token_emb.emb.weight.shape[0]
+    if actual_num_tokens != expected_num_tokens:
+        raise ValueError(
+            f"Contrastive reward checkpoint {checkpoint} has a "
+            f"{actual_num_tokens}-token chord vocab, but the tensors it "
+            f"would score use a {expected_num_tokens}-token vocab -- these "
+            "don't match, so Vendi can't be computed correctly here. Use a "
+            "contrastive reward checkpoint actually trained on the same "
+            "dataset(s), or omit --contrastive_checkpoint to skip Vendi."
+        )
+
+    actual_device = device
+    try:
+        model.to(actual_device)
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if actual_device.type == "cuda" and "out of memory" in message:
+            print("CUDA OOM when loading reward model; falling back to CPU")
+            actual_device = torch.device("cpu")
+            model.to(actual_device)
+        else:
+            raise
+    model.eval()
+    model.device = actual_device
+
+    # Pad/BOS/EOS ids are always 0/1/2 in every HooktheoryTokenizer
+    # regardless of chord_names (special tokens are assigned before
+    # chords in the vocab layout) -- no need for a caller-supplied
+    # tokenizer just for these.
+    wrapper = ContrastiveRewardFn(
+        model=model,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        model_part="chord",
+    )
+    return wrapper, model, actual_device
+
+
 def chord_name_from_token(token_id: int, tokenizer) -> str | None:
     name = tokenizer.id_to_name.get(int(token_id))
     if not name:

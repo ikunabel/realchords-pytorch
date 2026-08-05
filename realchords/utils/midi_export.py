@@ -6,10 +6,12 @@ sample every run) and scripts/eval/custom_eval/export_paired_midis.py
 generation or metrics) -- one rendering implementation, not two.
 
 Each selected song is written as one MIDI file *per source* (GT, and each
-model), not concatenated into a single multi-section file -- this makes it
-trivial to A/B a single source in isolation, and to diff the same song
-across sources by filename (identical `{out_idx:04d}_seq{i:04d}_{song}.mid`
-name in each source's own subfolder).
+model), never concatenated into a single multi-section file. Two layouts:
+write_all_source_midis (model-comparison mode) groups by *song* --
+midi/<song>/{gt.mid, <model>.mid, ...} -- so every source's take on one song
+sits together for direct A/B listening. write_source_midis (gt_only mode,
+where there's only one source anyway) groups by *source* --
+midi/<source>/{song}.mid.
 """
 
 import random
@@ -187,6 +189,40 @@ def resolve_include_chord_bass(
     return dataset_name != "wjd"
 
 
+def _write_one_midi(
+    tensor_row: torch.Tensor,     # 1-D, [BOS, chord_0, melody_0, ...]
+    tokenizer,
+    out_path: Path,
+    *,
+    bpm: int = 120,
+    strict_chords: bool = False,
+    include_chord_bass: bool = True,
+    chord_octave: int = CHORD_OCTAVE,
+    melody_octave: int = 0,
+) -> None:
+    """Render a single song, single source, to one MIDI file."""
+    midi_obj = pretty_midi.PrettyMIDI(initial_tempo=float(bpm))
+    melody_instr = pretty_midi.Instrument(program=0, name="Melody")
+    chord_instr = pretty_midi.Instrument(program=0, name="Chords")
+
+    seq = tensor_row[1:]  # strip BOS
+    _append_section(
+        seq, tokenizer, 60.0 / bpm, 0.0, melody_instr, chord_instr, midi_obj,
+        strict_chords=strict_chords,
+        include_chord_bass=include_chord_bass,
+        chord_octave=chord_octave,
+        melody_octave=melody_octave,
+    )
+    midi_obj.instruments.extend([melody_instr, chord_instr])
+    midi_obj.write(str(out_path))
+
+
+def _song_folder_name(out_idx: int, i: int, metadata: List[Dict]) -> str:
+    song_url = metadata[i].get("song_url", "unknown") if i < len(metadata) else "unknown"
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", song_url)[-60:]
+    return f"{out_idx:04d}_seq{i:04d}_{safe}"
+
+
 def write_source_midis(
     tensor: torch.Tensor,
     tokenizer,
@@ -203,31 +239,20 @@ def write_source_midis(
     quiet: bool = False,
 ) -> None:
     """Write one MIDI file per song for a single source (GT or one model),
-    to midi_dir/source_name/{out_idx:04d}_seq{i:04d}_{song}.mid.
+    to midi_dir/source_name/{out_idx:04d}_seq{i:04d}_{song}.mid. Used for
+    gt_only mode, where there's only ever one source.
     """
     out_dir = midi_dir / (source_name if source_name == "gt" else _slugify(source_name))
     out_dir.mkdir(parents=True, exist_ok=True)
-    spb = 60.0 / bpm
 
     iterator = indices if quiet else tqdm(indices, desc=f"Writing {source_name} MIDIs")
     for out_idx, i in enumerate(iterator):
-        midi_obj = pretty_midi.PrettyMIDI(initial_tempo=float(bpm))
-        melody_instr = pretty_midi.Instrument(program=0, name="Melody")
-        chord_instr = pretty_midi.Instrument(program=0, name="Chords")
-
-        seq = tensor[i, 1:]
-        _append_section(
-            seq, tokenizer, spb, 0.0, melody_instr, chord_instr, midi_obj,
-            strict_chords=strict_chords,
-            include_chord_bass=include_chord_bass,
-            chord_octave=chord_octave,
-            melody_octave=melody_octave,
+        name = _song_folder_name(out_idx, i, metadata)
+        _write_one_midi(
+            tensor[i], tokenizer, out_dir / f"{name}.mid",
+            bpm=bpm, strict_chords=strict_chords, include_chord_bass=include_chord_bass,
+            chord_octave=chord_octave, melody_octave=melody_octave,
         )
-        midi_obj.instruments.extend([melody_instr, chord_instr])
-
-        song_url = metadata[i].get("song_url", "unknown") if i < len(metadata) else "unknown"
-        safe = re.sub(r"[^a-zA-Z0-9_-]", "_", song_url)[-60:]
-        midi_obj.write(str(out_dir / f"{out_idx:04d}_seq{i:04d}_{safe}.mid"))
 
     if not quiet:
         print(f"  Wrote {len(indices)} MIDI files to {out_dir}")
@@ -249,17 +274,26 @@ def write_all_source_midis(
     melody_octave: int = 0,
     quiet: bool = False,
 ) -> None:
-    """Write GT + every model's MIDI, all using the *same* song indices (so
-    the same songs are directly comparable file-for-file across source
-    subfolders)."""
-    write_source_midis(
-        gt_tensor, gt_tokenizer, midi_dir, "gt", metadata, indices,
-        bpm=bpm, strict_chords=True, include_chord_bass=include_chord_bass,
-        chord_octave=chord_octave, melody_octave=melody_octave, quiet=quiet,
-    )
-    for label in ordered_labels:
-        write_source_midis(
-            model_tensors[label], model_tokenizer, midi_dir, label, metadata, indices,
-            bpm=bpm, strict_chords=False, include_chord_bass=include_chord_bass,
-            chord_octave=chord_octave, melody_octave=melody_octave, quiet=quiet,
+    """Write GT + every model's MIDI, one *folder per song*:
+    midi_dir/<song>/{gt.mid, <model_slug>.mid, ...} -- every source's
+    rendition of the same song sits together, for direct A/B listening,
+    using the same song indices across every source so they line up."""
+    iterator = indices if quiet else tqdm(indices, desc="Writing MIDIs")
+    for out_idx, i in enumerate(iterator):
+        song_dir = midi_dir / _song_folder_name(out_idx, i, metadata)
+        song_dir.mkdir(parents=True, exist_ok=True)
+        _write_one_midi(
+            gt_tensor[i], gt_tokenizer, song_dir / "gt.mid",
+            bpm=bpm, strict_chords=True, include_chord_bass=include_chord_bass,
+            chord_octave=chord_octave, melody_octave=melody_octave,
         )
+        for label in ordered_labels:
+            slug = _slugify(label)
+            _write_one_midi(
+                model_tensors[label][i], model_tokenizer, song_dir / f"{slug}.mid",
+                bpm=bpm, strict_chords=False, include_chord_bass=include_chord_bass,
+                chord_octave=chord_octave, melody_octave=melody_octave,
+            )
+
+    if not quiet:
+        print(f"  Wrote {len(indices)} song folder(s) x {1 + len(ordered_labels)} source(s) to {midi_dir}")

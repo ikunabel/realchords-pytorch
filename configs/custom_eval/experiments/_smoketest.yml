@@ -1,0 +1,24 @@
+dataset_name: hooktheory
+dataset_split: test
+batch_size: 4
+num_batches: 1
+seed: 42
+midi_samples: 2
+
+save_dir: logs/custom_eval/_smoketest_four_way
+
+# Structural smoke test for run_multi_model_eval.py -- also exercises the
+# opt-in contrastive_checkpoint path (set for the two HT models, omitted
+# for the two 7sets ones) to confirm Vendi is computed/skipped correctly
+# before the real full-scale run.
+models:
+  - label: Decoder_HT
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory.seed=1_ufjf6yta/step=11000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: Decoder_7sets
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
+  - label: EncDec_HT
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec_base_chord/step=10000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: EncDec_7sets
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
