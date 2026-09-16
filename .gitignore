@@ -85,6 +85,9 @@ wandb/
 soundfonts/
 checkpoints/
 
+# External repos cloned for experimentation (not vendored)
+third_party/MIDI-GPT/
+
 # OS
 .DS_Store
 
@@ -106,3 +109,7 @@ journal/
 rsync.sh
 
 scripts/jobscripts/slurm_logs/
+
+.claude
+
+Docs

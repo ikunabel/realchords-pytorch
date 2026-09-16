@@ -13,13 +13,22 @@ Output
     voicing to a sorted list of voicing dicts::
 
         {
-          "C":    [{"pitches": [48, 52, 55], "count": 500}, ...],
-          "Cm7":  [{"pitches": [48, 51, 55, 58], "count": 300}, ...],
+          "C":    [{"pitches": [48, 52, 55], "count": 500, "num_songs": 120}, ...],
+          "Cm7":  [{"pitches": [48, 51, 55, 58], "count": 300, "num_songs": 80}, ...],
           ...
         }
 
     Voicings within each chord entry are sorted by descending ``count``
-    (= number of times that exact pitch combination appeared in PIJAMA).
+    (= number of times that exact pitch combination appeared in the source).
+    ``num_songs`` is how many distinct source files it appeared in at all
+    (deduplicated) — useful for spotting a voicing whose count is mostly one
+    song's repeated figure rather than genuinely widespread use.
+
+If the input voicings carry ``"genre"`` / ``"performer"`` tags (see
+``extract_voicings.py``), pass ``--genres`` / ``--performers`` to restrict
+matching to a subset — e.g. build a jazz-only lookup, a Keith-Jarrett-only
+lookup, or an all-genres/all-performers lookup, all from the *same* cached
+extraction, without re-scanning any MIDI.
 
 Usage::
 
@@ -27,7 +36,10 @@ Usage::
         [--voicings data/voicings/pijama/all_voicings.json] \\
         [--chord_names data/cache/chord_names_augmented.json] \\
         [--output data/voicings/pijama/chord_voicings.json] \\
+        [--genres jazz pop] \\
+        [--performers "keith jarrett"] \\
         [--min_count 3] \\
+        [--min_songs 1] \\
         [--min_notes 3] \\
         [--max_notes 8]
 """
@@ -106,10 +118,42 @@ def parse_args() -> argparse.Namespace:
         help="Output JSON path.",
     )
     parser.add_argument(
+        "--genres",
+        nargs="+",
+        default=None,
+        help=(
+            "If given, only use voicings whose 'genre' tag matches one of these "
+            "(case-insensitive). Entries with no 'genre' field are treated as "
+            "'unknown' and only included if 'unknown' is passed explicitly. "
+            "Omit to use every genre (the previous, ungenred behaviour)."
+        ),
+    )
+    parser.add_argument(
+        "--performers",
+        nargs="+",
+        default=None,
+        help=(
+            "If given, only use voicings whose 'performer' tag matches one of these "
+            "(case-insensitive). Entries with no 'performer' field are treated as "
+            "'unknown' and only included if 'unknown' is passed explicitly. "
+            "Omit to use every performer."
+        ),
+    )
+    parser.add_argument(
         "--min_count",
         type=int,
         default=3,
-        help="Ignore voicings seen fewer than this many times across PIJAMA (default: 3).",
+        help="Ignore voicings seen fewer than this many times in the source (default: 3).",
+    )
+    parser.add_argument(
+        "--min_songs",
+        type=int,
+        default=1,
+        help=(
+            "Ignore voicings that appeared in fewer than this many distinct songs "
+            "(default: 1, i.e. no extra filtering beyond --min_count). Raise this to "
+            "guard against a single repetitive song inflating a voicing's count."
+        ),
     )
     parser.add_argument(
         "--min_notes",
@@ -132,22 +176,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-
-    # ------------------------------------------------------------------
-    # 1. Load and parse chord vocabulary
-    # ------------------------------------------------------------------
-    print("Parsing chord vocabulary …")
-    with open(args.chord_names, encoding="utf-8") as f:
+def load_chord_vocab(chord_names_path: Path) -> Tuple[np.ndarray, List[str], int, int]:
+    """Load and parse the chord vocabulary. Returns (masks, names, n_total, n_failed)."""
+    with open(chord_names_path, encoding="utf-8") as f:
         chord_names: List[str] = json.load(f)
 
-    # chord_masks[i] = 12-bit bitmask for chord i
-    # chord_n_pcs[i] = number of distinct pitch classes in chord i
     chord_masks: List[int] = []
     valid_names: List[str] = []
     parse_errors = 0
-
     for name in chord_names:
         pcs = chord_name_to_pcs(name)
         if pcs is None:
@@ -156,44 +192,69 @@ def main() -> None:
         chord_masks.append(pcs_to_mask(pcs))
         valid_names.append(name)
 
-    chord_masks_np = np.array(chord_masks, dtype=np.int32)
+    return np.array(chord_masks, dtype=np.int32), valid_names, len(chord_names), parse_errors
 
-    print(f"  Parsed {len(valid_names)}/{len(chord_names)} chord names "
-          f"({parse_errors} failed)")
 
-    # ------------------------------------------------------------------
-    # 2. Load voicings and apply filters
-    # ------------------------------------------------------------------
-    print("Loading voicings …")
-    with open(args.voicings, encoding="utf-8") as f:
-        all_voicings = json.load(f)
+def build_chord_lookup(
+    all_voicings: List[dict],
+    chord_masks_np: np.ndarray,
+    valid_names: List[str],
+    genres: Optional[List[str]] = None,
+    performers: Optional[List[str]] = None,
+    min_count: int = 3,
+    min_songs: int = 1,
+    min_notes: int = 3,
+    max_notes: int = 8,
+    max_voicings_per_chord: int = 500,
+    show_progress: bool = True,
+) -> Tuple[Dict[str, List[dict]], Dict[str, int]]:
+    """Filter/select/match voicings into a chord-name lookup table.
+
+    This is the reusable core of the CLI in this module — factored out so a
+    caller (e.g. a bulk-generation script) can run it many times against an
+    already-loaded ``all_voicings`` list without re-reading the file or
+    re-parsing the chord vocabulary each time.
+
+    Returns ``(lookup, stats)`` where ``stats`` has: raw_entries,
+    unique_pitch_sets, after_filtering, matched, unmatched, distinct_chords,
+    total_voicing_entries, total_occurrences.
+    """
+    selected = all_voicings
+    if genres:
+        genre_set = {g.lower() for g in genres}
+        selected = [v for v in selected if v.get("genre", "unknown").lower() in genre_set]
+    if performers:
+        performer_set = {p.lower() for p in performers}
+        selected = [v for v in selected if v.get("performer", "unknown").lower() in performer_set]
+
+    # Re-aggregate by pitch set: a genre/performer-tagged source can list the
+    # same pitch set once per (genre, performer), so sum counts (and songs)
+    # across whichever subset was selected before applying the thresholds.
+    pitch_counts: Dict[Tuple[int, ...], int] = defaultdict(int)
+    pitch_songs: Dict[Tuple[int, ...], int] = defaultdict(int)
+    for v in selected:
+        key = tuple(v["pitches"])
+        pitch_counts[key] += v["count"]
+        pitch_songs[key] += v.get("num_songs", 0)
 
     filtered = [
-        v for v in all_voicings
-        if v["count"] >= args.min_count
-        and args.min_notes <= len(v["pitches"]) <= args.max_notes
+        {"pitches": list(pitches), "count": count, "num_songs": pitch_songs[pitches]}
+        for pitches, count in pitch_counts.items()
+        if count >= min_count
+        and pitch_songs[pitches] >= min_songs
+        and min_notes <= len(pitches) <= max_notes
     ]
-    print(f"  {len(all_voicings)} total → {len(filtered)} after filtering "
-          f"(min_count={args.min_count}, notes={args.min_notes}–{args.max_notes})")
 
-    # ------------------------------------------------------------------
-    # 3. Match each voicing to its most specific chord
-    # ------------------------------------------------------------------
-    print("Matching voicings to chords …")
     lookup: Dict[str, List[dict]] = defaultdict(list)
     unmatched = 0
-
-    for v in tqdm(filtered, desc="Matching"):
+    iterator = tqdm(filtered, desc="Matching") if show_progress else filtered
+    for v in iterator:
         pitches = v["pitches"]
-        count = v["count"]
         voicing_mask = pitches_to_pcs_mask(pitches)
 
         # A chord matches if its pitch-class set is EXACTLY the voicing's
         # pitch-class set (after collapsing octave doublings via mod 12).
-        # Octave doublings are allowed (G3 and G4 both contribute the G pitch
-        # class), but no extra or missing pitch classes are permitted.
-        matches = chord_masks_np == voicing_mask  # bool array
-
+        matches = chord_masks_np == voicing_mask
         if not matches.any():
             unmatched += 1
             continue
@@ -203,31 +264,71 @@ def main() -> None:
         # (alphabetical order within the vocab).
         best_idx = int(np.where(matches)[0][0])
         best_name = valid_names[best_idx]
+        lookup[best_name].append({
+            "pitches": pitches, "count": v["count"], "num_songs": v["num_songs"],
+        })
 
-        lookup[best_name].append({"pitches": pitches, "count": count})
-
-    print(f"  Matched: {len(filtered) - unmatched}  Unmatched: {unmatched}")
-    print(f"  Distinct chords covered: {len(lookup)}")
-
-    # ------------------------------------------------------------------
-    # 4. Sort each chord's list by count desc and cap
-    # ------------------------------------------------------------------
     result: Dict[str, List[dict]] = {}
     for chord_name in sorted(lookup.keys()):
         voicings = sorted(lookup[chord_name], key=lambda x: -x["count"])
-        result[chord_name] = voicings[: args.max_voicings_per_chord]
+        result[chord_name] = voicings[:max_voicings_per_chord]
 
-    # ------------------------------------------------------------------
-    # 5. Save
-    # ------------------------------------------------------------------
+    stats = {
+        "raw_entries": len(all_voicings),
+        "selected_entries": len(selected),
+        "unique_pitch_sets": len(pitch_counts),
+        "after_filtering": len(filtered),
+        "matched": len(filtered) - unmatched,
+        "unmatched": unmatched,
+        "distinct_chords": len(result),
+        "total_voicing_entries": sum(len(v) for v in result.values()),
+        "total_occurrences": sum(e["count"] for v in result.values() for e in v),
+    }
+    return result, stats
+
+
+def main() -> None:
+    args = parse_args()
+
+    print("Parsing chord vocabulary …")
+    chord_masks_np, valid_names, n_total, n_failed = load_chord_vocab(Path(args.chord_names))
+    print(f"  Parsed {len(valid_names)}/{n_total} chord names ({n_failed} failed)")
+
+    print("Loading voicings …")
+    with open(args.voicings, encoding="utf-8") as f:
+        all_voicings = json.load(f)
+
+    if args.genres:
+        print(f"  Genre filter: {args.genres}")
+    if args.performers:
+        print(f"  Performer filter: {args.performers}")
+
+    print("Matching voicings to chords …")
+    result, stats = build_chord_lookup(
+        all_voicings, chord_masks_np, valid_names,
+        genres=args.genres, performers=args.performers,
+        min_count=args.min_count, min_songs=args.min_songs,
+        min_notes=args.min_notes, max_notes=args.max_notes,
+        max_voicings_per_chord=args.max_voicings_per_chord,
+    )
+
+    print(f"  {stats['raw_entries']} raw entries → "
+          f"{stats['selected_entries']:,} selected → "
+          f"{stats['unique_pitch_sets']:,} unique pitch sets → "
+          f"{stats['after_filtering']:,} after filtering "
+          f"(min_count={args.min_count}, min_songs={args.min_songs}, "
+          f"notes={args.min_notes}–{args.max_notes})")
+    print(f"  Matched: {stats['matched']}  Unmatched: {stats['unmatched']}")
+    print(f"  Distinct chords covered: {stats['distinct_chords']}")
+
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
 
     print(f"\nDone. Written to {out_path}")
-    print(f"  Chords with voicings : {len(result)}")
-    print(f"  Total voicing entries: {sum(len(v) for v in result.values())}")
+    print(f"  Chords with voicings : {stats['distinct_chords']}")
+    print(f"  Total voicing entries: {stats['total_voicing_entries']}")
 
     # Quick sample
     print("\nSample (top 3 voicings for a few chords):")
