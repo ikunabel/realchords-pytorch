@@ -9,6 +9,7 @@ import flask
 import argparse
 
 from realchords.realjam import agent_interface
+from realchords.realjam import song_catalogue
 
 DEFAULT_PORT = 8080
 
@@ -18,6 +19,12 @@ frontend_dir = os.path.join(base_dir, "frontend")
 app = flask.Flask(__name__, static_url_path="", static_folder=frontend_dir)
 
 agent: agent_interface.Agent = None
+
+# Flat song list and (dataset, split, id) -> cache record lookup for the
+# "robot melody" playback feature. Built once at startup (see main())
+# -- read-only afterward, so safe to share across requests.
+song_catalogue_index: list = []
+song_record_index: dict = {}
 
 
 @app.get("/")
@@ -31,6 +38,108 @@ def get_models() -> str:
     """Get available model names."""
     assert agent is not None
     return json.dumps(agent.get_models())
+
+
+@app.get("/songs")
+def get_songs() -> str:
+    """Get the song list for the robot-melody feature's fuzzy search."""
+    return json.dumps(song_catalogue_index)
+
+
+@app.get("/songs/<dataset>/<split>/<song_id>/melody")
+def get_song_melody(dataset: str, split: str, song_id: str) -> str:
+    """Get a specific song's ground-truth melody notes for robot playback."""
+    record = song_record_index.get((dataset, split, song_id))
+    if record is None:
+        flask.abort(404, description="Song not found")
+    return json.dumps(song_catalogue.extract_melody_notes(record))
+
+
+@app.get("/songs/<dataset>/<split>/<song_id>/reference")
+def get_song_reference(dataset: str, split: str, song_id: str) -> str:
+    """Get a song's ground-truth melody *and* its ground-truth chords.
+
+    For A/B listening: play the original accompaniment the model was trained
+    to reproduce, with no generation involved, against what the model does
+    with the same melody.
+
+    The chords are voiced through the same rule the live system would use
+    (custom voicings when `?custom=1`, otherwise the fixed-octave fallback),
+    and `prev_voicing` is threaded across the progression exactly as in live
+    playback -- so the comparison isolates *which chords* were chosen rather
+    than how they happen to be voiced.
+    """
+    assert agent is not None
+    record = song_record_index.get((dataset, split, song_id))
+    if record is None:
+        flask.abort(404, description="Song not found")
+
+    use_custom = flask.request.args.get("custom") == "1"
+    selector = agent.voicing_selector if use_custom else None
+    melody = song_catalogue.extract_melody_notes(record)
+
+    def melody_ceiling(onset: float, offset: float):
+        """Lowest melody note sounding at any point during a chord.
+
+        The live path re-voices every frame, so it can track the melody with
+        a point sample of whatever is sounding now. A reference chord is
+        voiced once and held for its whole duration, so it has to clear the
+        lowest note the melody reaches anywhere in that span -- sampling only
+        at the onset leaves the chord colliding with the tune as it rises.
+        Returns None where the melody rests throughout (e.g. intro chords
+        before the tune enters), leaving the voicing unconstrained.
+        """
+        sounding = [
+            note["pitch"] for note in melody
+            if note["onset"] < offset and note["offset"] > onset
+        ]
+        return min(sounding) if sounding else None
+
+    chords = []
+    prev_voicing = None
+    for chord in song_catalogue.extract_reference_chords(record):
+        pitches = None
+        if selector is not None:
+            pitches = selector.select(
+                chord["symbol"],
+                prev_voicing=prev_voicing,
+                update_state=False,
+                melody_pitch=melody_ceiling(chord["onset"], chord["offset"]),
+                melody_role="top",
+            )
+        if pitches is None:
+            pitches = agent.legacy_chord_pitches(chord["symbol"])
+        if not pitches:
+            continue
+        prev_voicing = pitches
+        chords.append({**chord, "pitches": pitches})
+
+    return json.dumps({"melody": melody, "chords": chords})
+
+
+@app.get("/voicings/chords")
+def get_voicing_chords() -> str:
+    """Get the full chord vocabulary, for the standalone voicing-browser UI
+    (independent of any session). Not limited to what the custom voicing
+    lookup covers -- uncovered chords fall back to a legacy voicing, see
+    get_voicings() below -- so every chord in the vocabulary is browsable."""
+    assert agent is not None
+    return json.dumps(agent.list_all_chords())
+
+
+@app.get("/voicings")
+def get_voicings() -> str:
+    """Get the voicing list for one chord symbol, for browsing.
+
+    Takes the chord name as a query param (`?chord=...`), not a path
+    segment, since many chord symbols contain '/' (slash chords like "C/E")
+    which would otherwise be misparsed as extra path segments. Falls back to
+    a single legacy fixed-octave voicing (tagged "legacy": true) for chords
+    the custom lookup doesn't cover.
+    """
+    assert agent is not None
+    chord_name = flask.request.args.get("chord", "")
+    return json.dumps(agent.get_voicings_for_browser(chord_name))
 
 
 @app.post("/play")
@@ -48,6 +157,14 @@ def play() -> str:
         float(payload["temperature"]),
         payload["silenceTill"],
         payload["introSet"],
+        use_custom_voicings=payload.get("useCustomVoicings", False),
+        prev_voicing=payload.get("prevVoicing"),
+        vl_weight=payload.get("vlWeight"),
+        reg_weight=payload.get("regWeight"),
+        note_count_weight=payload.get("noteCountWeight"),
+        density_weight=payload.get("densityWeight"),
+        target_mid=payload.get("targetMid"),
+        density_target=payload.get("densityTarget"),
     )
     return json.dumps(
         {
@@ -59,8 +176,33 @@ def play() -> str:
     )
 
 
+@app.post("/advance_chord")
+def advance_chord() -> str:
+    """Pick the chord to start right now, for manual chord-timing mode.
+
+    Unlike /play, this generates no lookahead and commits nothing: the
+    performer decides when each chord change happens, so the model is only
+    asked which chord it would play at this instant.
+    """
+    assert agent is not None
+    payload = flask.request.get_json()
+    return json.dumps(
+        agent.advance_chord(
+            payload["model"],
+            payload["notes"],
+            payload["chordTokens"],
+            payload["frame"],
+            float(payload["temperature"]),
+            use_custom_voicings=payload.get("useCustomVoicings", False),
+            prev_voicing=payload.get("prevVoicing"),
+            vl_weight=payload.get("vlWeight"),
+            reg_weight=payload.get("regWeight"),
+        )
+    )
+
+
 def main() -> None:
-    global agent
+    global agent, song_catalogue_index, song_record_index
 
     parser = argparse.ArgumentParser(description="Run the RealJam server")
     parser.add_argument(
@@ -100,6 +242,18 @@ def main() -> None:
         mlx=args.mlx,
         provider=args.onnx_provider,
     )
+
+    try:
+        song_catalogue_index, song_record_index = song_catalogue.build_catalogue()
+        print(
+            f"Loaded robot-melody song catalogue: "
+            f"{len(song_catalogue_index)} songs"
+        )
+    except Exception as e:
+        print(
+            f"Could not build song catalogue ({e}); "
+            "robot-melody feature will show an empty list."
+        )
 
     ssl_context = "adhoc" if args.ssl else None
     app.run(

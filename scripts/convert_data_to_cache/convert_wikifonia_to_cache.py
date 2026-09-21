@@ -309,12 +309,14 @@ def extract_melody_and_chords_from_musicxml(
         score = score.toSoundingPitch()
 
         # Get metadata
+        # music21 maps <work><work-title> to .title but a bare <movement-title>
+        # (no <work> wrapper -- e.g. JAZZMUS) to .movementName instead, so try
+        # both before falling back to the filename.
+        _title = None
+        if score.metadata:
+            _title = score.metadata.title or score.metadata.movementName
         metadata = {
-            "title": (
-                score.metadata.title
-                if score.metadata and score.metadata.title
-                else xml_file.stem
-            ),
+            "title": _title or xml_file.stem,
             "composer": (
                 score.metadata.composer
                 if score.metadata and score.metadata.composer

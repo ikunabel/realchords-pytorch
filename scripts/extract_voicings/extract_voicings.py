@@ -181,6 +181,48 @@ def write_chord_midi(
 
 
 # ---------------------------------------------------------------------------
+# Voicing quality: detecting suspected melody-bleed
+# ---------------------------------------------------------------------------
+
+_OCTAVE = 12
+
+
+def octave_outlier_split(pitches: List[int]) -> Optional[Tuple[List[int], List[int]]]:
+    """Detect a voicing where a minority of notes sit >= 1 octave away from
+    an otherwise tightly-clustered majority.
+
+    This is the onset-window chord detector's known failure mode: it groups
+    any notes hitting within `--onset_tolerance` (default 50ms) into one
+    "chord", so a pianist playing a left-hand chord and a high right-hand
+    melody note at the same instant gets recorded as one voicing containing
+    both. The signature is a large gap (>= 1 octave) between two adjacent
+    sorted pitches, with almost everything on one side and a small minority
+    stranded on the other.
+
+    Returns (majority, minority) pitch lists if such a split is found (the
+    minority is the suspected melody-bleed), else None. Only flags a genuine
+    minority (strictly fewer notes than the majority) and requires the
+    majority's own span to fit within an octave, so deliberately wide/open
+    voicings that split evenly across two clusters are not flagged.
+    """
+    if len(pitches) < 2:
+        return None
+    sorted_p = sorted(pitches)
+    n = len(sorted_p)
+    for i in range(1, n):
+        gap = sorted_p[i] - sorted_p[i - 1]
+        if gap < _OCTAVE:
+            continue
+        lower, upper = sorted_p[:i], sorted_p[i:]
+        majority, minority = (upper, lower) if len(lower) < len(upper) else (lower, upper)
+        if len(minority) >= len(majority):
+            continue  # even split -- plausibly a deliberate wide voicing
+        if majority[-1] - majority[0] < _OCTAVE:
+            return majority, minority
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Metadata filtering
 # ---------------------------------------------------------------------------
 

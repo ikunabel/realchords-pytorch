@@ -17,6 +17,7 @@ import numpy as np
 from copy import deepcopy
 import note_seq.chord_symbols_lib as chord_symbols_lib
 import random
+import openpyxl
 
 from realchords.constants import ZERO_OCTAVE
 from realchords.utils.io_utils import save_jsonl
@@ -773,16 +774,60 @@ def resolve_melody_overlaps(melody_notes: List[Dict]) -> List[Dict]:
     return resolved_notes
 
 
-def process_pop909_song(song_dir: Path) -> Optional[Dict]:
+def load_pop909_title_index(pop909_path: Path) -> Dict[str, Tuple[str, str]]:
+    """Load the real song title/artist index shipped with POP909.
+
+    POP909's release includes an index.xlsx with columns
+    (song_id, name, artist, ...) alongside the per-song directories — this
+    is the source of truth for real titles; the per-song MIDI/chord/beat
+    files carry no title metadata of their own.
+
+    Args:
+        pop909_path (Path): Path to the POP909 dataset directory (the one
+            containing per-song subdirectories AND index.xlsx).
+
+    Returns:
+        Dict[str, Tuple[str, str]]: song_id -> (title, artist). Empty dict
+        if index.xlsx isn't found (titles then fall back to a placeholder).
+    """
+    index_path = pop909_path / "index.xlsx"
+    if not index_path.exists():
+        print(f"Warning: {index_path} not found; falling back to placeholder titles")
+        return {}
+
+    wb = openpyxl.load_workbook(index_path, read_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    header, rows = rows[0], rows[1:]
+    id_idx = header.index("song_id")
+    name_idx = header.index("name")
+    artist_idx = header.index("artist")
+
+    index: Dict[str, Tuple[str, str]] = {}
+    for row in rows:
+        song_id = str(row[id_idx]).strip()
+        title = str(row[name_idx]).strip() if row[name_idx] else None
+        artist = str(row[artist_idx]).strip() if row[artist_idx] else None
+        index[song_id] = (title, artist)
+    return index
+
+
+def process_pop909_song(
+    song_dir: Path, title_index: Optional[Dict[str, Tuple[str, str]]] = None
+) -> Optional[Dict]:
     """Process a single POP909 song directory.
 
     Args:
         song_dir (Path): Path to song directory
+        title_index (Optional[Dict[str, Tuple[str, str]]]): song_id -> (title,
+            artist) from load_pop909_title_index(), used to populate real
+            metadata instead of a generic placeholder.
 
     Returns:
         Optional[Dict]: Processed song dictionary or None if processing failed
     """
     song_id = song_dir.name
+    title, artist = (title_index or {}).get(song_id, (None, None))
 
     # Find required files
     midi_file = song_dir / f"{song_id}.mid"
@@ -860,7 +905,8 @@ def process_pop909_song(song_dir: Path) -> Optional[Dict]:
             "split": "TRAIN",  # Will be reassigned later
             "pop909": {
                 "id": song_id,
-                "title": f"POP909 Song {song_id}",
+                "title": title or f"POP909 Song {song_id}",
+                "artist": artist,
                 "source": "POP909 Dataset",
                 "file": midi_file.name,
             },
@@ -1042,12 +1088,15 @@ def main():
 
     print(f"Found {len(song_dirs)} song directories to process")
 
+    title_index = load_pop909_title_index(pop909_path)
+    print(f"Loaded {len(title_index)} real titles/artists from index.xlsx")
+
     # Process all songs
     all_songs = []
 
     for song_dir in tqdm(song_dirs, desc="Processing POP909 songs"):
         try:
-            song_dict = process_pop909_song(song_dir)
+            song_dict = process_pop909_song(song_dir, title_index)
             if song_dict:
                 all_songs.append(song_dict)
         except Exception as e:

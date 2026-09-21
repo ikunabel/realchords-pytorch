@@ -86,9 +86,60 @@
         </div>
       </div>
       <div class="stack">
+        <div class="flex-wide">
+          <label for="song-search-input">Robot Melody: Search</label>
+          <input id="song-search-input" type="text" autocomplete="off"
+            placeholder="song or artist..." />
+        </div>
+        <div class="flex-wide">
+          <label for="reference-mode-check">Play Ground Truth (no model)</label>
+          <input id="reference-mode-check" class="centered" type="checkbox" />
+        </div>
+        <div id="song-search-results" class="search-results"></div>
+      </div>
+      <div class="stack">
         <label for="show-chords-check">Show Incoming Chords</label>
         <div class="flex-wide">
           <input id="show-chords-check" class="centered" type="checkbox" checked="checked" />
+        </div>
+      </div>
+      <div class="stack">
+        <label for="custom-voicings-check">Use Custom Voicings</label>
+        <div class="flex-wide">
+          <input id="custom-voicings-check" class="centered" type="checkbox" />
+        </div>
+      </div>
+      <div class="stack">
+        <div class="flex-wide">
+          <label for="vl-weight-input">Voicing: Voice Leading</label>
+          <input id="vl-weight-input" type="range" min="0" max="1" step="0.05" value="0.5" />
+          <span id="vl-weight-value" class="slider-value">0.50</span>
+        </div>
+        <div class="flex-wide">
+          <label for="reg-weight-input">Voicing: Register</label>
+          <input id="reg-weight-input" type="range" min="0" max="1" step="0.05" value="0.2" />
+          <span id="reg-weight-value" class="slider-value">0.20</span>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="flex-wide">
+          <label for="chord-timing-select">Chord Timing</label>
+          <select id="chord-timing-select">
+            <option value="auto">Auto (model decides when)</option>
+            <option value="manual">Manual (space plays next chord)</option>
+          </select>
+        </div>
+        <div class="flex-wide">
+          <span id="chord-timing-info">Press space during a session to play the next chord</span>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="flex-wide">
+          <label for="voicing-browser-chord-select">Voicing Browser: Chord</label>
+          <select id="voicing-browser-chord-select"><option value="">-- choose chord --</option></select>
+        </div>
+        <div class="flex-wide">
+          <span id="voicing-browser-info">Select a chord, then use &#8592;/&#8594; to browse its stored voicings (plays outside any session)</span>
         </div>
       </div>
       <div class="stack">

@@ -13,7 +13,21 @@ let curSession, lastSession, recorder, curAudioRecording;
 let playBtn, metronomeBtn, bpmInput, timeSigInput, metronomeFreqBtn,
   interfaceSelect, liveSessionBtn, temperatureInput, silenceInput,
   lookaheadInput, commitaheadInput, modelSelect, chordInstSelect,
-  melodyInstSelect, showChordsCheck, downloadSessionCheck, metronomeCheck;
+  melodyInstSelect, showChordsCheck, downloadSessionCheck, metronomeCheck,
+  customVoicingsCheck, vlWeightInput, regWeightInput, songSearchInput,
+  songSearchResults, voicingBrowserChordSelect, voicingBrowserInfo,
+  chordTimingSelect, chordTimingInfo, referenceModeCheck;
+let songCatalogue = [];   // [{dataset, split, id, title, artist}, ...]
+let songSearchMatches = [];  // Current fuzzy hits, best first (capped)
+let songSearchIndex = 0;     // Keyboard-highlighted row in songSearchMatches
+let songSearchLastQuery = '';  // Query songSearchPool was narrowed down to
+let songSearchPool = [];       // Every song matching it, not just the shown ones
+const songSearchMaxResults = 30;
+const songSearchMinChars = 2;
+let voicingBrowserList = [];  // [{pitches, count, num_songs}, ...] for the selected chord
+let voicingBrowserIndex = -1;
+let voicingBrowserActivePitches = [];  // pitches currently sounding/highlighted
+let voicingBrowserOffTimeout = null;   // pending noteOff timeout for them
 
 const fpb = 4;  // Frames per beat
 const chordVelocity = 0.5;
@@ -87,6 +101,23 @@ function addNumericInputEventListener(inputEl, callback) {
   });
 }
 
+/**
+ * Wire a range-input slider to a text element showing its live value.
+ * @param {string} inputId - Element ID of the <input type="range">
+ * @param {string} valueId - Element ID of the value-display element
+ * @param {number} decimals - Decimal places to display
+ * @return {Element} The range input element (for further use)
+ */
+function bindSliderValueDisplay(inputId, valueId, decimals) {
+  const inputEl = document.getElementById(inputId);
+  const valueEl = document.getElementById(valueId);
+  valueEl.textContent = inputEl.valueAsNumber.toFixed(decimals);
+  inputEl.addEventListener('input', () => {
+    valueEl.textContent = inputEl.valueAsNumber.toFixed(decimals);
+  });
+  return inputEl;
+}
+
 /** Initialize components after loading is done */
 function showMainScreen() {
   document.querySelector('.splash').hidden = true;
@@ -133,13 +164,14 @@ function saveSessionRecording() {
 function toggleLiveSession() {
   if (curSession) {
     lastSession = curSession;
-    lastSession.description = `sic${showChordsCheck.checked}_bpm${bpmInput.value}_met${metronomeStatus}_la${lookaheadInput.value}_com${commitaheadInput.value}_sil${silenceInput.value}_temp${temperatureInput.value}_${modelSelect.value}`;
+    lastSession.description = `sic${showChordsCheck.checked}_bpm${bpmInput.value}_met${metronomeStatus}_la${lookaheadInput.value}_com${commitaheadInput.value}_sil${silenceInput.value}_temp${temperatureInput.value}_timing${chordTimingSelect.value}_${modelSelect.value}`;
     curSession = undefined;
     liveSessionBtn.textContent = 'Start Live Session';
     showChordsCheck.disabled = false;
     bpmInput.disabled = false;
     timeSigInput.disabled = false;
     silenceInput.disabled = false;
+    chordTimingSelect.disabled = false;
     Tone.Transport.stop();
     Tone.Transport.cancel();
     stopMetronome();
@@ -147,29 +179,208 @@ function toggleLiveSession() {
     visual.clearScheduledNotes(0);
     visual.stopAllNotes();
     recorder.stop();
+    updateChordTimingInfo();
   } else {
-    Tone.Transport.stop();
-    Tone.Transport.start();
-    if (metronomeCheck.checked) {
-      startMetronome();
-    }
-    curAudioRecording = [];
-    recorder.start();
-    curSession = {
-      startTime: Date.now(),
-      startFrame: undefined,  // Frame relative to Transport start that first
-      // note is played
-      noteHistory: [],        // All note hits and releases
-      chordHistory: [],       // All chord pitch/symbol onsets with frames
-      chordTokens: [],        // All chord tokens in frame format
-      introSet: false,        // If model has generated intro section
-    };
-    liveSessionBtn.textContent = 'Stop Live Session';
-    showChordsCheck.disabled = true;
-    bpmInput.disabled = true;
-    timeSigInput.disabled = true;
-    silenceInput.disabled = true;
+    startSession();
   }
+}
+
+/**
+ * Start a fresh session and the Transport clock. Shared by manual live
+ * sessions (toggleLiveSession) and scheduled robot-melody playback
+ * (playSongMelody) -- the two differ only in where noteHistory events come
+ * from afterward (live MIDI input vs. pre-scheduled playback).
+ * @param {{referenceOnly?: boolean}=} options - referenceOnly suppresses all
+ *   generation, making the session purely a playback vehicle for a song's own
+ *   ground-truth melody and chords (see playSongReference). Reusing the
+ *   session machinery this way means the Stop button, metronome and visual
+ *   teardown all keep working unchanged.
+ */
+function startSession(options = {}) {
+  Tone.Transport.stop();
+  Tone.Transport.start();
+  if (metronomeCheck.checked) {
+    startMetronome();
+  }
+  curAudioRecording = [];
+  recorder.start();
+  curSession = {
+    startTime: Date.now(),
+    startFrame: undefined,  // Frame relative to Transport start that first
+    // note is played
+    noteHistory: [],        // All note hits and releases
+    chordHistory: [],       // All chord pitch/symbol onsets with frames
+    chordTokens: [],        // All chord tokens in frame format
+    introSet: false,        // If model has generated intro section
+    lastVoicing: null,      // Pitches of the last chord actually played,
+                             // for voice-leading continuity across polls
+                             // regardless of which decode rule produced it
+    loopStarted: false,     // If the generation loop has been kicked off
+    manualChord: null,      // Manual mode: chord currently being sustained
+    pendingChord: null,     // Manual mode: chord the next space press fires
+    referenceOnly: !!options.referenceOnly,  // Playing ground truth, no model
+  };
+  liveSessionBtn.textContent = 'Stop Live Session';
+  showChordsCheck.disabled = true;
+  bpmInput.disabled = true;
+  timeSigInput.disabled = true;
+  silenceInput.disabled = true;
+  chordTimingSelect.disabled = true;
+
+  // Manual mode drives chords independently of the melody, so it doesn't wait
+  // for a first note the way the auto loop does (see playNote).
+  if (isManualChordMode() && !curSession.referenceOnly) {
+    startGenerationLoop();
+  }
+  updateChordTimingInfo();
+}
+
+/**
+ * Play a song's ground-truth melody on a schedule (not live input), feeding
+ * it into the same session/generation pipeline as live playing so the model
+ * generates chords in response -- lets voicing settings be tested hands-free
+ * against real melodies. Loops indefinitely until the session is stopped
+ * some other way (Stop Live Session, or picking a different song).
+ * @param {Array<{pitch: number, onset: number, offset: number}>} notes
+ *   Melody notes in quarter-note (beat) units, as returned by the
+ *   /songs/.../melody endpoint.
+ */
+function playSongMelody(notes) {
+  if (!notes.length) {
+    console.warn('Selected song has no melody notes; nothing to play.');
+    return;
+  }
+  if (curSession) {
+    toggleLiveSession();  // stop whatever session (live or robot) is running
+  }
+  startSession();
+
+  // Anchor session frame 0 to "now", before scheduling anything relative to it.
+  getSessionCurrentFrame();
+  scheduleMelodyLoop(notes, curSession.startFrame);
+
+  // Kick off chord generation immediately, same as a live session's first
+  // note would (see playNote).
+  startGenerationLoop();
+}
+
+/**
+ * Play a song's ground-truth melody *and* its ground-truth chords, with no
+ * model in the loop at all -- the reference recording to A/B the generated
+ * accompaniment against.
+ *
+ * Runs as a session so the Stop button and visual teardown work as usual,
+ * but flagged referenceOnly so no /play or /advance_chord request is ever
+ * made (see startGenerationLoop).
+ * @param {Array<{pitch: number, onset: number, offset: number}>} melody
+ * @param {Array<{pitches: Array<number>, onset: number, offset: number,
+ *   symbol: string}>} chords
+ */
+function playSongReference(melody, chords) {
+  if (!melody.length && !chords.length) {
+    console.warn('Selected song has no reference content; nothing to play.');
+    return;
+  }
+  if (curSession) {
+    toggleLiveSession();
+  }
+  startSession({ referenceOnly: true });
+  getSessionCurrentFrame();  // Anchor frame 0 before scheduling against it
+  scheduleReferenceLoop(melody, chords, curSession.startFrame);
+}
+
+/**
+ * Schedule one play-through of a song's ground-truth melody and chords, then
+ * schedule the next right after it -- loops until the session is stopped,
+ * same as scheduleMelodyLoop.
+ * @param {Array<Object>} melody
+ * @param {Array<Object>} chords
+ * @param {number} baseFrame - Absolute frame this play-through starts at
+ */
+function scheduleReferenceLoop(melody, chords, baseFrame) {
+  let maxEndFrame = baseFrame;
+
+  melody.forEach(({ pitch, onset, offset }) => {
+    const onFrame = baseFrame + Math.round(onset * fpb);
+    const offFrame = baseFrame + Math.round(offset * fpb);
+    maxEndFrame = Math.max(maxEndFrame, offFrame);
+    scheduleRobotNote(pitch, true, onFrame);
+    scheduleRobotNote(pitch, false, offFrame);
+  });
+
+  chords.forEach(({ pitches, onset, offset, symbol }) => {
+    const onFrame = baseFrame + Math.round(onset * fpb);
+    const offFrame = baseFrame + Math.round(offset * fpb);
+    maxEndFrame = Math.max(maxEndFrame, offFrame);
+    // Same scheduling path the generated chords use, so the two sound
+    // identical apart from the choice of chord
+    scheduleChordPitches(
+      pitches, onFrame, frameToTransportTime(onFrame), true, 1.0, symbol);
+    scheduleChordPitches(
+      pitches, offFrame, frameToTransportTime(offFrame), false);
+  });
+
+  Tone.Transport.scheduleOnce(() => {
+    if (curSession && curSession.referenceOnly) {
+      scheduleReferenceLoop(melody, chords, maxEndFrame);
+    }
+  }, frameToTransportTime(maxEndFrame));
+}
+
+/**
+ * Schedule one play-through of a song's notes starting at baseFrame, then
+ * schedule another play-through right after it ends -- repeats indefinitely
+ * as long as the session started by playSongMelody is still the active one.
+ * @param {Array<{pitch: number, onset: number, offset: number}>} notes
+ * @param {number} baseFrame - Absolute (Transport-relative) frame this
+ *   play-through starts at
+ */
+function scheduleMelodyLoop(notes, baseFrame) {
+  let maxEndFrame = baseFrame;
+  notes.forEach(({ pitch, onset, offset }) => {
+    const onFrame = baseFrame + Math.round(onset * fpb);
+    const offFrame = baseFrame + Math.round(offset * fpb);
+    maxEndFrame = Math.max(maxEndFrame, offFrame);
+    scheduleRobotNote(pitch, true, onFrame);
+    scheduleRobotNote(pitch, false, offFrame);
+  });
+
+  Tone.Transport.scheduleOnce(() => {
+    // Stops the loop once the session has been ended some other way
+    // (Stop Live Session button, or a different song/live session started --
+    // both replace curSession, and starting a new one also cancels this via
+    // Tone.Transport.cancel() in toggleLiveSession's stop branch).
+    if (curSession) {
+      scheduleMelodyLoop(notes, maxEndFrame);
+    }
+  }, frameToTransportTime(maxEndFrame));
+}
+
+/**
+ * Schedule a single robot-melody note-on/off event at an absolute
+ * (Transport-relative) frame -- the scheduled-playback analogue of
+ * playNote/releaseNote, which push to noteHistory immediately for live input.
+ * @param {number} pitch - Raw MIDI pitch
+ * @param {boolean} on - Note-on (true) or note-off (false)
+ * @param {number} absFrame - Absolute frame (relative to Transport start) to
+ *   fire at
+ */
+function scheduleRobotNote(pitch, on, absFrame) {
+  const note = pitchToNote[pitch];
+  Tone.Transport.scheduleOnce(() => {
+    if (!curSession) {
+      return;
+    }
+    curSession.noteHistory.push(
+      { on, pitch, frame: absFrame - curSession.startFrame });
+    if (on) {
+      melodySynth.triggerAttack(note, '+0', melodyVelocity);
+      visual.noteOn(pitch);
+    } else {
+      melodySynth.triggerRelease(note);
+      visual.noteOff(pitch);
+    }
+  }, frameToTransportTime(absFrame));
 }
 
 /**
@@ -226,6 +437,34 @@ function getSessionCurrentFrame() {
   return frame - curSession.startFrame;
 }
 
+/**
+ * If chords wait for the performer instead of playing on the model's own
+ * predicted timing. See advanceChordNow.
+ * @return {boolean}
+ */
+function isManualChordMode() {
+  return chordTimingSelect.value === 'manual';
+}
+
+/**
+ * Kick off whichever generation loop the current chord-timing mode uses.
+ * Idempotent -- called from several places that can each be the first to
+ * happen in a session (first melody note, robot playback, session start in
+ * manual mode, or a space press before any of those).
+ */
+function startGenerationLoop() {
+  if (!curSession || curSession.loopStarted || curSession.referenceOnly) {
+    return;
+  }
+  curSession.loopStarted = true;
+  getSessionCurrentFrame();  // Anchor session frame 0 before scheduling
+  if (isManualChordMode()) {
+    pendingChordLoop();
+  } else {
+    syncWithServer();
+  }
+}
+
 /** Send session history as context to model to get new chord predictions */
 async function syncWithServer() {
   // Exit loop if current session ended (in case ended during timeout)
@@ -250,6 +489,10 @@ async function syncWithServer() {
       silenceTill: getSilenceFrames(),
       temperature: temperatureInput.valueAsNumber,
       introSet: curSession.introSet,
+      useCustomVoicings: customVoicingsCheck.checked,
+      prevVoicing: curSession.lastVoicing,
+      vlWeight: vlWeightInput.valueAsNumber,
+      regWeight: regWeightInput.valueAsNumber,
     })
   });
   const json = await result.json();
@@ -269,6 +512,142 @@ async function syncWithServer() {
   } else {
     syncWithServer();
   }
+}
+
+/**
+ * Manual chord timing: the model chooses which chord comes next, the
+ * performer chooses when it lands. Nothing is scheduled onto the Transport
+ * and nothing is committed -- a chord sustains until the next space press.
+ *
+ * The next chord is fetched ahead of time and cached in
+ * curSession.pendingChord so a press fires instantly rather than waiting on
+ * a round trip, and refreshed once per beat so it keeps responding to melody
+ * played since the last press.
+ */
+
+/**
+ * Bring curSession.chordTokens up to the current frame, so the model sees an
+ * accurate account of what has been sounding. Frames with no chord are left
+ * as -1, which the server fills with SILENCE.
+ */
+function fillManualChordTokens() {
+  const curFrame = getSessionCurrentFrame();
+  for (let i = 0; i <= curFrame; i++) {
+    if (curSession.chordTokens[i] === undefined) {
+      curSession.chordTokens[i] = -1;
+    }
+  }
+  const held = curSession.manualChord;
+  if (held) {
+    // Everything after the onset frame is the same chord still ringing
+    for (let i = held.startFrame + 1; i <= curFrame; i++) {
+      curSession.chordTokens[i] = held.holdToken;
+    }
+  }
+}
+
+/** Ask the model which chord it would start right now, and cache it */
+async function fetchPendingChord() {
+  if (!curSession) {
+    return;
+  }
+  fillManualChordTokens();
+  const result = await fetch(`${window.location.origin}/advance_chord`, {
+    'method': 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: modelSelect.value,
+      notes: curSession.noteHistory,
+      chordTokens: curSession.chordTokens,
+      frame: getSessionCurrentFrame() + 1,
+      temperature: temperatureInput.valueAsNumber,
+      useCustomVoicings: customVoicingsCheck.checked,
+      prevVoicing: curSession.lastVoicing,
+      vlWeight: vlWeightInput.valueAsNumber,
+      regWeight: regWeightInput.valueAsNumber,
+    })
+  });
+  const chord = await result.json();
+  if (!curSession) {
+    return;
+  }
+  curSession.pendingChord = chord;
+  updateChordTimingInfo();
+}
+
+/** Keep the queued chord fresh while waiting for the performer */
+async function pendingChordLoop() {
+  if (!curSession || !isManualChordMode()) {
+    return;
+  }
+  await fetchPendingChord();
+  if (!curSession || !isManualChordMode()) {
+    return;
+  }
+  setTimeout(pendingChordLoop, 60000 / Tone.Transport.bpm.value);
+}
+
+/**
+ * Play the queued chord immediately, releasing whatever is sustaining.
+ * Bound to space in manual mode.
+ */
+async function advanceChordNow() {
+  startGenerationLoop();
+  if (!curSession.pendingChord) {
+    // Nothing queued yet (session just started, or a fetch is still in
+    // flight) -- fetch one now and take the round-trip hit for this press.
+    await fetchPendingChord();
+    if (!curSession || !curSession.pendingChord) {
+      return;
+    }
+  }
+
+  const chord = curSession.pendingChord;
+  const frame = getSessionCurrentFrame();
+
+  if (curSession.manualChord) {
+    curSession.manualChord.pitches.forEach(pitch => {
+      chordSynth.triggerRelease(pitchToNote[pitch]);
+      visual.noteOff(pitch);
+    });
+  }
+  chord.pitches.forEach(pitch => {
+    chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
+    visual.noteOn(pitch, 'blue');
+  });
+
+  curSession.chordTokens[frame] = chord.onsetToken;
+  curSession.manualChord = { ...chord, startFrame: frame };
+  curSession.chordHistory.push(
+    { scheduleFrame: frame, pitches: chord.pitches, symbol: chord.symbol, eventIDs: [] });
+  if (chord.pitches.length) {
+    curSession.lastVoicing = chord.pitches;
+  }
+
+  curSession.pendingChord = null;
+  updateChordTimingInfo();
+  fetchPendingChord();
+}
+
+/** Show what is sounding and what space will play next */
+function updateChordTimingInfo() {
+  if (!isManualChordMode()) {
+    chordTimingInfo.textContent =
+      'Chords play on the model\'s own predicted timing';
+    return;
+  }
+  if (!curSession) {
+    chordTimingInfo.textContent =
+      'Start a session, then press space to play each chord';
+    return;
+  }
+  const playing = curSession.manualChord
+    ? curSession.manualChord.symbol : '--';
+  const next = curSession.pendingChord
+    ? curSession.pendingChord.symbol : 'thinking...';
+  chordTimingInfo.textContent = `Playing: ${playing}   Space plays: ${next}`;
 }
 
 /**
@@ -362,6 +741,15 @@ function processAgentAction(
       eventID => Tone.Transport.clear(eventID));
   }
 
+  // Track the most recent non-empty voicing (regardless of scheduling), so
+  // it can be sent back as prevVoicing next poll for voice-leading
+  // continuity across separate /play calls.
+  for (const [, pitches] of newChords) {
+    if (pitches && pitches.length) {
+      curSession.lastVoicing = pitches;
+    }
+  }
+
   // Schedule note hits and releases for sent frames
   newChords.forEach(([symbol, pitches, on], frameOffset) => {
     const scheduleFrame = targetFrame + frameOffset;
@@ -414,6 +802,351 @@ function establishServerConnection() {
       console.log('Interactive agent is ready!');
       liveSessionBtn.disabled = false;
     });
+  loadSongCatalogue();
+  loadVoicingBrowserChords();
+}
+
+/** Fetch the robot-melody song catalogue for fuzzy searching */
+async function loadSongCatalogue() {
+  const result = await fetch(`${window.location.origin}/songs`);
+  songCatalogue = prepareSongCatalogue(await result.json());
+}
+
+/**
+ * Precompute the lowercased forms the search scans, so a keystroke doesn't
+ * re-lowercase and re-concatenate all 30k songs (that alone was most of the
+ * per-keystroke cost).
+ * @param {Array<Object>!} songs
+ * @return {Array<Object>!} The same entries, annotated in place
+ */
+function prepareSongCatalogue(songs) {
+  songs.forEach(song => {
+    song.titleLower = song.title.toLowerCase();
+    song.artistLower = song.artist.toLowerCase();
+  });
+  return songs;
+}
+
+// Characters a match can start right after and still count as beginning a
+// word: space, hyphen, underscore, slash, open paren, comma, apostrophe.
+// Compared by char code so scoring never has to slice out a character.
+const wordBoundaryCharCodes = new Set([32, 45, 95, 47, 40, 44, 39]);
+
+// How many query characters the last fuzzyMatchScore call got through before
+// giving up. Returned out of band because it's only needed on the rare path
+// where a query spans both title and artist, and packing it into the return
+// value would allocate for every song scanned.
+let fuzzyMatchConsumed = 0;
+
+/**
+ * Split search text into the characters a match must contain, in order.
+ * Done once per keystroke rather than once per song: iterating the query
+ * string directly inside the scorer allocates a character per song scanned,
+ * which dominated the cost across a 30k-song catalogue.
+ * @param {string} query - Lowercased search text
+ * @return {Array<string>!} Characters to match, spaces dropped
+ */
+function toQueryChars(query) {
+  // Spaces are separators between what the user typed, not characters to find
+  return query.split('').filter(c => c !== ' ');
+}
+
+/**
+ * Score how well a fuzzy query matches some text, higher being better.
+ * Query characters must appear in order but not contiguously, so "empstate"
+ * or "emp state" both find "Empire State Of Mind". Bonuses for word-start
+ * and consecutive hits keep the meaningful matches above incidental letter
+ * scatter across a long title.
+ * @param {Array<string>!} queryChars - From toQueryChars
+ * @param {string} lower - Text to score against, already lowercased (see
+ *   prepareSongCatalogue -- lowercasing here would dominate the cost)
+ * @param {number=} startIndex - First query character to match, so a caller
+ *   can match the remainder of a query without slicing the array per song
+ * @return {number} Score, or -Infinity if the query isn't a subsequence of
+ *   the text. A real match can score negative, so the sentinel has to sit
+ *   below any achievable score rather than at some fixed threshold. Also
+ *   sets fuzzyMatchConsumed.
+ */
+function fuzzyMatchScore(queryChars, lower, startIndex = 0) {
+  let score = 0;
+  let pos = 0;         // Where in the text to resume scanning
+  let prevMatch = -2;  // Index of the previously matched character
+  for (let i = startIndex; i < queryChars.length; i++) {
+    const found = lower.indexOf(queryChars[i], pos);
+    if (found === -1) {
+      fuzzyMatchConsumed = i;
+      return -Infinity;
+    }
+    score += 1;
+    if (found === prevMatch + 1) {
+      score += 6;
+    }
+    if (found === 0 || wordBoundaryCharCodes.has(lower.charCodeAt(found - 1))) {
+      score += 10;
+    }
+    score -= Math.min(found - pos, 4);  // Penalise skipping over characters
+    prevMatch = found;
+    pos = found + 1;
+  }
+  fuzzyMatchConsumed = queryChars.length;
+  // Among equally good matches, prefer the tighter text
+  return score - Math.min(lower.length / 10, 5);
+}
+
+/**
+ * Best fuzzy score for a song, matching the query against its title, its
+ * artist, or both together -- so "creep" finds the song, "radiohead" finds
+ * everything by them, and "creep radiohead" finds the one song.
+ * @param {Array<string>!} queryChars - From toQueryChars
+ * @param {Object!} song - Catalogue entry with title and artist
+ * @return {number} Score, or -Infinity if nothing matched
+ */
+function songMatchScore(queryChars, song) {
+  let best = fuzzyMatchScore(queryChars, song.titleLower);
+  const titleConsumed = fuzzyMatchConsumed;
+
+  // Nudge artist hits below title hits, so typing a song name still ranks
+  // that song above other work by an artist whose name happens to match
+  const artistScore = fuzzyMatchScore(queryChars, song.artistLower);
+  if (artistScore > -Infinity) {
+    best = Math.max(best, artistScore - 2);
+  }
+
+  // Neither field matched the whole query, so try it as "title artist"
+  // ("creep radiohead"): the title took a prefix, the artist must take the
+  // rest. Scanning only the leftover characters here, rather than matching
+  // the query against a combined string, keeps this off the hot path -- it
+  // was costing more than the two real passes combined.
+  if (best === -Infinity && titleConsumed > 0) {
+    best = fuzzyMatchScore(queryChars, song.artistLower, titleConsumed);
+  }
+  return best;
+}
+
+/** Recompute fuzzy matches for the current search text and show them */
+function onSongSearchInput() {
+  const query = songSearchInput.value.trim().toLowerCase();
+  songSearchIndex = 0;
+  // A single character matches most of the catalogue, so the results wouldn't
+  // mean anything and it's the most expensive scan there is
+  if (query.length < songSearchMinChars) {
+    songSearchMatches = [];
+    songSearchPool = [];
+    songSearchLastQuery = '';
+    renderSongSearchResults();
+    return;
+  }
+
+  // Extending a query can only narrow the results -- if a song's text didn't
+  // contain the old query as a subsequence, it can't contain a longer one --
+  // so typing forward rescores just the previous hits instead of all 30k.
+  // Only scoring against the full catalogue when the query isn't an extension
+  // (first character, a backspace, or a paste) keeps every keystroke cheap,
+  // since the full scan then only happens for short, fast-to-reject queries.
+  const pool = (songSearchLastQuery && query.startsWith(songSearchLastQuery))
+    ? songSearchPool : songCatalogue;
+
+  // Collect every match, but only ever rank the handful actually shown. A
+  // short query matches most of the catalogue, and sorting tens of thousands
+  // of those per keystroke costs far more than the matching itself. The pool
+  // stays in catalogue order so equal scores always break ties the same way.
+  const queryChars = toQueryChars(query);
+  const nextPool = [];
+  const top = [];
+  let worstShown = -Infinity;
+  pool.forEach(song => {
+    const score = songMatchScore(queryChars, song);
+    if (score === -Infinity) {
+      return;
+    }
+    nextPool.push(song);
+    if (top.length === songSearchMaxResults && score <= worstShown) {
+      return;
+    }
+    let i = top.length;
+    while (i > 0 && top[i - 1].score < score) {
+      i--;
+    }
+    top.splice(i, 0, { song, score });
+    if (top.length > songSearchMaxResults) {
+      top.pop();
+    }
+    worstShown = top[top.length - 1].score;
+  });
+
+  songSearchPool = nextPool;
+  songSearchLastQuery = query;
+  songSearchMatches = top.map(entry => entry.song);
+  renderSongSearchResults();
+}
+
+/** Draw the current match list, marking the keyboard-highlighted row */
+function renderSongSearchResults() {
+  songSearchResults.innerHTML = '';
+  songSearchMatches.forEach((song, i) => {
+    const row = document.createElement('div');
+    row.className = i === songSearchIndex ? 'search-result active' : 'search-result';
+    row.textContent = song.title;
+    const artist = document.createElement('span');
+    artist.className = 'artist';
+    artist.textContent = `  ${song.artist}`;
+    row.appendChild(artist);
+    row.addEventListener('click', () => playSongFromSearch(i));
+    songSearchResults.appendChild(row);
+  });
+}
+
+/** Arrow keys move the highlight, Enter plays it, Escape clears the search */
+function onSongSearchKeydown(event) {
+  if (event.key === 'Escape') {
+    songSearchInput.value = '';
+    onSongSearchInput();
+    return;
+  }
+  if (!songSearchMatches.length) {
+    return;
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    songSearchIndex = Math.min(songSearchIndex + 1, songSearchMatches.length - 1);
+    renderSongSearchResults();
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    songSearchIndex = Math.max(songSearchIndex - 1, 0);
+    renderSongSearchResults();
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    playSongFromSearch(songSearchIndex);
+  }
+}
+
+/**
+ * Fetch the chosen song's melody and start robot playback.
+ * @param {number} index - Row in songSearchMatches
+ */
+async function playSongFromSearch(index) {
+  const song = songSearchMatches[index];
+  if (!song) {
+    return;
+  }
+  songSearchIndex = index;
+  renderSongSearchResults();
+  songSearchInput.blur();  // Hand the keyboard back to playing
+
+  const base = `${window.location.origin}/songs/` +
+    `${song.dataset}/${song.split}/${encodeURIComponent(song.id)}`;
+
+  if (referenceModeCheck.checked) {
+    // The song's own accompaniment, no model involved
+    const custom = customVoicingsCheck.checked ? '?custom=1' : '';
+    const result = await fetch(`${base}/reference${custom}`);
+    const { melody, chords } = await result.json();
+    playSongReference(melody, chords);
+    return;
+  }
+
+  const result = await fetch(`${base}/melody`);
+  const notes = await result.json();
+  playSongMelody(notes);
+}
+
+/**
+ * Voicing browser: audition individual stored voicings for a chord symbol,
+ * completely independent of any live/robot session -- no noteHistory, no
+ * Transport scheduling, no server /play calls. Select a chord, then use
+ * Left/Right arrow keys to step through its stored voicings; each plays for
+ * exactly one measure at the current tempo/time signature.
+ */
+
+/** Fetch every chord symbol covered by the voicing lookup and populate the dropdown */
+async function loadVoicingBrowserChords() {
+  const result = await fetch(`${window.location.origin}/voicings/chords`);
+  const chords = await result.json();
+  chords.forEach(chord => {
+    const option = document.createElement('option');
+    option.value = chord;
+    option.textContent = chord;
+    voicingBrowserChordSelect.appendChild(option);
+  });
+}
+
+/** Handle chord selection: fetch its voicings and audition the first one */
+async function onVoicingBrowserChordSelected() {
+  const chord = voicingBrowserChordSelect.value;
+  if (!chord) {
+    voicingBrowserList = [];
+    voicingBrowserIndex = -1;
+    return;
+  }
+  const result = await fetch(
+    `${window.location.origin}/voicings?chord=${encodeURIComponent(chord)}`);
+  voicingBrowserList = await result.json();
+  voicingBrowserIndex = 0;
+  playBrowsedVoicing();
+}
+
+/** Handle Left/Right arrow keys on the chord dropdown to step through voicings */
+function onVoicingBrowserKeydown(event) {
+  if (!voicingBrowserList.length) {
+    return;
+  }
+  if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    voicingBrowserIndex = Math.min(voicingBrowserIndex + 1, voicingBrowserList.length - 1);
+    playBrowsedVoicing();
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    voicingBrowserIndex = Math.max(voicingBrowserIndex - 1, 0);
+    playBrowsedVoicing();
+  }
+}
+
+/**
+ * Play the currently-selected browsed voicing for one measure, and update
+ * the info readout. Uses chordSynth directly (no Transport scheduling, no
+ * session) so this works whether or not a live/robot session is running.
+ */
+function playBrowsedVoicing() {
+  const entry = voicingBrowserList[voicingBrowserIndex];
+  if (!entry) {
+    return;
+  }
+
+  // Cut off whatever the previous voicing was doing immediately, rather than
+  // letting it ring/stay highlighted until its own bar finishes -- otherwise
+  // rapidly stepping through voicings overlaps with the new one.
+  if (voicingBrowserOffTimeout !== null) {
+    clearTimeout(voicingBrowserOffTimeout);
+    voicingBrowserOffTimeout = null;
+  }
+  if (voicingBrowserActivePitches.length) {
+    chordSynth.triggerRelease(voicingBrowserActivePitches.map(pitch => pitchToNote[pitch]));
+    voicingBrowserActivePitches.forEach(pitch => visual.noteOff(pitch));
+    voicingBrowserActivePitches = [];
+  }
+
+  const beatsPerMeasure = Tone.Transport.timeSignature;
+  const barSeconds = (60 / Tone.Transport.bpm.value) * beatsPerMeasure;
+  const noteNames = entry.pitches.map(pitch => pitchToNote[pitch]);
+  chordSynth.triggerAttackRelease(noteNames, barSeconds);
+
+  // Highlight on the piano roll for the same duration as the audio -- plain
+  // setTimeout (not Tone.Transport) since this tool runs outside any
+  // session/Transport scheduling.
+  entry.pitches.forEach(pitch => visual.noteOn(pitch));
+  voicingBrowserActivePitches = entry.pitches;
+  voicingBrowserOffTimeout = setTimeout(() => {
+    entry.pitches.forEach(pitch => visual.noteOff(pitch));
+    voicingBrowserActivePitches = [];
+    voicingBrowserOffTimeout = null;
+  }, barSeconds * 1000);
+
+  const detail = entry.legacy
+    ? '(legacy fixed-octave voicing -- not covered by the custom voicing lookup)'
+    : `(seen ${entry.count} times across ${entry.num_songs} songs)`;
+  voicingBrowserInfo.textContent =
+    `Voicing ${voicingBrowserIndex + 1} / ${voicingBrowserList.length} -- ` +
+    `${noteNames.join(', ')} ${detail}`;
 }
 
 /**
@@ -424,12 +1157,9 @@ function establishServerConnection() {
 function playNote(note, velocity) {
   const keyIndex = noteToPitch[note];
   if (curSession) {
-    const startLoop = !curSession.startFrame;
     curSession.noteHistory.push(
       { on: true, pitch: keyIndex, frame: getSessionCurrentFrame() });
-    if (startLoop) {
-      syncWithServer();
-    }
+    startGenerationLoop();
   }
   melodySynth.triggerAttack(note, '+0', velocity);
   visual.noteOn(keyIndex);
@@ -626,10 +1356,34 @@ function setKeysToNotes() {
   enableClickingInputs();  // Add listeners on new keys since old ones removed
 }
 
+/**
+ * If a keystroke is meant for a form field rather than for playing. Without
+ * this, typing a song title into the search box would play melody notes and
+ * (in manual chord mode) every space would fire a chord.
+ * @param {Event!} event
+ * @return {boolean}
+ */
+function isTypingTarget(event) {
+  const tag = event.target && event.target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
 /** Create key events for playing notes with the computer keyboard */
 function enableKeyboardInputs() {
   setKeysToNotes();
   document.addEventListener('keydown', event => {
+    if (isTypingTarget(event)) {
+      return;
+    }
+    // Space advances the chord in manual timing mode. Swallow it so it
+    // doesn't also activate whatever button happens to have focus.
+    if (event.code === 'Space' && curSession && isManualChordMode()) {
+      event.preventDefault();
+      if (!event.repeat) {
+        advanceChordNow();
+      }
+      return;
+    }
     const note = keysToNotes[event.key];
     if (note && !heldNotes[note]) {
       heldNotes[note] = true;
@@ -637,6 +1391,9 @@ function enableKeyboardInputs() {
     }
   });
   document.addEventListener('keyup', event => {
+    if (isTypingTarget(event)) {
+      return;
+    }
     const note = keysToNotes[event.key];
     if (note) {
       heldNotes[note] = false;
@@ -845,6 +1602,24 @@ async function initializeMIDIReader(visual_arg) {
   downloadSessionCheck = document.getElementById('download-session-check');
   metronomeCheck = document.getElementById('metronome-check');
   showChordsCheck = document.getElementById('show-chords-check');
+  customVoicingsCheck = document.getElementById('custom-voicings-check');
+  vlWeightInput = bindSliderValueDisplay('vl-weight-input', 'vl-weight-value', 2);
+  regWeightInput = bindSliderValueDisplay('reg-weight-input', 'reg-weight-value', 2);
+  songSearchInput = document.getElementById('song-search-input');
+  songSearchInput.addEventListener('input', onSongSearchInput);
+  songSearchInput.addEventListener('keydown', onSongSearchKeydown);
+  songSearchResults = document.getElementById('song-search-results');
+  referenceModeCheck = document.getElementById('reference-mode-check');
+  chordTimingSelect = document.getElementById('chord-timing-select');
+  chordTimingInfo = document.getElementById('chord-timing-info');
+  chordTimingSelect.addEventListener('change', () => {
+    updateChordTimingInfo();
+    chordTimingSelect.blur();
+  });
+  voicingBrowserChordSelect = document.getElementById('voicing-browser-chord-select');
+  voicingBrowserChordSelect.addEventListener('change', onVoicingBrowserChordSelected);
+  voicingBrowserChordSelect.addEventListener('keydown', onVoicingBrowserKeydown);
+  voicingBrowserInfo = document.getElementById('voicing-browser-info');
   temperatureInput = document.getElementById('temperature-input');
   temperatureInput.value = DEFAULTS.temperature;
   addNumericInputEventListener(temperatureInput);
@@ -865,6 +1640,7 @@ async function initializeMIDIReader(visual_arg) {
 
   // Do initial setup with server
   establishServerConnection();
+  updateChordTimingInfo();
 
   console.log('ready!');
   playBtn.textContent = 'Play';

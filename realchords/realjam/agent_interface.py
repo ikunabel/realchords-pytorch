@@ -3,7 +3,7 @@
 @Author Tia-Jane Fowler, Alex Scarlatos, Yusong Wu
 """
 
-from typing import List, Optional, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 import note_seq
 import numpy as np
 import torch
@@ -35,10 +35,12 @@ from realchords.constants import (
     REALJAM_CHECKPOINT_DIR,
 )
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
+from realchords.utils.voicing_selector import VoicingSelector
 from realchords.model.sampling import (
     filter_invalid_tokens_generate_unconditional,
     filter_invalid_tokens_generate_online,
     filter_invalid_tokens_generate_single_part,
+    filter_chord_onset_only,
 )
 from functools import partial
 import onnxruntime as ort
@@ -57,6 +59,29 @@ class NoteInfo(TypedDict):
     pitch: int
     frame: int
     on: bool
+
+
+def _active_melody_pitch(notes: List[NoteInfo], frame: int) -> Optional[int]:
+    """Return the melody pitch sounding at `frame`, if any.
+
+    Scans the full note-on/off event history up to and including `frame` and
+    returns whichever pitch's most recent event was a note-on with no
+    matching note-off yet. Melody is nominally monophonic, but if multiple
+    pitches are somehow still held, returns the most recently onset one.
+    Doesn't assume `notes` is sorted by frame (client-sent event order isn't
+    strictly guaranteed).
+    """
+    onset_frame: Dict[int, int] = {}
+    for note in notes:
+        if note["frame"] > frame:
+            continue
+        if note["on"]:
+            onset_frame[note["pitch"]] = note["frame"]
+        else:
+            onset_frame.pop(note["pitch"], None)
+    if not onset_frame:
+        return None
+    return max(onset_frame.items(), key=lambda kv: kv[1])[0]
 
 
 ONLINE_MODEL_PATH = os.path.join(
@@ -227,6 +252,7 @@ class Agent:
         provider=None,
         compile: bool = True,
         auto_download: bool = True,
+        voicings_path: Optional[str] = "data/voicings/merged/chord_voicings.json",
     ) -> None:
         """Initialize the agent.
 
@@ -236,6 +262,11 @@ class Agent:
             provider: ONNX execution provider (e.g., 'CUDAExecutionProvider', 'CPUExecutionProvider').
             compile: Whether to compile the model with torch.compile.
             auto_download: Whether to automatically download checkpoints if they don't exist.
+            voicings_path: Path to a chord_voicings.json lookup table (see
+                scripts/extract_voicings/) used for the optional "custom voicings"
+                playback mode. Not part of the downloaded checkpoint bundle — if
+                missing, custom-voicing requests silently fall back to the
+                fixed-octave rule.
         """
         if onnx and mlx:
             raise ValueError("ONNX and MLX backends are mutually exclusive")
@@ -279,6 +310,33 @@ class Agent:
             chord_names = json.load(f)
         tokenizer = HooktheoryTokenizer(chord_names=chord_names)
         self.tokenizer = tokenizer
+        self.chord_names = chord_names  # full vocabulary, for the voicing browser
+
+        # Optional data-driven voicing lookup for the "custom voicings" live
+        # toggle. Loaded once at startup and used statelessly per-request
+        # (see decode_chord_token_custom_voicing) so it's safe to share
+        # across concurrently connected clients.
+        self.voicing_selector: Optional[VoicingSelector] = None
+        if voicings_path and os.path.exists(voicings_path):
+            try:
+                self.voicing_selector = VoicingSelector(voicings_path)
+                logging.info(
+                    "Loaded custom voicing lookup from %s", voicings_path
+                )
+            except Exception as e:
+                logging.warning(
+                    "Failed to load voicing lookup from %s: %s. "
+                    "Custom-voicing requests will fall back to the "
+                    "fixed-octave rule.",
+                    voicings_path,
+                    e,
+                )
+        else:
+            logging.info(
+                "No voicing lookup found at %s; custom-voicing requests "
+                "will fall back to the fixed-octave rule.",
+                voicings_path,
+            )
 
         # Load non-causal (offline) model
         self.enc_dec_model_path = _resolve_existing_path(
@@ -433,10 +491,24 @@ class Agent:
             chord_symbol = token_name.replace("CHORD_ON_", "")
         else:
             chord_symbol = token_name.replace("CHORD_", "")
+        pitches = self.legacy_chord_pitches(chord_symbol)
+        if pitches is None:
+            chord_symbol = ""
+            pitches = []
+        return chord_symbol, pitches, is_onset
+
+    def legacy_chord_pitches(self, chord_symbol: str) -> Optional[List[int]]:
+        """The original fixed-octave voicing rule: every chord tone at
+        CHORD_OCTAVE, plus a separate bass note at BASS_OCTAVE. Shared by
+        decode_chord_token and the voicing browser's fallback for chords
+        the custom voicing lookup doesn't cover (e.g. most slash chords).
+
+        Returns None if `chord_symbol` doesn't parse as a real chord.
+        """
         try:
             chord_pitches = note_seq.chord_symbol_pitches(chord_symbol)
             bass_pitch = note_seq.chord_symbol_bass(chord_symbol)
-            pitches = [
+            return [
                 *[CHORD_OCTAVE * 12 + pitch for pitch in chord_pitches],
                 BASS_OCTAVE * 12 + bass_pitch,
             ]
@@ -446,9 +518,243 @@ class Agent:
                 chord_symbol,
                 e,
             )
-            chord_symbol = ""
-            pitches = []
-        return chord_symbol, pitches, is_onset
+            return None
+
+    def list_all_chords(self) -> List[str]:
+        """Full chord vocabulary, for the voicing-browser dropdown -- NOT
+        limited to the subset the custom voicing lookup covers (unlike
+        VoicingSelector.list_chords()), so every chord is browsable even if
+        it'll fall back to legacy_chord_pitches when selected.
+        """
+        return sorted(self.chord_names)
+
+    def get_voicings_for_browser(self, chord_name: str) -> List[Dict]:
+        """Stored voicings for one chord, for the standalone voicing
+        browser. Falls back to a single legacy fixed-octave voicing when the
+        custom lookup doesn't cover this chord (e.g. most slash chords are
+        outcompeted by their root-position equivalent under the lookup's
+        exact pitch-class-set matching -- see journal/VOICING_EXTRACTION.md)
+        rather than the browser showing nothing for them.
+        """
+        if self.voicing_selector is not None:
+            voicings = self.voicing_selector.get_voicings(chord_name)
+            if voicings:
+                return voicings
+
+        legacy_pitches = self.legacy_chord_pitches(chord_name)
+        if legacy_pitches is None:
+            return []
+        return [{"pitches": legacy_pitches, "count": None, "num_songs": None, "legacy": True}]
+
+    def decode_chord_token_custom_voicing(
+        self,
+        chord_token: int,
+        prev_voicing: Optional[List[int]],
+        vl_weight: Optional[float] = None,
+        reg_weight: Optional[float] = None,
+        note_count_weight: Optional[float] = None,
+        density_weight: Optional[float] = None,
+        target_mid: Optional[float] = None,
+        density_target: Optional[float] = None,
+        melody_pitch: Optional[int] = None,
+    ) -> Tuple[ChordInfo, Optional[List[int]]]:
+        """Like decode_chord_token, but voices the chord using
+        self.voicing_selector (data-driven, voice-leading-aware) instead of
+        the fixed-octave rule, when available.
+
+        Falls back to decode_chord_token's fixed-octave pitches when no
+        selector is loaded, the chord symbol isn't covered by the lookup
+        table, or the symbol is empty (silence/parse failure).
+
+        Args:
+          chord_token: the chord token to decode
+          prev_voicing: pitches of the previously voiced chord, threaded in
+            explicitly (rather than tracked as instance state) so this stays
+            safe to call for multiple concurrently-jamming clients sharing
+            one Agent — see VoicingSelector's own stateless `select(...,
+            update_state=False)` mode.
+          vl_weight, reg_weight, note_count_weight, density_weight,
+          target_mid, density_target:
+            Per-call overrides for VoicingSelector's scoring weights (``None``
+            falls back to the selector's own constructed defaults). Threaded
+            through the same way as prev_voicing, for the same concurrency
+            reason — different live-jam clients can use different slider
+            values against one shared selector instance.
+          melody_pitch: MIDI pitch currently sounding in the melody, if any
+            (see _active_melody_pitch) — passed as a hard ceiling constraint
+            so chord voicings can never climb above/collide with the melody.
+
+        Returns:
+          chord_info: same (chord_symbol, chord_pitches, is_onset) as
+            decode_chord_token.
+          new_prev_voicing: pitches to pass as prev_voicing on the NEXT call,
+            for voice-leading continuity across a sequence of chords.
+            Carries the previous value forward on silence/failure so a
+            single missed frame doesn't reset voice-leading context.
+        """
+        if self.tokenizer.is_silence(chord_token):
+            return ("", [], True), prev_voicing
+
+        is_onset = self.tokenizer.is_chord_on(chord_token)
+        token_name = self.tokenizer.id_to_name[chord_token]
+        chord_symbol = token_name.replace(
+            "CHORD_ON_" if is_onset else "CHORD_", ""
+        )
+
+        pitches: Optional[List[int]] = None
+        if self.voicing_selector is not None and chord_symbol:
+            pitches = self.voicing_selector.select(
+                chord_symbol, prev_voicing=prev_voicing, update_state=False,
+                vl_weight=vl_weight, reg_weight=reg_weight,
+                note_count_weight=note_count_weight, density_weight=density_weight,
+                melody_pitch=melody_pitch, melody_role="top",
+                target_mid=target_mid, density_target=density_target,
+            )
+
+        if pitches is not None:
+            return (chord_symbol, pitches, is_onset), pitches
+
+        # Fallback: no selector, chord not covered, or empty symbol.
+        chord_info = self.decode_chord_token(chord_token)
+        fallback_pitches = chord_info[1] if chord_info[1] else prev_voicing
+        return chord_info, fallback_pitches
+
+    def _build_interleaved_prompt(
+        self,
+        note_token_hist: List[int],
+        chord_tokens: List[int],
+        frame: int,
+        max_context_len: int,
+    ) -> Tuple[torch.Tensor, List[int], List[int]]:
+        """Build the `[BOS, chord_0, note_0, chord_1, note_1, ...]` prompt the
+        online model expects, covering history up to (not including) `frame`.
+
+        Mutates `chord_tokens` in place, filling -1 gaps with SILENCE and
+        padding up to `frame` — callers rely on that (generate_live reads
+        chord_tokens again afterward for its commit-window logic).
+
+        Returns the prompt tensor plus the trimmed note/chord histories that
+        went into it.
+        """
+        # Fill any gaps in chord tokens with rests
+        # If there are -1 values in chord_tokens, fill them with SILENCE
+        # If chord_tokens length is less than frame, pad with SILENCE
+        for i in range(len(chord_tokens)):
+            if chord_tokens[i] == -1:
+                chord_tokens[i] = self.tokenizer.name_to_id["SILENCE"]
+        if len(chord_tokens) < frame:
+            chord_tokens.extend(
+                [self.tokenizer.name_to_id["SILENCE"]]
+                * (frame - len(chord_tokens))
+            )
+
+        # Create initial prompt (up to target frame)
+        # If chord_tokens length is greater than frame, take the first frame tokens
+        # If chord_tokens length is less than frame, take all chord_tokens
+        chord_token_hist = chord_tokens[:frame]
+        # Trim beginning of context to avoid surpassing max length
+        note_token_hist = note_token_hist[-max_context_len:]
+        chord_token_hist = chord_token_hist[-max_context_len:]
+
+        # The first frame of context can't be a "hold" of something the model
+        # can't see, so rewrite it to the equivalent non-hold token.
+        if note_token_hist and self.tokenizer.is_note_hold(note_token_hist[0]):
+            note_token_hist[0] = self.tokenizer.note_hold_id_to_note_id(
+                note_token_hist[0]
+            )
+
+        if chord_token_hist and self.tokenizer.is_chord_hold(
+            chord_token_hist[0]
+        ):
+            chord_token_hist[0] = self.tokenizer.chord_hold_id_to_chord_id(
+                chord_token_hist[0]
+            )
+
+        # Create interleaved sequence with BOS at start, EOS at end
+        interleaved_tokens = [self.tokenizer.bos_token]
+        for i in range(min(len(chord_token_hist), len(note_token_hist))):
+            interleaved_tokens.extend([chord_token_hist[i], note_token_hist[i]])
+
+        prompt = torch.tensor(
+            [interleaved_tokens], dtype=torch.long, device=self.device
+        )
+        return prompt, note_token_hist, chord_token_hist
+
+    def advance_chord(
+        self,
+        model_name: str,
+        notes: List[NoteInfo],
+        chord_tokens: List[int],
+        frame: int,
+        temperature: float,
+        use_custom_voicings: bool = False,
+        prev_voicing: Optional[List[int]] = None,
+        vl_weight: Optional[float] = None,
+        reg_weight: Optional[float] = None,
+    ) -> Dict:
+        """Pick the chord that should start *right now*, at `frame`.
+
+        The counterpart to generate_live for manual chord-timing mode: the
+        model chooses *which* chord, but not *when* — sampling is restricted
+        to chord onset tokens, so it can't answer "keep holding" or "rest".
+        Generates exactly one token, since there is no lookahead window to
+        schedule when the performer decides each chord change themselves.
+
+        Args:
+          model_name: model to use, from MODELS keys
+          notes: list of all note events in session
+          chord_tokens: list of all chord tokens in session (history only —
+            manual mode has no committed future to preserve)
+          frame: frame the chord should start at
+          temperature: model sampling temperature
+          use_custom_voicings, prev_voicing, vl_weight, reg_weight:
+            same meaning as in generate_live.
+
+        Returns:
+          dict with the chord symbol, its pitches, and both the onset and
+          hold token ids — the client needs the hold token to keep filling in
+          chord history for as long as it sustains the chord.
+        """
+        model = self.models[model_name]
+
+        note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
+        prompt, _, _ = self._build_interleaved_prompt(
+            note_token_hist, chord_tokens, frame, self.max_frames - 1
+        )
+
+        logging.info("[Advance] Generating chord onset at frame %s", frame)
+        generated = self.gen_online_model(
+            model=model,
+            prompt=prompt,
+            seq_len=1,
+            temperature=temperature,
+            filter_fn=filter_chord_onset_only,
+            filter_kwargs=dict(tokenizer=self.tokenizer),
+        )
+        onset_token = int(generated[0, 0])
+
+        melody_pitch = _active_melody_pitch(notes, frame)
+        if use_custom_voicings and self.voicing_selector is not None:
+            (chord_symbol, pitches, _), _ = (
+                self.decode_chord_token_custom_voicing(
+                    onset_token,
+                    prev_voicing,
+                    vl_weight=vl_weight,
+                    reg_weight=reg_weight,
+                    melody_pitch=melody_pitch,
+                )
+            )
+        else:
+            chord_symbol, pitches, _ = self.decode_chord_token(onset_token)
+
+        result = {
+            "symbol": chord_symbol,
+            "pitches": pitches,
+            "onsetToken": onset_token,
+            "holdToken": self.tokenizer.chord_on_id_to_chord_id(onset_token),
+        }
+        logging.info("[Advance] Chord: %s", result)
+        return result
 
     def _prepare_model(self, model):
         """Prepare model for inference.
@@ -532,6 +838,8 @@ class Agent:
         prompt: torch.Tensor,
         seq_len: int,
         temperature: float,
+        filter_fn=None,
+        filter_kwargs=None,
     ) -> torch.Tensor:
         """Generate tokens using the online model.
 
@@ -540,10 +848,20 @@ class Agent:
             prompt: The input prompt tensor
             seq_len: Number of new tokens to generate
             temperature: Sampling temperature
+            filter_fn: Logit filter to constrain sampling. Defaults to the
+                standard interleaved chord/melody validity filter; overridden
+                by advance_chord to force a chord onset.
+            filter_kwargs: Keyword arguments for `filter_fn`.
 
         Returns:
             Generated tokens tensor
         """
+        if filter_fn is None:
+            filter_fn = self.online_model_filter_fn
+            filter_kwargs = self.online_model_filter_kwargs
+        if filter_kwargs is None:
+            filter_kwargs = dict()
+
         if self.onnx:
             # Use ONNX implementation
             onnx_init, onnx_step = model
@@ -553,8 +871,8 @@ class Agent:
                 prompt,
                 temperature=temperature,
                 n_new=seq_len,
-                filter_logits_fn=self.online_model_filter_fn,
-                filter_kwargs=self.online_model_filter_kwargs,
+                filter_logits_fn=filter_fn,
+                filter_kwargs=filter_kwargs,
             )
             return torch.tensor(gen_tokens_np, device=prompt.device)
         else:
@@ -563,8 +881,8 @@ class Agent:
                 seq_len=seq_len,
                 temperature=temperature,
                 cache_kv=True,
-                filter_logits_fn=self.online_model_filter_fn,
-                filter_kwargs=self.online_model_filter_kwargs,
+                filter_logits_fn=filter_fn,
+                filter_kwargs=filter_kwargs,
             )
 
     def gen_commit_online_model_postfill(
@@ -760,6 +1078,14 @@ class Agent:
         temperature: float,
         silence_till: int,
         intro_set: bool,
+        use_custom_voicings: bool = False,
+        prev_voicing: Optional[List[int]] = None,
+        vl_weight: Optional[float] = None,
+        reg_weight: Optional[float] = None,
+        note_count_weight: Optional[float] = None,
+        density_weight: Optional[float] = None,
+        target_mid: Optional[float] = None,
+        density_target: Optional[float] = None,
     ) -> Tuple[List[ChordInfo], List[int], Optional[List[int]]]:
         """Generate chords for a given frame.
 
@@ -778,6 +1104,18 @@ class Agent:
           temperature: model sampling temperature
           silence_till: frames before generating with online model
           intro_set: if intro chords have been filled in by offline model
+          use_custom_voicings: if True, voice chords via self.voicing_selector
+            (data-driven, voice-leading-aware) instead of the fixed-octave
+            rule, falling back per-chord when the lookup doesn't cover it.
+          prev_voicing: pitches of the last voicing the caller actually used
+            (regardless of which rule produced them), for voice-leading
+            continuity across separate generate_live calls. Client-tracked
+            since the server holds no per-session state.
+          vl_weight, reg_weight, note_count_weight, density_weight,
+          target_mid, density_target:
+            Per-call overrides for VoicingSelector's scoring weights, only
+            relevant when use_custom_voicings is True. ``None`` falls back
+            to the selector's own constructed defaults.
 
         Returns:
           new_chords: list of ChordInfo, one for each frame in lookahead
@@ -853,44 +1191,10 @@ class Agent:
             logging.info(
                 "[Offline model] Time taken: %s", end_time - start_time
             )
-        # Fill any gaps in chord tokens with rests
-        # If there are -1 values in chord_tokens, fill them with SILENCE
-        # If chord_tokens length is less than frame, pad with SILENCE
-        for i in range(len(chord_tokens)):
-            if chord_tokens[i] == -1:
-                chord_tokens[i] = self.tokenizer.name_to_id["SILENCE"]
-        if len(chord_tokens) < frame:
-            chord_tokens.extend(
-                [self.tokenizer.name_to_id["SILENCE"]]
-                * (frame - len(chord_tokens))
+        prompt, note_token_hist, chord_token_hist = (
+            self._build_interleaved_prompt(
+                note_token_hist, chord_tokens, frame, self.max_frames - lookahead
             )
-
-        # Create initial prompt (up to target frame)
-        # If chord_tokens length is greater than frame, take the first frame tokens
-        # If chord_tokens length is less than frame, take all chord_tokens
-        chord_token_hist = chord_tokens[:frame]
-        # Trim beginning of context to avoid surpassing max length
-        max_context_len = self.max_frames - lookahead
-        note_token_hist = note_token_hist[-max_context_len:]
-        chord_token_hist = chord_token_hist[-max_context_len:]
-
-        if self.tokenizer.is_note_hold(note_token_hist[0]):
-            note_token_hist[0] = self.tokenizer.note_hold_id_to_note_id(
-                note_token_hist[0]
-            )
-
-        if self.tokenizer.is_chord_hold(chord_token_hist[0]):
-            chord_token_hist[0] = self.tokenizer.chord_hold_id_to_chord_id(
-                chord_token_hist[0]
-            )
-
-        # Create interleaved sequence with BOS at start, EOS at end
-        interleaved_tokens = [self.tokenizer.bos_token]
-        for i in range(min(len(chord_token_hist), len(note_token_hist))):
-            interleaved_tokens.extend([chord_token_hist[i], note_token_hist[i]])
-
-        prompt = torch.tensor(
-            [interleaved_tokens], dtype=torch.long, device=self.device
         )
 
         start_idx = prompt.shape[1]
@@ -962,9 +1266,26 @@ class Agent:
                 )
 
         # Decode and return new chord tokens
-        new_chords = [
-            self.decode_chord_token(chord_tok) for chord_tok in new_chord_tokens
-        ]
+        if use_custom_voicings and self.voicing_selector is not None:
+            new_chords = []
+            voicing_state = prev_voicing
+            for i, chord_tok in enumerate(new_chord_tokens):
+                # new_chord_tokens[i] corresponds to absolute frame `frame + i`
+                # -- look up whatever melody note is sounding there so the
+                # voicing selector can keep chords from climbing above it.
+                melody_pitch = _active_melody_pitch(notes, frame + i)
+                chord_info, voicing_state = self.decode_chord_token_custom_voicing(
+                    chord_tok, voicing_state,
+                    vl_weight=vl_weight, reg_weight=reg_weight,
+                    note_count_weight=note_count_weight, density_weight=density_weight,
+                    target_mid=target_mid, density_target=density_target,
+                    melody_pitch=melody_pitch,
+                )
+                new_chords.append(chord_info)
+        else:
+            new_chords = [
+                self.decode_chord_token(chord_tok) for chord_tok in new_chord_tokens
+            ]
 
         logging.info("[Response] Chords: %s", new_chords)
         logging.info("[Response] Chord tokens: %s", new_chord_tokens.tolist())

@@ -207,8 +207,47 @@ button.splash-button.small {
   margin-bottom: auto;
 }
 
+.slider-value {
+  min-width: 2.5em;
+  text-align: right;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
 .centered {
   margin: auto;
+}
+
+#song-search-input {
+  width: 220px;
+}
+
+.search-results {
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 15px;
+}
+
+.search-results:empty {
+  display: none;
+}
+
+.search-result {
+  padding: 3px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result:hover,
+.search-result.active {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.search-result .artist {
+  opacity: 0.6;
+  font-size: 13px;
 }
 
 @keyframes pulsing-fade {

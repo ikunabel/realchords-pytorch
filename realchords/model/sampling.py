@@ -151,6 +151,28 @@ def filter_invalid_tokens(
     return torch.where(mask == 0, float("-inf"), logits)
 
 
+def filter_chord_onset_only(
+    logits,
+    curr_sequence,
+    curr_sample_step,
+    tokenizer,
+    **kwargs,
+):
+    """Restrict sampling to chord *onset* tokens only.
+
+    Used when the chord change time is decided externally rather than by the
+    model -- the model still chooses which chord, but is not allowed to answer
+    "keep holding the current one" (a hold token) or "play nothing" (silence).
+    See Agent.advance_chord / the manual chord-timing mode in the ReaLJam UI.
+    """
+    # Note: tokenizer.onset_tokens covers note onsets too, so restrict to the
+    # chord onset range specifically.
+    chord_on_range = tokenizer.chord_on_token_range
+    mask = torch.zeros_like(logits)
+    mask[:, chord_on_range[0] : chord_on_range[1] + 1] = 1
+    return torch.where(mask == 0, float("-inf"), logits)
+
+
 def filter_invalid_tokens_generate_online(
     logits,
     curr_sequence,
