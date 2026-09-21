@@ -1,0 +1,26 @@
+# Test-set check of the MLE LR-schedule decision (journal/CONFIGS.md, "MLE LR schedule vs.
+# reference"). Each hooktheory-only decoder at its best-by-val/loss checkpoint:
+# - Constant: reference config, constant LR 1e-4, seed 42 (best val/loss 0.4396 @ 12k)
+# - Cosine15k: same, warmup + cosine to 0 over 15k steps (best 0.4363 @ 15k)
+# - Seed1: other seed (warmup + cosine over 50k, ~constant before its best @ 11k, 0.4383) --
+#   shows how much the generation metrics move between seeds alone.
+# All use the 5902-token hooktheory vocab, matching the contrastive checkpoint -> Vendi valid.
+dataset_name: hooktheory
+dataset_split: test
+batch_size: 64
+num_batches: -1
+seed: 42
+midi_samples: 10
+
+save_dir: logs/custom_eval/lr_schedule_hooktheory
+
+models:
+  - label: Constant
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=12000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: Cosine15k
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory.seed=42.lr_schedule=cosine15k_pkeqm84l/step=15000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - label: Seed1
+    checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory.seed=1_ufjf6yta/step=11000.ckpt"
+    contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"

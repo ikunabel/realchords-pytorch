@@ -6,17 +6,17 @@ import json
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Sequence, Tuple
+from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import bisect
 
 import numpy as np
 import torch
 import note_seq.chord_symbols_lib as chord_symbols_lib
-from scipy.spatial.distance import jensenshannon
+from scipy import sparse
+from scipy.optimize import linprog
 from scipy.stats import entropy as _scipy_entropy
 from scipy.stats import wasserstein_distance
-from scipy.stats import wasserstein_distance_nd
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.modes import (
@@ -599,113 +599,149 @@ def chord_type_distribution(
     return dict(counts)
 
 
-def chord_type_js_distance(
-    counts_a: Dict[str, int],
-    counts_b: Dict[str, int],
-    base: float = 2.0,
+@lru_cache(maxsize=None)
+def _chord_pitch_class_set(symbol: str) -> FrozenSet[int] | None:
+    """Pitch classes (0-11) of a chord symbol, or None if it can't be parsed."""
+    try:
+        pitches = chord_symbols_lib.chord_symbol_pitches(symbol)
+    except Exception:
+        return None
+    return frozenset(p % 12 for p in pitches) or None
+
+
+def pitch_class_set_wasserstein(
+    weights_a: Dict[FrozenSet[int], float],
+    weights_b: Dict[FrozenSet[int], float],
 ) -> float:
-    """Jensen-Shannon distance between two chord-type usage distributions.
+    """Wasserstein-1 distance between two chord-usage distributions over
+    pitch-class sets, with pitch-class overlap as the ground distance.
 
-    Unlike Vendi score (which measures how diverse ONE source's own chord
-    usage is against itself), this directly compares whether TWO sources --
-    e.g. a model's output vs. the GT test set, or two different datasets --
-    choose chords in similar proportions. A model can have high Vendi
-    (genuinely varied output) while still favoring a completely different
-    chord palette than real data; this metric is what catches that, not
-    Vendi. Missing symbols in one distribution are treated as zero count, not
-    excluded.
+    The cost of moving usage from chord X to chord Y is
+    ``1 - |X ∩ Y| / |X ∪ Y|`` (1 - Jaccard), giving partial credit for
+    near-misses: C -> C7 0.25, C -> Am 0.5, C -> G 0.8, C -> C# 1.0. Symbols
+    spelling the same notes (e.g. ``C6``/``Am7``) are
+    the same set. Solved exactly as a transport linear program.
 
-    Args:
-        counts_a: Chord symbol -> count, e.g. ``chord_type_distribution(...)``.
-        counts_b: Chord symbol -> count, same format, other source.
-        base: Logarithm base for the underlying entropy calculation. With the
-            default of 2.0, the result is bounded in [0, 1]: 0 = identical
-            usage proportions, 1 = completely disjoint chord vocabularies.
+    Used by ``per_song_chord_distribution_wasserstein`` and
+    ``key_relative_chord_distribution_wasserstein``. (A pooled comparison of
+    absolute chord symbols was dropped: it can't tell which song a chord was
+    played in -- see journal/METRICS.md.)
 
     Returns:
-        Jensen-Shannon distance (the square root of the JS divergence, a true
-        metric satisfying the triangle inequality, unlike divergence itself).
+        Distance in ``[0, 1]``: 0 = identical usage, 1 = no chord of one side
+        shares a note with any chord of the other.
     """
-    vocab = sorted(set(counts_a) | set(counts_b))
-    if not vocab:
-        raise ValueError("Cannot compute JS distance: both distributions are empty.")
-
-    a = np.array([counts_a.get(sym, 0) for sym in vocab], dtype=np.float64)
-    b = np.array([counts_b.get(sym, 0) for sym in vocab], dtype=np.float64)
-    if a.sum() == 0 or b.sum() == 0:
+    if not weights_a or not weights_b:
         raise ValueError(
-            "Cannot compute JS distance: a distribution has zero total count."
+            "Cannot compute chord-distribution Wasserstein: a distribution has "
+            "no parseable chords."
         )
-    return float(jensenshannon(a, b, base=base))
+    sets_a, sets_b = list(weights_a), list(weights_b)
+    a = np.array([weights_a[s] for s in sets_a])
+    b = np.array([weights_b[s] for s in sets_b])
+    a, b = a / a.sum(), b / b.sum()
 
-
-def chord_root_pitch_class_distribution(counts: Dict[str, int]) -> Dict[int, int]:
-    """Collapse a chord-symbol usage histogram down to root pitch class (0-11).
-
-    Same input/purpose as ``chord_type_distribution``'s output, but discards
-    chord quality entirely -- useful when quality itself isn't the thing being
-    compared (see ``chord_root_distribution_emd``, which needs *some* ordered
-    axis to move mass along, and root pitch class is the natural one: chord
-    symbols themselves have no inherent distance between them).
-    """
-    root_counts: Counter = Counter()
-    for symbol, count in counts.items():
-        try:
-            root_pc = chord_symbols_lib.chord_symbol_root(symbol) % 12
-        except Exception:
-            continue
-        root_counts[root_pc] += count
-    return dict(root_counts)
-
-
-# Unit-circle embedding of the 12 pitch classes -- consecutive pitch classes
-# (and pc 11 <-> pc 0) are adjacent on the circle, so Euclidean distance
-# between two embedded points respects chromatic-circle proximity instead of
-# treating pitch classes as an arbitrary, unordered 0-11 integer labeling.
-_PITCH_CLASS_CIRCLE = np.stack(
-    [np.cos(2 * np.pi * np.arange(12) / 12), np.sin(2 * np.pi * np.arange(12) / 12)],
-    axis=1,
-)
-
-
-def chord_root_distribution_emd(
-    counts_a: Dict[str, int],
-    counts_b: Dict[str, int],
-) -> float:
-    """Circular Earth Mover's Distance between two chord-root usage distributions.
-
-    Unlike ``chord_type_js_distance`` (categorical -- every distinct chord
-    symbol is equally "different" from every other), this compares only the
-    *root* pitch class each chord uses, on the chromatic circle: moving mass
-    from C to C# costs less than moving it from C to F#. Complements
-    JS-distance rather than replacing it -- this is blind to chord quality
-    (a Cmaj7 and a Cm7 are indistinguishable here), JS-distance is blind to
-    harmonic proximity between different roots.
-
-    Args:
-        counts_a: Chord symbol -> count, e.g. ``chord_type_distribution(...)``.
-        counts_b: Chord symbol -> count, same format, other source.
-
-    Returns:
-        Wasserstein-1 distance on the unit circle (0 = identical root usage
-        proportions; max possible is 2, two point masses on opposite sides).
-    """
-    root_a = chord_root_pitch_class_distribution(counts_a)
-    root_b = chord_root_pitch_class_distribution(counts_b)
-    weights_a = np.array([root_a.get(pc, 0) for pc in range(12)], dtype=np.float64)
-    weights_b = np.array([root_b.get(pc, 0) for pc in range(12)], dtype=np.float64)
-    if weights_a.sum() == 0 or weights_b.sum() == 0:
-        raise ValueError(
-            "Cannot compute root-distribution EMD: a distribution has zero total count."
-        )
-    return float(
-        wasserstein_distance_nd(
-            _PITCH_CLASS_CIRCLE,
-            _PITCH_CLASS_CIRCLE,
-            u_weights=weights_a,
-            v_weights=weights_b,
-        )
+    n, m = len(sets_a), len(sets_b)
+    cost = np.array(
+        [[1.0 - len(x & y) / len(x | y) for y in sets_b] for x in sets_a]
     )
+    # Transport plan T (n x m, flattened row-major): row sums = a, column sums = b.
+    rows = np.repeat(np.arange(n), m)
+    cols = np.arange(n * m)
+    row_sum = sparse.csr_matrix((np.ones(n * m), (rows, cols)), shape=(n, n * m))
+    col_sum = sparse.csr_matrix(
+        (np.ones(n * m), (np.tile(np.arange(m), n), cols)), shape=(m, n * m)
+    )
+    result = linprog(
+        cost.ravel(),
+        A_eq=sparse.vstack([row_sum, col_sum]),
+        b_eq=np.concatenate([a, b]),
+        bounds=(0, None),
+        method="highs",
+    )
+    if not result.success:
+        raise RuntimeError(f"Chord-distribution transport LP failed: {result.message}")
+    return float(result.fun)
+
+
+def _row_pitch_class_set_weights(
+    chords: Dict[str, object], row: int, weighting: str, shift: int = 0
+) -> Dict[FrozenSet[int], float]:
+    """Pitch-class-set usage of one sequence (``evaluate_chord_symbols_per_frame``
+    output), transposed down by ``shift`` semitones; same onset/frame weighting
+    as ``chord_type_distribution``."""
+    weights: Dict[FrozenSet[int], float] = {}
+    for frame, sym in enumerate(chords["symbols"][row]):
+        if not sym or not bool(chords["valid"][row, frame].item()):
+            continue
+        if weighting == "onset" and not bool(chords["is_onset"][row, frame].item()):
+            continue
+        pcs = _chord_pitch_class_set(sym)
+        if pcs is None:
+            continue
+        pcs = frozenset((p - shift) % 12 for p in pcs)
+        weights[pcs] = weights.get(pcs, 0.0) + 1.0
+    return weights
+
+
+def key_relative_chord_distribution_wasserstein(
+    model_chords: Dict[str, object],
+    gt_chords: Dict[str, object],
+    tonics: Sequence[Optional[int]],
+    weighting: str = "onset",
+) -> Tuple[float, int]:
+    """Chord-distribution Wasserstein after transposing every sequence to a
+    common tonic (Roman-numeral-like: a I chord is the same set in every key).
+
+    Pooling chords of songs in different keys mixes up their functions (a
+    ``G`` is I in G major but III in E minor); moving each sequence's chords
+    so its tonic becomes pitch class 0 compares harmonic *function* usage
+    instead. Needs a key annotation per sequence: ``tonics[row]`` is the
+    tonic pitch class, or None to leave that row out (no/ambiguous key). Same
+    ground distance as ``pitch_class_set_wasserstein``.
+
+    Returns:
+        (distance in [0, 1], number of sequences used).
+    """
+    if weighting not in {"onset", "frame"}:
+        raise ValueError(f"Unsupported weighting '{weighting}'.")
+    weights_model: Dict[FrozenSet[int], float] = {}
+    weights_gt: Dict[FrozenSet[int], float] = {}
+    used = 0
+    for row, tonic in enumerate(tonics):
+        if tonic is None:
+            continue
+        used += 1
+        for src, dst in ((model_chords, weights_model), (gt_chords, weights_gt)):
+            for pcs, w in _row_pitch_class_set_weights(src, row, weighting, tonic).items():
+                dst[pcs] = dst.get(pcs, 0.0) + w
+    return pitch_class_set_wasserstein(weights_model, weights_gt), used
+
+
+def per_song_chord_distribution_wasserstein(
+    model_chords: Dict[str, object],
+    gt_chords: Dict[str, object],
+    weighting: str = "onset",
+) -> Tuple[float, int]:
+    """Mean over sequences of the chord-distribution Wasserstein between the
+    model's and GT's chords *for the same melody* (paired; uses the fact that
+    every model is conditioned on GT's melodies). Needs no key: transposing
+    both sides of one song by the same tonic leaves the pitch-class-overlap
+    ground distance unchanged. Sequences where either side has no parseable
+    chord are skipped.
+
+    Returns:
+        (mean distance in [0, 1], number of sequences used).
+    """
+    if weighting not in {"onset", "frame"}:
+        raise ValueError(f"Unsupported weighting '{weighting}'.")
+    distances = []
+    for row in range(len(gt_chords["symbols"])):
+        w_model = _row_pitch_class_set_weights(model_chords, row, weighting)
+        w_gt = _row_pitch_class_set_weights(gt_chords, row, weighting)
+        if w_model and w_gt:
+            distances.append(pitch_class_set_wasserstein(w_model, w_gt))
+    return (float(np.mean(distances)) if distances else float("nan")), len(distances)
 
 
 def evaluate_note_in_chord_ratio(

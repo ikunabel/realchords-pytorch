@@ -45,7 +45,7 @@ class LitEncoderDecoder(BaseLightningModel):
         max_log_examples: int = 8,
         random_truncate: bool = False,
         disable_midi_logging: bool = False,
-        lr_schedule: str = "cosine",  # "none", "cosine", or "plateau"
+        lr_schedule: str = "none",  # "none", "cosine", or "plateau"
         warmup_steps: int = 1000,
         lr_plateau_factor: float = 0.5,
         lr_plateau_patience: int = 5,

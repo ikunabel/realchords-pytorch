@@ -1,0 +1,31 @@
+# GAPT on hooktheory only: realchords.yml (same policy init, KD anchor, reward models, data,
+# LR, penalty weights) + GAPT's own additions, so the GAPT method is the only difference vs.
+# realchords. The GAPT paper compares GAPT trained on 3 datasets against ReaLchords on
+# hooktheory, which mixes method and data; this removes the data difference.
+# GAPT additions = exactly the keys where the released HF configs differ
+# (logs/huggingface/gapt/args.yml vs logs/huggingface/realchords/args.yml): entropy bonus,
+# GAIL discriminator (trained online from scratch on chords only: policy rollouts vs. the
+# ground-truth chords of the same melodies) and its two-phase update schedule, and
+# logits_vram_swap (GPU-memory setting). Values copied from configs/rl/gapt.yml.
+# Run with scripts/jobscripts/train_variants/rl/submit_gapt.sh.
+
+$include:
+  - configs/rl/realchords.yml
+
+entropy_loss_coef: 0.01
+gail_reward_weight: 1.0
+gail_discriminative_model_configs:
+  dim: 512
+  depth: 8
+  heads: 8
+  dropout: 0.1
+gail_reward_learning_rate: !!float 9e-5
+reward_update_steps: 5 # update reward every n steps
+reward_update_early_stop_steps: 500
+enable_reward_label_smoothing: true
+gail_reward_formulation: "logits_prob_log"
+reward_update_strategy: "average"
+reward_average_steps: 3
+reward_update_threshold: 1.0
+reward_apply_threshold_after_steps: 200
+logits_vram_swap: true

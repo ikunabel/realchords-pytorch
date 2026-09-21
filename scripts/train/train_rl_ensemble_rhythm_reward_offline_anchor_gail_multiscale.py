@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""GAPT RL training with multiscale contrastive reward (legacy + sliding windows)."""
+"""GAPT RL training with multiscale contrastive reward (legacy + sliding windows).
+
+Multiscale discriminative reward is opt-in: if the config sets
+`multiscale_discriminative_reward_model_path` (+ `multiscale_discriminative_window_lens`),
+the full-context discriminative models and the per-scale ones are combined into one
+MultiscaleDiscriminativeRewardFn term, exactly as in
+train_rl_ensemble_rhythm_reward_offline_anchor_multiscale.py (the non-GAIL
+counterpart). Without it, the full-context discriminative models stay separate
+terms as before, so older configs (configs/rl/gapt_multiscale.yml) are unchanged.
+"""
 
 import os
 from copy import deepcopy
@@ -19,6 +28,9 @@ from realchords.lit_module.discriminative_reward import LitDiscriminativeReward
 from realchords.lit_module.discriminative_reward_rhythm import (
     LitDiscriminativeRewardRhythm,
 )
+from realchords.lit_module.discriminative_reward_segment import (
+    LitDiscriminativeRewardSegment,
+)
 from realchords.lit_module.enc_dec import LitEncoderDecoder
 from realchords.model.reward_model import DiscriminativeReward
 from realchords.rl.actor import DecoderSingleAgentActor, EncoderDecoderOfflineAnchor
@@ -34,6 +46,9 @@ from realchords.rl.reward.model_based_rewards import (
 )
 from realchords.rl.reward.multiscale_contrastive_rewards import (
     MultiscaleContrastiveRewardFn,
+)
+from realchords.rl.reward.multiscale_discriminative_rewards import (
+    MultiscaleDiscriminativeRewardFn,
 )
 from realchords.rl.reward.rule_based_rewards import (
     EarlyStopPenalty,
@@ -208,6 +223,31 @@ def main(args, save_dir: str = ""):
         )
         for model_path in args.discriminative_reward_model_path
     ]
+
+    multiscale_discriminative_paths = (
+        getattr(args, "multiscale_discriminative_reward_model_path", None) or []
+    )
+    multiscale_discriminative_window_lens = (
+        getattr(args, "multiscale_discriminative_window_lens", None) or []
+    )
+    if len(multiscale_discriminative_paths) != len(multiscale_discriminative_window_lens):
+        raise ValueError(
+            "multiscale_discriminative_reward_model_path and "
+            "multiscale_discriminative_window_lens must have the same length."
+        )
+    use_multiscale_discriminative = len(multiscale_discriminative_paths) > 0
+    multiscale_discriminative_models = [
+        prepare_model_for_deepspeed(
+            load_lit_model(
+                model_path,
+                lit_module_cls=LitDiscriminativeRewardSegment,
+                compile=False,
+                return_only_model=True,
+            ),
+            target_dtype,
+        )
+        for model_path in multiscale_discriminative_paths
+    ]
     contrastive_reward_rhythm_models = [
         prepare_model_for_deepspeed(
             load_lit_model(
@@ -243,6 +283,10 @@ def main(args, save_dir: str = ""):
         "multiscale_contrastive_rewards", multiscale_contrastive_models
     )
     preparer.add_model_list("discriminative_rewards", discriminative_reward_models)
+    if use_multiscale_discriminative:
+        preparer.add_model_list(
+            "multiscale_discriminative_rewards", multiscale_discriminative_models
+        )
     preparer.add_model_list(
         "contrastive_rhythm_rewards", contrastive_reward_rhythm_models
     )
@@ -259,6 +303,10 @@ def main(args, save_dir: str = ""):
     legacy_contrastive_models = models.get_model_list("legacy_contrastive_rewards")
     multiscale_contrastive_models = models.get_model_list("multiscale_contrastive_rewards")
     discriminative_reward_models = models.get_model_list("discriminative_rewards")
+    if use_multiscale_discriminative:
+        multiscale_discriminative_models = models.get_model_list(
+            "multiscale_discriminative_rewards"
+        )
     contrastive_reward_rhythm_models = models.get_model_list("contrastive_rhythm_rewards")
     discriminative_reward_rhythm_models = models.get_model_list(
         "discriminative_rhythm_rewards"
@@ -285,7 +333,27 @@ def main(args, save_dir: str = ""):
 
     reward_configs = []
 
-    for i, discriminative_reward_model in enumerate(discriminative_reward_models):
+    if use_multiscale_discriminative:
+        reward_configs.append(
+            {
+                "reward_fn": MultiscaleDiscriminativeRewardFn(
+                    legacy_models=discriminative_reward_models,
+                    multiscale_models=multiscale_discriminative_models,
+                    window_lens=multiscale_discriminative_window_lens,
+                    pad_token_id=tokenizer.pad_token,
+                    bos_token_id=tokenizer.bos_token,
+                    eos_token_id=tokenizer.eos_token,
+                    model_part=args.model_part,
+                ),
+                "weight": getattr(args, "discriminative_reward_weight", 1.0),
+                "name": "multiscale_discriminative_reward",
+                "clip_range": getattr(args, "discriminative_reward_clip_range", None),
+            }
+        )
+
+    for i, discriminative_reward_model in enumerate(
+        [] if use_multiscale_discriminative else discriminative_reward_models
+    ):
         reward_configs.append(
             {
                 "reward_fn": DiscriminativeRewardFn(

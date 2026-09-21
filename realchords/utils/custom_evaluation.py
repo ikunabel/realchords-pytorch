@@ -80,7 +80,7 @@ Outputs (all in --save_dir):
     {slug}_chord_complexity.pt        same, per model
     means.json                        summary: rhythm/silence/note-in-chord/note-in-mode/
                                        chord-complexity means per source, plus model-vs-GT
-                                       comparisons (sync EMD, chord-type JS distance) -- see
+                                       comparisons (sync EMD, per-song and key-relative chord distribution distances) -- see
                                        realchords/utils/eval_utils.py
     chord_names_augmented.json        vocab snapshot for downstream decoding
     model_labels.json                 {label: slug} map + dataset_name, for
@@ -112,7 +112,8 @@ from realchords.utils.chord_diversity_analysis import (
 )
 from realchords.utils.eval_utils import (
     chord_type_distribution,
-    chord_type_js_distance,
+    key_relative_chord_distribution_wasserstein,
+    per_song_chord_distribution_wasserstein,
     duration_entropy,
     evaluate_chord_complexity,
     evaluate_chord_durations,
@@ -340,7 +341,7 @@ def _save_mean_metrics(
     Saves per-sequence .pt files (durations, silence ratios, frame counts,
     synchronization intervals) and returns a summary dict -- both scalar
     means for printing, and the raw pooled distributions needed to compare
-    this source against another one (synchronization_emd, chord_type_js_distance).
+    this source against another one (synchronization_emd).
 
     prefix is prepended to every filename as-is (include a trailing "_" for
     e.g. "gt_chord_durations.pt"; pass "" when save_dir's own name already
@@ -404,8 +405,6 @@ def _save_mean_metrics(
         "chord_complexity_mean": _nanmean(complexity["mean"]),
         "vendi_score": vendi_score,
         "sync_intervals_flat": sync["intervals_flat"],
-        "chord_dist_onset": chord_type_distribution(chords, weighting="onset"),
-        "chord_dist_frame": chord_type_distribution(chords, weighting="frame"),
     }
 
 
@@ -419,20 +418,7 @@ def _compare_to_gt(model_means: Dict[str, object], gt_means: Dict[str, object]) 
         else None
     )
 
-    def _safe_js(a: Dict[str, int], b: Dict[str, int]) -> Optional[float]:
-        if not a or not b:
-            return None
-        return chord_type_js_distance(a, b)
-
-    return {
-        "sync_emd_vs_gt": sync_emd,
-        "chord_type_js_distance_onset_vs_gt": _safe_js(
-            model_means["chord_dist_onset"], gt_means["chord_dist_onset"]
-        ),
-        "chord_type_js_distance_frame_vs_gt": _safe_js(
-            model_means["chord_dist_frame"], gt_means["chord_dist_frame"]
-        ),
-    }
+    return {"sync_emd_vs_gt": sync_emd}
 
 
 def _fmt_nicr(mean: float) -> Optional[float]:
@@ -446,6 +432,58 @@ def _fmt_metric(value: Optional[float]) -> Optional[float]:
     if value is None or value != value:  # None or NaN
         return None
     return round(float(value), 4)
+
+
+def _hooktheory_tonics(
+    metadata: List[Dict], dataset_name: str, dataset_split: str
+) -> List[Optional[int]]:
+    """Tonic pitch class per sequence from its Hooktheory key annotation.
+
+    None where no key can be used: non-hooktheory data (other converters
+    write placeholder keys), rows without a song_id (runs from before it was
+    recorded), or sections with key changes (the crop's position within the
+    section isn't recorded). Looked up by Hooktheory section id, not song
+    URL: sections of one song can be in different keys. Chords in the cache
+    are at the annotated key's pitch level (checked: GT chords are 87%
+    diatonic to the annotated key vs. 32% if every song were assumed in C).
+    """
+    if dataset_name.lower() != "hooktheory":
+        return [None] * len(metadata)
+    path = Path(DATASET_CACHE_DIRS["hooktheory"]) / f"{dataset_split.lower()}.jsonl"
+    keys_by_id: Dict[str, List[Dict]] = {}
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            item = json.loads(line)
+            keys_by_id[item["hooktheory"]["id"]] = item["annotations"]["keys"]
+    tonics: List[Optional[int]] = []
+    for entry in metadata:
+        keys = keys_by_id.get(entry.get("song_id"))
+        tonics.append(int(keys[0]["tonic_pitch_class"]) if keys and len(keys) == 1 else None)
+    return tonics
+
+
+def _paired_chord_metrics(
+    model_chords: Dict[str, object],
+    gt_chords: Dict[str, object],
+    tonics: List[Optional[int]],
+) -> Dict[str, Optional[float]]:
+    """Chord-distribution distances that pair each model sequence with the GT
+    sequence for the same melody: per-song (any dataset) and key-relative
+    pooled (needs tonics; None if no sequence has one)."""
+    out: Dict[str, Optional[float]] = {}
+    for weighting in ("onset", "frame"):
+        out[f"chord_dist_wasserstein_per_song_{weighting}_vs_gt"] = (
+            per_song_chord_distribution_wasserstein(model_chords, gt_chords, weighting)[0]
+        )
+        if any(t is not None for t in tonics):
+            out[f"chord_dist_wasserstein_key_relative_{weighting}_vs_gt"] = (
+                key_relative_chord_distribution_wasserstein(
+                    model_chords, gt_chords, tonics, weighting
+                )[0]
+            )
+        else:
+            out[f"chord_dist_wasserstein_key_relative_{weighting}_vs_gt"] = None
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -782,12 +820,14 @@ def _run_eval(
                 gt_seq_stripped = replace_eos_with_pad(gt_seq_stripped, tokenizer)
 
                 song_urls: List[str] = batch.get("song_url", ["unknown"] * gt_seq.size(0))
+                song_ids: List[str] = batch.get("song_id", [None] * gt_seq.size(0))
 
                 # Record metadata for each sequence in the batch
                 for b in range(gt_seq.size(0)):
                     metadata.append({
                         "seq_idx": seq_idx + b,
                         "song_url": song_urls[b] if isinstance(song_urls, list) else song_urls,
+                        "song_id": song_ids[b] if isinstance(song_ids, list) else song_ids,
                         "batch_idx": batch_idx,
                         "batch_pos": b,
                         "dataset_name": args.dataset_name,
@@ -897,8 +937,14 @@ def _run_eval(
     print(f"  gt/{gt_prefix}sync_intervals.pt")
     print(f"  gt/{gt_prefix}chord_complexity.pt  mean={gt_means['chord_complexity_mean']:.4f}")
 
+    tonics = _hooktheory_tonics(metadata, args.dataset_name, args.dataset_split)
+    num_keyed = sum(t is not None for t in tonics)
+    if args.dataset_name.lower() == "hooktheory":
+        print(f"  key annotations usable for {num_keyed}/{len(tonics)} sequences")
+
     model_nicr_means: Dict[str, torch.Tensor] = {}
     model_nicr_pooled: Dict[str, float] = {}
+    model_paired_metrics: Dict[str, Dict[str, Optional[float]]] = {}
     model_mode_means: Dict[str, torch.Tensor] = {}
     model_mode_seg_ratios: Dict[str, torch.Tensor] = {}
     model_mode_pooled: Dict[str, float] = {}
@@ -933,6 +979,14 @@ def _run_eval(
                 reward_wrapper=reward_wrapper, reward_model=reward_model, device=device,
             )
             model_means_by_label[label] = model_means
+            model_paired_metrics[label] = _paired_chord_metrics(
+                model_chords, gt_chords, tonics
+            )
+            print(f"  {slug} " + "  ".join(
+                f"{k.replace('chord_dist_wasserstein_', '').replace('_vs_gt', '')}="
+                + ("n/a" if v is None else f"{v:.4f}")
+                for k, v in model_paired_metrics[label].items()
+            ))
             print(
                 f"  models/{slug}/chord_durations.pt / note_durations.pt  "
                 f"chord_entropy={model_means['chord_duration_entropy']:.4f} "
@@ -992,6 +1046,8 @@ def _run_eval(
             "chord_complexity_mean": _fmt_metric(model_means["chord_complexity_mean"]),
             "vendi_score": _fmt_metric(model_means["vendi_score"]),
             **{key: _fmt_metric(value) for key, value in comparison.items()},
+            **{key: _fmt_metric(value) for key, value in model_paired_metrics[label].items()},
+            "num_sequences_with_key": num_keyed,
         }
     means_path = save_dir / "means.json"
     with means_path.open("w", encoding="utf-8") as fh:

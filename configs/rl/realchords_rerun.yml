@@ -1,0 +1,9 @@
+# Rerun of the realchords baseline with the current code, so all four cells of the hooktheory
+# 2x2 (realchords / realchords_multiscale / gapt_hooktheory / gapt_multiscale_hooktheory) are
+# trained with identical code. The original rl/realchords run is from 2026-04-16; the RL code
+# has seen refactors since (see journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md, "Rerun design").
+# Identical to realchords.yml; separate file only so it saves to rl/realchords_rerun.
+# Run with scripts/jobscripts/train_variants/rl/submit_rl.sh.
+
+$include:
+  - configs/rl/realchords.yml

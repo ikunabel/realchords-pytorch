@@ -1,6 +1,15 @@
+# Single-variable test: does annealing the LR around the best checkpoint help?
+# Identical to the reference decoder_only_online_chord.yml (hooktheory, seed 42,
+# constant AdamW 1e-4 = repo/HF default and GAPT paper) except the schedule:
+# 1000-step warmup, then cosine to 0 over train_steps. train_steps is 15000 so
+# the LR is actually low near where the constant run's best checkpoint was
+# (step ~12k, val/loss 0.4396). Our earlier schedule ablation used cosine over
+# 50k steps, which was still at ~90% of peak at the minimum -- it never tested this.
+# Seed-to-seed spread of best val/loss (seed 42 vs seed 1): ~0.0013.
+# See journal/CONFIGS.md.
 # Trainer hyperparameters, for Trainer and lit_module
 seed: 42
-train_steps: 30000
+train_steps: 15000
 val_interval: 1000
 sample_interval: 5000
 overfit_batches: 0
@@ -38,5 +47,6 @@ DecoderTransformer.heads: 8
 DecoderTransformer.max_seq_len: 514 # bos, eos
 DecoderTransformer.dropout: 0.1
 
-# LR schedule: constant (reference implementation / GAPT paper), see journal/CONFIGS.md
-lr_schedule: "none"
+# LR schedule (the only change vs. the reference besides train_steps)
+lr_schedule: "cosine"
+warmup_steps: 1000

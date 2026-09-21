@@ -389,7 +389,12 @@ class HooktheoryDataset(Dataset):
             # Fallback for other datasets
             output["song_url"] = "unknown://unknown"
 
-        # TODO: optionally add metadata
+        # Unique per entry: Hooktheory entries are per song *section*, and
+        # sections of one song can be in different keys, so song_url alone
+        # can't identify which annotation (e.g. key) belongs to a sequence.
+        output["song_id"] = (
+            item["hooktheory"]["id"] if "hooktheory" in item else output["song_url"]
+        )
         return output
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor | str]:
@@ -447,6 +452,7 @@ class HooktheoryDataset(Dataset):
             output["targets_mask"] = targets_mask
 
         output["song_url"] = item["song_url"]
+        output["song_id"] = item["song_id"]
         return output
 
 

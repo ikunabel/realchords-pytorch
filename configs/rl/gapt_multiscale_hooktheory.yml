@@ -1,20 +1,13 @@
-# ReaLchords-M on hooktheory: realchords.yml with the full-context contrastive and
-# discriminative rewards replaced by their multiscale versions (full-context score averaged
-# with w16/w32/w64/w128 sliding-window scores, see MultiscaleContrastiveRewardFn /
-# MultiscaleDiscriminativeRewardFn). Everything else -- policy init, KD anchor, the
-# full-context checkpoints inside the average, rhythm rewards, LR, penalty weights (1.0) --
-# is inherited unchanged from realchords.yml, so multiscale is the only difference.
-#
-# Replaces the deleted x10-penalty version (rhythm collapse, see
-# journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md): per Yusong, penalty coefficients from the
-# ReaLchords paper don't transfer to this framework; keep each reward term in [-1, 1].
-# All four scales kept (paper-faithful); pair separation is well above chance at every
-# scale, see journal/REWARD_MODELS.md "Pair separation vs. retrieval".
-# Per-scale checkpoints are each run's lowest-val-loss step (hooktheory-only, sliding).
-# Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
+# GAPT-M on hooktheory: gapt_hooktheory.yml with the frozen contrastive and discriminative
+# rewards replaced by their multiscale versions -- the same multiscale checkpoints as
+# realchords_multiscale.yml, so gapt_hooktheory -> gapt_multiscale_hooktheory is the same
+# change as realchords -> realchords_multiscale. The GAIL discriminator stays full-context.
+# Needs the opt-in multiscale discriminative support in
+# scripts/train/train_rl_ensemble_rhythm_reward_offline_anchor_gail_multiscale.py.
+# Run with scripts/jobscripts/train_variants/rl/submit_gapt_multiscale.sh.
 
 $include:
-  - configs/rl/realchords.yml
+  - configs/rl/gapt_hooktheory.yml
 
 multiscale_contrastive_reward_model_path:
   - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_w16_sliding_2o1vixac/step=18500.ckpt"

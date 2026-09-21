@@ -269,7 +269,7 @@ class BaseLightningModel(L.LightningModule):
     def _configure_optimizer_with_schedule(
         self,
         optimizer,
-        lr_schedule: str = "cosine",
+        lr_schedule: str = "none",
         warmup_steps: int = 1000,
         lr_monitor_metric: str = "val/loss",
         lr_monitor_mode: str = "min",
@@ -281,7 +281,10 @@ class BaseLightningModel(L.LightningModule):
 
         lr_schedule:
             "none"    -- flat LR for the whole run (the original behavior --
-                         no scheduler at all). The optimizer never slows down
+                         no scheduler at all). The default: matches the
+                         reference implementation and the GAPT paper; cosine
+                         annealed to the best step only gained 0.0033 val/loss
+                         (see journal/CONFIGS.md). The optimizer never slows down
                          as training approaches overfitting, so it keeps
                          taking full-sized steps into sharper minima that fit
                          noise right up to the last step.

@@ -15,7 +15,7 @@ Usage:
 Presets:
     <name> for every configs/custom_eval/<name>.yml
         Paired model-vs-model comparison (e.g. paired_hooktheory, or any
-        other top-level config such as realchords_vs_realchords_multiscale).
+        other top-level configs/custom_eval/<name>.yml).
 
     gt_<dataset> for every configs/custom_eval/gt/<dataset>.yml, plus gt_all
         GT-only chord-distribution collection (no models). gt_all runs every
@@ -34,7 +34,7 @@ Example:
     python scripts/eval/custom_eval/run_custom_eval.py paired_hooktheory
     python scripts/eval/custom_eval/run_custom_eval.py gt_all
     python scripts/eval/custom_eval/run_custom_eval.py gt_hooktheory midi_gt_hooktheory
-    python scripts/eval/custom_eval/run_custom_eval.py configs/custom_eval/realchords_vs_realchords_multiscale.yml
+    python scripts/eval/custom_eval/run_custom_eval.py configs/custom_eval/gt/hooktheory.yml
 """
 
 import subprocess
