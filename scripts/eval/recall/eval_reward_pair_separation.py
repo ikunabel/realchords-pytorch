@@ -20,6 +20,16 @@ a mismatched pair:
                chance).
   - d_prime:   (mean true - mean mismatched) / sqrt(mean of both variances).
 
+Key-matched negatives (Hooktheory only, via the section's annotated key):
+  - *_same_key:  mismatched pairs restricted to chord windows of other test
+                 songs annotated in the *same key* (tonic + mode). The model
+                 can't reject these just by noticing a key clash, so this
+                 measures whether it judges fit to the specific melody.
+  - *_diff_key:  restricted to other songs in a different key.
+If *_diff_key is much higher than *_same_key, the model mostly detects key
+mismatch. Songs with key changes or without a key partner are left out of the
+same-key numbers.
+
 Each --model path is resolved to its run's lowest-val-loss checkpoint by
 default (same as eval_reward_recall.py). See journal/REWARD_MODELS.md.
 
@@ -31,6 +41,7 @@ Usage (from the repo root):
 
 import argparse
 import csv
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -42,12 +53,70 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eval_reward_recall import (  # noqa: E402
     build_test_dataloader,
-    encode_contrastive,
     parse_model_arg,
     resolve_best_checkpoint,
 )
 from realchords.lit_module.contrastive_reward import LitContrastiveReward  # noqa: E402
+from realchords.utils.experiment_utils import DATASET_CACHE_DIRS  # noqa: E402
 from realchords.utils.inference_utils import load_lit_model  # noqa: E402
+
+
+def load_hooktheory_keys(split: str = "test") -> Dict[str, tuple]:
+    """Hooktheory section id -> (tonic, scale intervals), single-key sections only."""
+    keys = {}
+    path = Path(DATASET_CACHE_DIRS["hooktheory"]) / f"{split}.jsonl"
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            item = json.loads(line)
+            ks = item["annotations"]["keys"]
+            if len(ks) == 1:
+                keys[item["hooktheory"]["id"]] = (
+                    ks[0]["tonic_pitch_class"], tuple(ks[0]["scale_degree_intervals"])
+                )
+    return keys
+
+
+@torch.no_grad()
+def encode_with_ids(lit_module, dataloader, device):
+    """Like eval_reward_recall.encode_contrastive, but also returns each row's song_id."""
+    model = lit_module.model.to(device).eval()
+    melody_embeds, chord_embeds, song_ids = [], [], []
+    for batch in dataloader:
+        melody_tokens, chord_tokens, melody_mask, chord_mask = lit_module.get_inputs(batch)
+        chord_embed, melody_embed, _ = model(
+            chord=chord_tokens.to(device),
+            melody=melody_tokens.to(device),
+            chord_mask=chord_mask.to(device),
+            melody_mask=melody_mask.to(device),
+        )
+        melody_embeds.append(melody_embed.float().cpu())
+        chord_embeds.append(chord_embed.float().cpu())
+        song_ids.extend(batch.get("song_id", [None] * melody_tokens.shape[0]))
+    return torch.cat(melody_embeds), torch.cat(chord_embeds), song_ids
+
+
+def restricted_metrics(scores: torch.Tensor, negative_mask: torch.Tensor, suffix: str) -> Dict[str, float]:
+    """pair_auc / mean_rank / d_prime using only the negatives in negative_mask
+    (rows without any such negative are skipped)."""
+    rows = negative_mask.any(dim=1)
+    if not rows.any():
+        return {}
+    true = scores.diagonal()[rows]
+    neg = scores[rows][negative_mask[rows]]
+    sorted_neg = neg.sort().values
+    below = torch.searchsorted(sorted_neg, true.contiguous(), right=False).float()
+    ties = torch.searchsorted(sorted_neg, true.contiguous(), right=True).float() - below
+    per_row_below = ((scores[rows] < true.unsqueeze(1)) & negative_mask[rows]).sum(dim=1).float()
+    per_row_n = negative_mask[rows].sum(dim=1).float()
+    return {
+        f"pair_auc_{suffix}": ((below + 0.5 * ties) / neg.numel()).mean().item(),
+        f"mean_rank_{suffix}": (per_row_below / per_row_n).mean().item(),
+        f"d_prime_{suffix}": (
+            (true.mean() - neg.mean()) / torch.sqrt(0.5 * (true.var() + neg.var()))
+        ).item(),
+        f"rows_{suffix}": int(rows.sum().item()),
+        f"negatives_per_row_{suffix}": per_row_n.mean().item(),
+    }
 
 
 def separation_metrics(melody_embeds: torch.Tensor, chord_embeds: torch.Tensor) -> Dict[str, float]:
@@ -97,6 +166,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     eval_aug = None if args.eval_augmentation is None else args.eval_augmentation == "on"
 
+    hooktheory_keys = load_hooktheory_keys("test")
     results, paths = {}, {}
     for label, path in args.model:
         path = path if args.no_best_checkpoint else resolve_best_checkpoint(path)
@@ -107,16 +177,30 @@ def main():
                                     return_lit_module=True)
         dataloader = build_test_dataloader(ckpt_args, args.batch_size, args.num_workers,
                                            args.eval_datasets, eval_aug)
-        melody_embeds, chord_embeds = encode_contrastive(lit_module, dataloader, device)
+        melody_embeds, chord_embeds, song_ids = encode_with_ids(lit_module, dataloader, device)
         results[label] = separation_metrics(melody_embeds, chord_embeds)
+        row_keys = [hooktheory_keys.get(sid) for sid in song_ids]
+        if any(k is not None for k in row_keys):
+            scores = melody_embeds @ chord_embeds.T
+            n = len(row_keys)
+            key_ids = {k: i for i, k in enumerate(sorted({k for k in row_keys if k is not None}))}
+            kid = torch.tensor([key_ids[k] if k is not None else -1 for k in row_keys])
+            keyed = kid >= 0
+            both = keyed.unsqueeze(1) & keyed.unsqueeze(0) & ~torch.eye(n, dtype=torch.bool)
+            same = both & (kid.unsqueeze(1) == kid.unsqueeze(0))
+            results[label].update(restricted_metrics(scores, same, "same_key"))
+            results[label].update(restricted_metrics(scores, both & ~same, "diff_key"))
         print("  " + "  ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
                                for k, v in results[label].items()))
 
-    cols = ["pair_auc", "mean_rank", "d_prime", "mean_true", "mean_mismatched", "num_songs"]
+    cols = ["pair_auc", "pair_auc_diff_key", "pair_auc_same_key", "mean_rank_same_key",
+            "d_prime", "d_prime_diff_key", "d_prime_same_key", "rows_same_key",
+            "negatives_per_row_same_key", "num_songs"]
     print(f"\n{'model':28s}" + "".join(f"{c:>16s}" for c in cols))
     for label, m in results.items():
-        print(f"{label:28s}" + "".join(f"{m[c]:>16.4f}" if isinstance(m[c], float) else f"{m[c]:>16d}"
-                                       for c in cols))
+        print(f"{label:28s}" + "".join(
+            f"{'-':>16s}" if c not in m else f"{m[c]:>16.4f}" if isinstance(m[c], float) else f"{m[c]:>16d}"
+            for c in cols))
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -125,7 +209,7 @@ def main():
         writer = csv.writer(fh)
         writer.writerow(["label", "model_path"] + cols)
         for label, m in results.items():
-            writer.writerow([label, paths[label]] + [m[c] for c in cols])
+            writer.writerow([label, paths[label]] + [m.get(c) for c in cols])
     print(f"\nWrote {out_path}")
 
 

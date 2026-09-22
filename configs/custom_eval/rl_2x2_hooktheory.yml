@@ -1,0 +1,26 @@
+# Benchmark of the hooktheory 2x2 RL runs (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md, "Rerun
+# design"): ReaLchords / ReaLchords-M / GAPT / GAPT-M, all trained with the same code from the
+# same MLE model, plus that MLE model as reference. All share the hooktheory 5902-token vocab,
+# so one custom_evaluation.py run (identical test melodies) and Vendi with the hooktheory
+# contrastive checkpoint are valid.
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/rl_2x2_hooktheory.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+model:
+  - "MLE=base"
+  - "ReaLchords=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_rerun/actor.pth"
+  - "ReaLchords-M=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale/actor.pth"
+  - "GAPT=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_hooktheory/actor.pth"
+  - "GAPT-M=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_multiscale_hooktheory/actor.pth"
+seed: 42
+
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/rl_2x2_hooktheory
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+# CLaMP 2 distance metrics (FMD + paired cosine, full piece and chords only) on all sequences
+# (FMD needs clearly more samples than the 768-d embedding; a first run used 200),
+# plain export voicing. Resubmitting reuses the saved gt.pt/preds.pt and only recomputes metrics.
+clamp2_samples: -1

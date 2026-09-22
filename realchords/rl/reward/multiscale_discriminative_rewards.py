@@ -26,6 +26,8 @@ from realchords.model.reward_model import DiscriminativeReward
 from realchords.rl.experience_maker import Samples
 from realchords.rl.reward.base import BaseRewardModel
 from realchords.rl.reward.multiscale_contrastive_rewards import (
+    place_window_rewards,
+    sliding_window_ends,
     gather_sliding_windows,
     lanes_to_chord_melody,
     split_interleaved_lanes,
@@ -80,7 +82,9 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         eos_token_id: int,
         model_part: str,
         max_windows_per_forward: int = 8192,
+        dense_placement: bool = False,
     ):
+        """``dense_placement``: see multiscale_contrastive_rewards (module docstring)."""
         super().__init__()
         if len(multiscale_models) != len(window_lens):
             raise ValueError(
@@ -99,6 +103,7 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         self.eos_token_id = eos_token_id
         self.model_part = model_part
         self.max_windows_per_forward = max_windows_per_forward
+        self.dense_placement = dense_placement
 
     @property
     def device(self) -> torch.device:
@@ -142,7 +147,9 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         context_tokens: torch.Tensor,
         valid_lens: torch.Tensor,
         window_len: int,
-    ) -> torch.Tensor:
+    ):
+        """Per-sequence mean over windows, plus (sample_idx, per-window scores)
+        for dense placement (both None if every sequence is empty)."""
         stride = max(1, int(window_len * MULTISCALE_OVERLAP_FRACTION))
         batch_size = model_tokens.shape[0]
         device = model_tokens.device
@@ -157,12 +164,13 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
             pad_token_id=self.pad_token_id,
         )
         if sample_idx is None:
-            return scores
+            return scores, None, None
 
         num_windows = sample_idx.shape[0]
         chunk_starts = range(0, num_windows, self.max_windows_per_forward)
         per_sample_sum = torch.zeros(batch_size, device=device, dtype=torch.float32)
         per_sample_count = torch.zeros(batch_size, device=device, dtype=torch.float32)
+        all_window_scores = []
 
         for chunk_start in chunk_starts:
             chunk_end = min(chunk_start + self.max_windows_per_forward, num_windows)
@@ -179,12 +187,13 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
                 self.model_part,
             )
             window_scores = self._score_encoded_batch(model, input_tokens, input_mask)
+            all_window_scores.append(window_scores)
             ones = torch.ones_like(window_scores)
             per_sample_sum.scatter_add_(0, chunk_sample_idx, window_scores)
             per_sample_count.scatter_add_(0, chunk_sample_idx, ones)
 
         scores = per_sample_sum / per_sample_count.clamp(min=1)
-        return scores
+        return scores, sample_idx, torch.cat(all_window_scores)
 
     @torch.no_grad()
     def forward(self, samples: Samples) -> Dict[str, torch.Tensor]:
@@ -207,9 +216,13 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         metrics: Dict[str, torch.Tensor] = {
             "multiscale_discriminative_w256": legacy_mean.detach(),
         }
+        num_parts = 1 + len(self.window_lens)
+        reward = assign_reward_to_last_token(
+            legacy_mean.to(sequence.device) / num_parts, action_mask
+        ) if self.dense_placement else None
 
         for window_len, model in zip(self.window_lens, self.multiscale_models):
-            scale_score = self._score_sliding_average(
+            scale_score, sample_idx, window_scores = self._score_sliding_average(
                 model,
                 model_tokens,
                 context_tokens,
@@ -218,13 +231,19 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
             )
             scale_scores.append(scale_score)
             metrics[f"multiscale_discriminative_w{window_len}"] = scale_score.detach()
+            if self.dense_placement and sample_idx is not None:
+                stride = max(1, int(window_len * MULTISCALE_OVERLAP_FRACTION))
+                ends = sliding_window_ends(valid_lens, window_len, stride)
+                counts = torch.bincount(sample_idx, minlength=valid_lens.shape[0]).float()
+                values = window_scores / counts[sample_idx] / num_parts
+                reward = reward + place_window_rewards(
+                    sample_idx.to(sequence.device), ends.to(sequence.device),
+                    values.to(sequence.device), action_mask,
+                )
 
         combined = torch.stack(scale_scores, dim=0).mean(dim=0)
         metrics["multiscale_discriminative_combined"] = combined.detach()
 
-        return {
-            "reward": assign_reward_to_last_token(
-                combined.to(sequence.device), action_mask
-            ),
-            **metrics,
-        }
+        if not self.dense_placement:
+            reward = assign_reward_to_last_token(combined.to(sequence.device), action_mask)
+        return {"reward": reward, **metrics}

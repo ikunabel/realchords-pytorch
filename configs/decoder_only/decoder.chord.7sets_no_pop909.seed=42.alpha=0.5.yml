@@ -1,5 +1,10 @@
+# Dataset-mix study (leave-one-out), see journal/CONFIGS.md. All runs identical except the
+# dataset list: seed 42, constant LR 1e-4, alpha 0.5, architecture of decoder_only_online_chord.
+# Checkpoint = lowest val/loss over the *training* datasets only (the held-out one isn't in the
+# val set), so the held-out dataset plays no part in model selection.
+# This one: all 7 except pop909.
 # Trainer hyperparameters, for Trainer and lit_module
-seed: 1
+seed: 42
 train_steps: 50000
 val_interval: 1000
 sample_interval: 5000
@@ -9,7 +14,7 @@ log_every_n_steps: 1
 checkpoint_interval: 1000
 checkpoint_metric: "val/loss"
 checkpoint_mode: "min"
-checkpoint_top_k: -1 # save all checkpoints
+checkpoint_top_k: 5 # 5 best by val/loss (all would be ~12 GB per run)
 accelerator: "auto"
 devices: "auto"
 num_nodes: 1
@@ -28,7 +33,7 @@ model_part: "chord"
 model_type: "decoder_only"
 max_len: 512
 
-datasets: ["hooktheory", "pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
+datasets: ["hooktheory", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
 alpha: 0.5
 data_augmentation: true
 
@@ -38,7 +43,7 @@ AdamW.weight_decay: 0.0
 
 # LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
 # train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
-lr_schedule: "cosine"
+lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
 warmup_steps: 1000
 
 # Model hyperparameters

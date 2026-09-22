@@ -1,0 +1,21 @@
+# Dense vs last-token placement of the multi-scale reward (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md):
+# ReaLchords-M (window scores averaged, placed on the last token) vs ReaLchords-M-dense (each
+# window's score placed at its last action, same sequence sum), with MLE and full-context
+# ReaLchords as references. Same test melodies/seed as rl_2x2_hooktheory.yml.
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/rl_multiscale_dense_hooktheory.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+model:
+  - "MLE=base"
+  - "ReaLchords=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_rerun/actor.pth"
+  - "ReaLchords-M=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale/actor.pth"
+  - "ReaLchords-M-dense=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale_dense/actor.pth"
+seed: 42
+
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/rl_multiscale_dense_hooktheory
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+clamp2_samples: -1

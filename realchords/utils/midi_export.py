@@ -199,8 +199,10 @@ def _write_one_midi(
     include_chord_bass: bool = True,
     chord_octave: int = CHORD_OCTAVE,
     melody_octave: int = 0,
+    include_melody: bool = True,
 ) -> None:
-    """Render a single song, single source, to one MIDI file."""
+    """Render a single song, single source, to one MIDI file. ``include_melody=False``
+    writes the chord track only (used for the chords-only CLaMP 2 metrics)."""
     midi_obj = pretty_midi.PrettyMIDI(initial_tempo=float(bpm))
     melody_instr = pretty_midi.Instrument(program=0, name="Melody")
     chord_instr = pretty_midi.Instrument(program=0, name="Chords")
@@ -213,7 +215,7 @@ def _write_one_midi(
         chord_octave=chord_octave,
         melody_octave=melody_octave,
     )
-    midi_obj.instruments.extend([melody_instr, chord_instr])
+    midi_obj.instruments.extend([melody_instr, chord_instr] if include_melody else [chord_instr])
     midi_obj.write(str(out_path))
 
 

@@ -1,0 +1,27 @@
+# Dataset-mix leave-one-out (alpha 0.5, seed 42, constant LR): 7sets baseline + the 7 runs
+# each trained without one dataset, all on the emopia_plus test set. For no_emopia_plus this set is unseen
+# (out-of-distribution); for the others it is in the training mix. Checkpoints: best
+# val/loss over each run's own training datasets (held-out never used for selection), from
+# the 5 kept per run. All share the 6198-token vocab, so one run is safe. No reward model
+# exists for this vocab -> no Vendi. CLaMP 2 on all test sequences (FMD only meaningful
+# where N >> 768; see clamp2_num_sequences_*).
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/dataset_loo/emopia_plus.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_7mhnk76x/step=10000.ckpt"
+model:
+  - "7sets=base"
+  - "no_hooktheory=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_hooktheory.seed=42.alpha=0.5_58hcp8p1/step=5500.ckpt"
+  - "no_pop909=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_pop909.seed=42.alpha=0.5_h2c0bf5s/step=9000.ckpt"
+  - "no_nottingham=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_nottingham.seed=42.alpha=0.5_vkb3nb6j/step=9000.ckpt"
+  - "no_wikifonia=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_wikifonia.seed=42.alpha=0.5_yf1fqrg4/step=9000.ckpt"
+  - "no_chord_melody_dataset=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_chord_melody_dataset.seed=42.alpha=0.5_p3z8ujj1/step=10000.ckpt"
+  - "no_jazzmus=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_jazzmus.seed=42.alpha=0.5_ux0t9kjy/step=10000.ckpt"
+  - "no_emopia_plus=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_emopia_plus.seed=42.alpha=0.5_wcmnu6pg/step=11000.ckpt"
+seed: 42
+
+dataset_name: emopia_plus
+dataset_split: test
+save_dir: logs/custom_eval/dataset_loo/emopia_plus
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+clamp2_samples: -1

@@ -142,6 +142,7 @@ from realchords.utils.experiment_utils_model_data import (
     generate_from_data_enc_dec,
 )
 from realchords.utils.inference_utils import load_lit_model, load_rl_model
+from realchords.utils.clamp2_metrics import GT_KEY as CLAMP2_GT_KEY, compute_clamp2_metrics
 from realchords.utils.midi_export import (
     resolve_include_chord_bass,
     select_midi_indices,
@@ -722,6 +723,7 @@ def _run_eval(
     dataset_chord_names_path: Optional[str] = None,
     midi_samples: int = 10,
     seed: int = 42,
+    clamp2_samples: int = 0,
 ) -> None:
     """Run one full eval pass (dataloader → generation → save) into save_dir.
 
@@ -1005,6 +1007,25 @@ def _run_eval(
             print(f"  models/{slug}/sync_intervals.pt")
             print(f"  models/{slug}/chord_complexity.pt  mean={model_means['chord_complexity_mean']:.4f}")
 
+    # CLaMP 2 distance metrics (FMD + paired cosine) on a random sample of
+    # sequences, full piece and chords only -- see realchords/utils/clamp2_metrics.py.
+    clamp2_by_label: Dict[str, Dict[str, float]] = {}
+    if clamp2_samples and not args.gt_only:
+        clamp2_indices = select_midi_indices(
+            gt_tensor.size(0), clamp2_samples, default_all=False, seed=seed
+        )
+        clamp2_by_label = compute_clamp2_metrics(
+            gt_tensor=gt_tensor,
+            model_tensors=model_tensors,
+            gt_tokenizer=dataset_tokenizer,
+            model_tokenizer=model_tokenizer,
+            indices=clamp2_indices,
+            out_dir=save_dir / "clamp2_midi",
+            include_chord_bass=resolve_include_chord_bass(False, False, args.dataset_name),
+        )
+        for label, metrics_ in clamp2_by_label.items():
+            print(f"  {'gt' if label == CLAMP2_GT_KEY else _slugify(label)} clamp2: " + "  ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in metrics_.items()))
+
     # Cross-source comparison metrics (model vs. GT), one small summary file
     means_summary = {
         "gt": {
@@ -1024,6 +1045,7 @@ def _run_eval(
             # explicitly as the literal parallel to the ReaLchords paper's Table 1
             # "Test set" row, which is the same trivial self-comparison.
             "sync_emd_vs_gt": 0.0,
+            **{key: _fmt_metric(value) for key, value in clamp2_by_label.get(CLAMP2_GT_KEY, {}).items()},
         },
         "models": {},
     }
@@ -1048,6 +1070,8 @@ def _run_eval(
             **{key: _fmt_metric(value) for key, value in comparison.items()},
             **{key: _fmt_metric(value) for key, value in model_paired_metrics[label].items()},
             "num_sequences_with_key": num_keyed,
+            **{key: (value if isinstance(value, int) else _fmt_metric(value))
+               for key, value in clamp2_by_label.get(label, {}).items()},
         }
     means_path = save_dir / "means.json"
     with means_path.open("w", encoding="utf-8") as fh:
@@ -1074,8 +1098,10 @@ def _run_eval(
             fh.write(json.dumps(entry) + "\n")
     print(f"  metadata.jsonl  ({len(metadata)} rows, with per-sequence NiCR/mode-fit)")
 
-    # Vocab snapshot so the .pt files can always be decoded correctly
-    snapshot = save_vocab_snapshot(str(save_dir))
+    # Vocab snapshot so the .pt files can always be decoded correctly: the vocab the
+    # tensors are encoded in (the models' own), not the current global file, which
+    # has grown with the new datasets and no longer matches older checkpoints.
+    snapshot = save_vocab_snapshot(str(save_dir), chord_names_path=dataset_chord_names_path)
     print(f"  vocab snapshot → {snapshot}")
 
     # Label→slug mapping (and dataset_name) so scripts/eval/custom_eval/export_paired_midis.py
@@ -1139,6 +1165,7 @@ def main(
     contrastive_checkpoint: str = "",
     run_full_songs: bool = True,
     midi_samples: int = 10,
+    clamp2_samples: int = 0,
 ) -> None:
     """
     Args:
@@ -1185,6 +1212,15 @@ def main(
             disables. -1 renders every song (slow for large splits --
             prefer running scripts/eval/custom_eval/export_paired_midis.py
             separately for that instead of setting this to -1).
+        clamp2_samples: Model-comparison mode only. Number of randomly chosen
+            sequences (same ones for GT and every model, seeded by seed) to
+            render with the plain export voicing and score with CLaMP 2:
+            Frechet Music Distance to GT and mean paired cosine similarity,
+            each on the full piece and on the chord track only (keys
+            clamp2_{fmd,cos_per_song}_{full,chords}_vs_gt in means.json; MIDI
+            kept under <save_dir>/clamp2_midi/). 0 (default) disables, -1 uses
+            every sequence. FMD depends on the sample size -- only compare
+            runs with the same value.
     """
     _validate_args(
         base_model=base_model,
@@ -1325,6 +1361,7 @@ def main(
             dataset_chord_names_path=dataset_chord_names_path,
             midi_samples=midi_samples,
             seed=seed,
+            clamp2_samples=clamp2_samples,
         )
 
 

@@ -236,12 +236,18 @@ def run_experiment(experiment_yml: Path) -> Path:
     _merge_metadata(experiment_dir, staging_dirs)
     _merge_model_labels(experiment_dir, staging_dirs, shared["dataset_name"])
 
-    # Vocab snapshot: same rationale as gt/ -- copy from the first model,
-    # only used for re-decoding gt.pt (melody+chord *names* are what
-    # matter, not which model happened to produce the snapshot).
+    # Vocab snapshots. gt.pt comes from the first model's run, so the top-level
+    # snapshot is that run's vocab (used for decoding gt.pt). Each models/<slug>/preds.pt
+    # stays in its own model's vocab, which may differ (hooktheory 2821 vs 7-dataset
+    # chords), so each model dir gets its own chord_names.json; export_paired_midis.py
+    # decodes every model with it.
     snapshot_src = staging_dirs[first_label] / "chord_names_augmented.json"
     if snapshot_src.exists():
         shutil.copy2(snapshot_src, experiment_dir / "chord_names_augmented.json")
+    for label, staging_dir in staging_dirs.items():
+        vocab_src = staging_dir / "_model_chord_vocab.json"
+        if vocab_src.exists():
+            shutil.copy2(vocab_src, models_dst / _slugify(label) / "chord_names.json")
 
     _merge_midi(experiment_dir, staging_dirs)
 

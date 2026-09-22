@@ -1,0 +1,9 @@
+# ReaLchords-M with the paper's reward ensemble (no rhythm-only rewards); counterpart of
+# realchords_no_rhythm.yml. Last-token placement as in realchords_multiscale.yml, so the only
+# change vs that run is the rhythm weights. Rhythm models are still loaded and logged, weight 0.
+# Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
+
+$include:
+  - configs/rl/realchords_multiscale.yml
+contrastive_reward_rhythm_weight: 0.0
+discriminative_reward_rhythm_weight: 0.0

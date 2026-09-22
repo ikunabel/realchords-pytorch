@@ -186,6 +186,7 @@ class SegmentHooktheoryDataset(HooktheoryDataset):
             output["targets_mask"] = targets_mask
 
         output["song_url"] = item["song_url"]
+        output["song_id"] = item["song_id"]
         output["segment_idx"] = segment_idx
         output["segment_start"] = segment_start
         output["segment_end"] = segment_end

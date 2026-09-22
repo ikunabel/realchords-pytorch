@@ -1,0 +1,11 @@
+# Paper-faithful reward ensemble for ReaLchords: the ReaLchords paper uses only contrastive +
+# discriminative rewards; the rhythm-only variants are GAPT's addition (gapt_paper.md §3.4).
+# Pair with realchords_multiscale_no_rhythm.yml to test whether the rhythm rewards explain why our
+# ReaLchords-M doesn't improve note-in-chord over ReaLchords as in the paper (+6.1 points there)
+# (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md). Rhythm models are still loaded and logged, weight 0.
+# Run with scripts/jobscripts/train_variants/rl/submit_rl.sh.
+
+$include:
+  - configs/rl/realchords.yml
+contrastive_reward_rhythm_weight: 0.0
+discriminative_reward_rhythm_weight: 0.0

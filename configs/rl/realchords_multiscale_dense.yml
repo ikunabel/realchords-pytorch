@@ -1,0 +1,13 @@
+# A/B vs. configs/rl/realchords_multiscale.yml -- the ONLY difference is where the multiscale
+# window scores are placed. There, all window scores are averaged and put on the last token
+# (one reward per sequence, like the full-context reward). Here each window's score goes on its
+# own last chord frame, scaled so each sequence's summed reward is unchanged -- i.e. the temporal
+# credit assignment the ReaLchords paper motivates multi-scale rewards with. Question: does this
+# fix ReaLchords-M's rhythm collapse (chord_duration_entropy 0.12) and/or improve harmony?
+# See journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md. Test: tests/test_multiscale_dense_placement.py.
+# Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
+
+$include:
+  - configs/rl/realchords_multiscale.yml
+
+multiscale_dense_reward: true

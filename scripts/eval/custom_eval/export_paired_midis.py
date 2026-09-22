@@ -42,7 +42,7 @@ Or equivalently, without a config file::
 import json
 from functools import partial
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import argbind
 import torch
@@ -159,20 +159,33 @@ def _export_model_comparison(
     print(f"Models: {ordered_labels}")
     print(f"Writing {len(midi_indices)} song folder(s) x {1 + len(ordered_labels)} source(s) to {midi_dir} ...")
 
-    write_all_source_midis(
-        gt_tensor=gt_tensor,
-        model_tensors=model_tensors,
-        ordered_labels=ordered_labels,
-        metadata=metadata,
-        gt_tokenizer=tokenizer,
-        model_tokenizer=tokenizer,
-        midi_dir=midi_dir,
-        indices=midi_indices,
-        bpm=bpm,
-        include_chord_bass=resolved_include_chord_bass,
-        chord_octave=chord_octave,
-        melody_octave=melody_octave,
-    )
+    # Merged multi-model dirs (run_multi_model_eval.py) can mix chord vocabs: each
+    # models/<slug>/chord_names.json, when present, is the vocab that model's preds.pt is
+    # encoded in. Export each vocab group with its own tokenizer.
+    groups: Dict[str, List[str]] = {}  # vocab (as JSON; "" = top-level snapshot) -> labels
+    group_tokenizers: Dict[str, HooktheoryTokenizer] = {"": tokenizer}
+    for label, slug in labels.items():
+        vocab_path = save_dir / "models" / slug / "chord_names.json"
+        key = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
+        if key not in group_tokenizers:
+            group_tokenizers[key] = HooktheoryTokenizer(chord_names=json.loads(key))
+        groups.setdefault(key, []).append(label)
+
+    for key, group_labels in groups.items():
+        write_all_source_midis(
+            gt_tensor=gt_tensor,
+            model_tensors={label: model_tensors[label] for label in group_labels},
+            ordered_labels=group_labels,
+            metadata=metadata,
+            gt_tokenizer=tokenizer,
+            model_tokenizer=group_tokenizers[key],
+            midi_dir=midi_dir,
+            indices=midi_indices,
+            bpm=bpm,
+            include_chord_bass=resolved_include_chord_bass,
+            chord_octave=chord_octave,
+            melody_octave=melody_octave,
+        )
 
 
 @bind(without_prefix=True)
