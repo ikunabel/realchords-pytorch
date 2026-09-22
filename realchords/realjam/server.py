@@ -52,7 +52,13 @@ def get_song_melody(dataset: str, split: str, song_id: str) -> str:
     record = song_record_index.get((dataset, split, song_id))
     if record is None:
         flask.abort(404, description="Song not found")
-    return json.dumps(song_catalogue.extract_melody_notes(record))
+    # num_beats sets the loop period: a melody that rests through its last
+    # beats would otherwise be looped from its final note and drift off the
+    # bar grid on every repetition.
+    return json.dumps({
+        "melody": song_catalogue.extract_melody_notes(record),
+        "num_beats": record["annotations"].get("num_beats"),
+    })
 
 
 @app.get("/songs/<dataset>/<split>/<song_id>/reference")
@@ -114,7 +120,11 @@ def get_song_reference(dataset: str, split: str, song_id: str) -> str:
         prev_voicing = pitches
         chords.append({**chord, "pitches": pitches})
 
-    return json.dumps({"melody": melody, "chords": chords})
+    return json.dumps({
+        "melody": melody,
+        "chords": chords,
+        "num_beats": record["annotations"].get("num_beats"),
+    })
 
 
 @app.get("/voicings/chords")

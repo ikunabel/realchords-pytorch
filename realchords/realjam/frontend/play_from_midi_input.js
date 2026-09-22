@@ -236,6 +236,22 @@ function startSession(options = {}) {
 }
 
 /**
+ * Length of one play-through, in frames. Uses the song's own length from the
+ * data (num_beats) rather than where its last note ends: a melody that rests
+ * through its final beats would otherwise restart early and drift off the bar
+ * grid on every repetition. Never shorter than the notes themselves, in case
+ * num_beats is missing or too small.
+ * @param {Array<{offset: number}>} events - Anything with a beat-unit offset
+ * @param {?number} numBeats
+ * @return {number}
+ */
+function loopLengthFrames(events, numBeats) {
+  const lastOffset = events.reduce(
+    (latest, e) => Math.max(latest, Math.round(e.offset * fpb)), 0);
+  return Math.max(numBeats ? numBeats * fpb : 0, lastOffset);
+}
+
+/**
  * Play a song's ground-truth melody on a schedule (not live input), feeding
  * it into the same session/generation pipeline as live playing so the model
  * generates chords in response -- lets voicing settings be tested hands-free
@@ -244,8 +260,9 @@ function startSession(options = {}) {
  * @param {Array<{pitch: number, onset: number, offset: number}>} notes
  *   Melody notes in quarter-note (beat) units, as returned by the
  *   /songs/.../melody endpoint.
+ * @param {?number} numBeats - The song's length, for the loop period
  */
-function playSongMelody(notes) {
+function playSongMelody(notes, numBeats) {
   if (!notes.length) {
     console.warn('Selected song has no melody notes; nothing to play.');
     return;
@@ -257,7 +274,8 @@ function playSongMelody(notes) {
 
   // Anchor session frame 0 to "now", before scheduling anything relative to it.
   getSessionCurrentFrame();
-  scheduleMelodyLoop(notes, curSession.startFrame);
+  scheduleMelodyLoop(notes, curSession.startFrame,
+    loopLengthFrames(notes, numBeats));
 
   // Kick off chord generation immediately, same as a live session's first
   // note would (see playNote).
@@ -275,8 +293,9 @@ function playSongMelody(notes) {
  * @param {Array<{pitch: number, onset: number, offset: number}>} melody
  * @param {Array<{pitches: Array<number>, onset: number, offset: number,
  *   symbol: string}>} chords
+ * @param {?number} numBeats - The song's length, for the loop period
  */
-function playSongReference(melody, chords) {
+function playSongReference(melody, chords, numBeats) {
   if (!melody.length && !chords.length) {
     console.warn('Selected song has no reference content; nothing to play.');
     return;
@@ -286,7 +305,8 @@ function playSongReference(melody, chords) {
   }
   startSession({ referenceOnly: true });
   getSessionCurrentFrame();  // Anchor frame 0 before scheduling against it
-  scheduleReferenceLoop(melody, chords, curSession.startFrame);
+  scheduleReferenceLoop(melody, chords, curSession.startFrame,
+    loopLengthFrames([...melody, ...chords], numBeats));
 }
 
 /**
@@ -296,14 +316,14 @@ function playSongReference(melody, chords) {
  * @param {Array<Object>} melody
  * @param {Array<Object>} chords
  * @param {number} baseFrame - Absolute frame this play-through starts at
+ * @param {number} loopFrames - Period between play-throughs
  */
-function scheduleReferenceLoop(melody, chords, baseFrame) {
-  let maxEndFrame = baseFrame;
+function scheduleReferenceLoop(melody, chords, baseFrame, loopFrames) {
+  const nextFrame = baseFrame + loopFrames;
 
   melody.forEach(({ pitch, onset, offset }) => {
     const onFrame = baseFrame + Math.round(onset * fpb);
     const offFrame = baseFrame + Math.round(offset * fpb);
-    maxEndFrame = Math.max(maxEndFrame, offFrame);
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
@@ -311,7 +331,6 @@ function scheduleReferenceLoop(melody, chords, baseFrame) {
   chords.forEach(({ pitches, onset, offset, symbol }) => {
     const onFrame = baseFrame + Math.round(onset * fpb);
     const offFrame = baseFrame + Math.round(offset * fpb);
-    maxEndFrame = Math.max(maxEndFrame, offFrame);
     // Same scheduling path the generated chords use, so the two sound
     // identical apart from the choice of chord
     scheduleChordPitches(
@@ -322,9 +341,9 @@ function scheduleReferenceLoop(melody, chords, baseFrame) {
 
   Tone.Transport.scheduleOnce(() => {
     if (curSession && curSession.referenceOnly) {
-      scheduleReferenceLoop(melody, chords, maxEndFrame);
+      scheduleReferenceLoop(melody, chords, nextFrame, loopFrames);
     }
-  }, frameToTransportTime(maxEndFrame));
+  }, frameToTransportTime(nextFrame));
 }
 
 /**
@@ -334,13 +353,13 @@ function scheduleReferenceLoop(melody, chords, baseFrame) {
  * @param {Array<{pitch: number, onset: number, offset: number}>} notes
  * @param {number} baseFrame - Absolute (Transport-relative) frame this
  *   play-through starts at
+ * @param {number} loopFrames - Period between play-throughs
  */
-function scheduleMelodyLoop(notes, baseFrame) {
-  let maxEndFrame = baseFrame;
+function scheduleMelodyLoop(notes, baseFrame, loopFrames) {
+  const nextFrame = baseFrame + loopFrames;
   notes.forEach(({ pitch, onset, offset }) => {
     const onFrame = baseFrame + Math.round(onset * fpb);
     const offFrame = baseFrame + Math.round(offset * fpb);
-    maxEndFrame = Math.max(maxEndFrame, offFrame);
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
@@ -351,9 +370,9 @@ function scheduleMelodyLoop(notes, baseFrame) {
     // both replace curSession, and starting a new one also cancels this via
     // Tone.Transport.cancel() in toggleLiveSession's stop branch).
     if (curSession) {
-      scheduleMelodyLoop(notes, maxEndFrame);
+      scheduleMelodyLoop(notes, nextFrame, loopFrames);
     }
-  }, frameToTransportTime(maxEndFrame));
+  }, frameToTransportTime(nextFrame));
 }
 
 /**
@@ -1040,14 +1059,14 @@ async function playSongFromSearch(index) {
     // The song's own accompaniment, no model involved
     const custom = customVoicingsCheck.checked ? '?custom=1' : '';
     const result = await fetch(`${base}/reference${custom}`);
-    const { melody, chords } = await result.json();
-    playSongReference(melody, chords);
+    const { melody, chords, num_beats } = await result.json();
+    playSongReference(melody, chords, num_beats);
     return;
   }
 
   const result = await fetch(`${base}/melody`);
-  const notes = await result.json();
-  playSongMelody(notes);
+  const { melody, num_beats } = await result.json();
+  playSongMelody(melody, num_beats);
 }
 
 /**
