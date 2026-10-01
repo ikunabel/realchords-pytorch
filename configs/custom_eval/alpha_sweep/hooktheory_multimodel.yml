@@ -1,0 +1,48 @@
+# Hooktheory alpha sweep, 16-bar all-windows protocol, run through
+# run_multi_model_eval.py rather than run_custom_eval.py.
+#
+# Why: all 12 models in one custom_evaluation.py process needs ~36 min of GPU
+# (44 batches x ~49 s) and the login-node GPU limit is 30 min -- that run was
+# killed at ~30/44. This script runs each model as its own short subprocess
+# (~4 min each) and merges by seq_idx afterwards, so no single GPU process
+# approaches the limit. The window enumeration is identical across sub-runs
+# (all_windows is deterministic from the dataset, eval seed fixed at 42),
+# which is what makes the merge valid.
+#
+# Run: python scripts/eval/custom_eval/run_multi_model_eval.py \
+#   configs/custom_eval/alpha_sweep/hooktheory_multimodel.yml
+dataset_name: hooktheory
+dataset_split: test
+batch_size: 64
+num_batches: -1
+seed: 42
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true
+save_dir: logs/custom_eval/alpha_sweep_allwin/hooktheory
+models:
+- label: a0.s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0_oh80o5uw/step=23000.ckpt
+- label: a0.s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0_dvcy9lth/step=19000.ckpt
+- label: a0.s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0_kpfypmhp/step=23000.ckpt
+- label: a0p25.s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.25_45w7avqy/step=13000.ckpt
+- label: a0p25.s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0.25_886c2hra/step=10000.ckpt
+- label: a0p25.s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0.25_xak6woo7/step=14000.ckpt
+- label: a0p5.s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_jyn38tk8/step=11000.ckpt
+- label: a0p5.s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0.5_66mbi6mg/step=10000.ckpt
+- label: a0p5.s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0.5_khxa06xe/step=12000.ckpt
+- label: a1.s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=1_nvx3f6rz/step=12000.ckpt
+- label: a1.s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=1_yfo43iir/step=12000.ckpt
+- label: a1.s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=1_bo6g1pl1/step=13000.ckpt

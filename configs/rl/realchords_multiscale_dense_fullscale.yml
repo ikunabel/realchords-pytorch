@@ -1,0 +1,13 @@
+# A/B cell 2 on top of realchords_multiscale_dense.yml: stop shrinking the per-window rewards.
+# Dense placement divides each window's score by the number of windows of that scale (and by the
+# number of averaged parts), so on a ~171-frame rollout one 16-frame window contributes ~1% of a
+# single reward term while the four rhythm rewards and the full-context term land at full size on
+# the last token. With multiscale_dense_keep_window_scale the per-window score keeps its full size;
+# the per-sequence sum then grows with the number of windows, i.e. the short scales dominate.
+# See journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md; test: tests/test_multiscale_dense_placement.py.
+# Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
+
+$include:
+  - configs/rl/realchords_multiscale_dense.yml
+
+multiscale_dense_keep_window_scale: true

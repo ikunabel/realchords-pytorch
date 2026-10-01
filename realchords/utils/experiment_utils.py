@@ -82,6 +82,7 @@ def create_dataset_dataloaders(
     max_len: int,
     num_workers: int = 0,
     chord_names_path: Optional[str] = None,
+    all_windows: bool = False,
 ) -> Tuple[Optional[torch.utils.data.DataLoader], torch.utils.data.DataLoader]:
     """Create dataloaders for a specific dataset/split using HooktheoryDataset.
 
@@ -115,6 +116,7 @@ def create_dataset_dataloaders(
         model_part=model_part,
         max_len=max_len,
         data_augmentation=False,
+        all_windows=all_windows,
         load_augmented_chord_names=True,
         chord_names_path=chord_names_path,
     )

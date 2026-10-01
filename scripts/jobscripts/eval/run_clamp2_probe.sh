@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-gpu=24
 #SBATCH --gres=gpu:1
-#SBATCH --time=04:00:00
+#SBATCH --time=03:00:00
 #SBATCH --output=scripts/jobscripts/slurm_logs/%x/%x_%j.out
 #SBATCH --error=scripts/jobscripts/slurm_logs/%x/%x_%j.err
 #SBATCH --account=thes2192
@@ -22,4 +22,4 @@ srun python scripts/eval/custom_eval/clamp2_dataset_probe.py \
   --gt_root logs/custom_eval/gt \
   --split_mode full_songs \
   --out_dir logs/custom_eval/clamp2_probe_full \
-  --max_per_dataset 100 \
+  --max_per_dataset ${MAX_PER_DATASET:--1} \

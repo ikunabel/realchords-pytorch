@@ -1,0 +1,58 @@
+# Dataset-mix study (leave-one-out), see journal/CONFIGS.md. Seed replicate (seed 43) of the
+# seed-42 run of the same mix, for the training-seed noise band. All runs identical except the
+# dataset list: seed 42, constant LR 1e-4, alpha 0.5, architecture of decoder_only_online_chord.
+# Checkpoint = lowest val/loss over the *training* datasets only (the held-out one isn't in the
+# val set), so the held-out dataset plays no part in model selection.
+# This one: all 7 except hooktheory -- special case: Hooktheory is ~2/3 of the frames, so this
+# mostly tests 'much less data'. The remaining 6 (3,320 songs / 1.8M frames) get all samples instead
+# of 62%, so their minimum should come earlier (~5k vs 7-9k): validation/checkpoints every 500 steps
+# and patience 30 checks (same 15k steps). Only monitoring changes -- training is identical.
+# Trainer hyperparameters, for Trainer and lit_module
+seed: 43
+train_steps: 50000
+val_interval: 500
+sample_interval: 5000
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 500
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: -1 # keep every checkpoint: the aggregate val/loss picks a different step than each corpus would (see journal/DATASET_MIX_LOO.md)
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+
+early_stopping_patience: 30 # checks = 15k steps, as in the other runs
+
+# Data hyperparameters, for get_weighted_dataloader
+batch_size: 64
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "chord"
+model_type: "decoder_only"
+max_len: 512
+
+datasets: ["pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
+alpha: 0.5
+data_augmentation: true
+
+# Optimizer hyperparameters
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
+# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+warmup_steps: 1000
+
+# Model hyperparameters
+DecoderTransformer.dim: 512
+DecoderTransformer.depth: 8
+DecoderTransformer.heads: 8
+DecoderTransformer.max_seq_len: 514 # bos, eos
+DecoderTransformer.dropout: 0.1

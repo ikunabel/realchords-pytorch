@@ -70,6 +70,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import yaml
+from realchords.utils.experiment_summary import experiment_root, write_experiment_summary
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _EVAL_SCRIPT = REPO_ROOT / "realchords" / "utils" / "custom_evaluation.py"
@@ -93,6 +94,12 @@ def _run_one_model(
         "--num_batches", str(shared["num_batches"]),
         "--seed", str(shared["seed"]),
         "--midi_samples", str(shared["midi_samples"]),
+        # Protocol keys. These MUST be forwarded: their custom_evaluation.py defaults are
+        # the old protocol (256 tokens = 8 bars, one sampled window per song), so omitting
+        # them silently scores a different thing than the experiment yml asked for.
+        "--cropped_max_len", str(shared["cropped_max_len"]),
+        "--all_windows", str(shared["all_windows"]),
+        "--clamp2_samples", str(shared["clamp2_samples"]),
     ]
     if contrastive_checkpoint:
         cmd += ["--contrastive_checkpoint", contrastive_checkpoint]
@@ -191,6 +198,19 @@ def run_experiment(experiment_yml: Path) -> Path:
     with experiment_yml.open(encoding="utf-8") as fh:
         spec = yaml.safe_load(fh)
 
+    if "models" not in spec:
+        # configs/custom_eval/ holds ymls for both entry points and they are not
+        # interchangeable: custom_evaluation.py takes a "model:" list of
+        # "label=path" strings, this script takes a "models:" list of mappings.
+        if "model" in spec:
+            raise SystemExit(
+                f"{experiment_yml} is a custom_evaluation.py config: it has a "
+                f"'model:' list of 'label=path' strings, not a 'models:' list of "
+                f"mappings. Run instead:\n"
+                f"  python scripts/eval/custom_eval/run_custom_eval.py {experiment_yml}"
+            )
+        raise SystemExit(f"{experiment_yml}: no 'models:' list.")
+
     model_specs = spec["models"]
     if not model_specs:
         raise ValueError(f"{experiment_yml}: 'models' list is empty.")
@@ -202,6 +222,9 @@ def run_experiment(experiment_yml: Path) -> Path:
         "num_batches": spec.get("num_batches", -1),
         "seed": spec.get("seed", 42),
         "midi_samples": spec.get("midi_samples", 10),
+        "cropped_max_len": spec.get("cropped_max_len", 512),
+        "all_windows": bool(spec.get("all_windows", False)),
+        "clamp2_samples": spec.get("clamp2_samples", 0),
     }
 
     experiment_dir = Path(spec.get("save_dir", f"logs/custom_eval/{experiment_yml.stem}"))
@@ -250,6 +273,12 @@ def run_experiment(experiment_yml: Path) -> Path:
             shutil.copy2(vocab_src, models_dst / _slugify(label) / "chord_names.json")
 
     _merge_midi(experiment_dir, staging_dirs)
+
+    summary_root = experiment_root(experiment_dir)
+    if summary_root is not None:
+        summary_path = write_experiment_summary(summary_root)
+        if summary_path is not None:
+            print(f"  experiment summary -> {summary_path}")
 
     print(f"\nDone. Combined experiment at {experiment_dir}")
     return experiment_dir

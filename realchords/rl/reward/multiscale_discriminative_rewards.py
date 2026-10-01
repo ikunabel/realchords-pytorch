@@ -83,6 +83,7 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         model_part: str,
         max_windows_per_forward: int = 8192,
         dense_placement: bool = False,
+        dense_keep_window_scale: bool = False,
     ):
         """``dense_placement``: see multiscale_contrastive_rewards (module docstring)."""
         super().__init__()
@@ -104,6 +105,11 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
         self.model_part = model_part
         self.max_windows_per_forward = max_windows_per_forward
         self.dense_placement = dense_placement
+        # dense_keep_window_scale: place each window's score at full size instead of dividing it
+        # by the number of windows of that scale. The per-sequence sum then grows with the number
+        # of windows (short scales contribute most) rather than staying equal to the sparse
+        # variant's single score -- i.e. the local signal is no longer ~1% of a reward term.
+        self.dense_keep_window_scale = dense_keep_window_scale
 
     @property
     def device(self) -> torch.device:
@@ -235,7 +241,9 @@ class MultiscaleDiscriminativeRewardFn(BaseRewardModel):
                 stride = max(1, int(window_len * MULTISCALE_OVERLAP_FRACTION))
                 ends = sliding_window_ends(valid_lens, window_len, stride)
                 counts = torch.bincount(sample_idx, minlength=valid_lens.shape[0]).float()
-                values = window_scores / counts[sample_idx] / num_parts
+                values = window_scores / num_parts
+                if not self.dense_keep_window_scale:
+                    values = values / counts[sample_idx]
                 reward = reward + place_window_rewards(
                     sample_idx.to(sequence.device), ends.to(sequence.device),
                     values.to(sequence.device), action_mask,

@@ -330,6 +330,7 @@ def main(args, save_dir: str = ""):
         eos_token_id=tokenizer.eos_token,
         model_part=args.model_part,
         dense_placement=getattr(args, "multiscale_dense_reward", False),
+        dense_keep_window_scale=getattr(args, "multiscale_dense_keep_window_scale", False),
     )
 
     reward_configs = []
@@ -346,6 +347,7 @@ def main(args, save_dir: str = ""):
                     eos_token_id=tokenizer.eos_token,
                     model_part=args.model_part,
                     dense_placement=getattr(args, "multiscale_dense_reward", False),
+        dense_keep_window_scale=getattr(args, "multiscale_dense_keep_window_scale", False),
                 ),
                 "weight": getattr(args, "discriminative_reward_weight", 1.0),
                 "name": "multiscale_discriminative_reward",

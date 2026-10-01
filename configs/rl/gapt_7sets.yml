@@ -1,0 +1,76 @@
+# GAPT on the 7-dataset mix (hooktheory/pop909/nottingham/wikifonia/chord_melody_dataset/
+# jazzmus/emopia_plus, alpha 0.5): same objective and hyperparameters as gapt_hooktheory.yml, but
+# every component is the 7sets one -- policy initialization, distillation anchor, reward models and
+# training melodies. Counterpart of gapt_hooktheory.yml for "does the larger pre-training mixture
+# still help after RL?" (journal/DATASET_MIX_LOO.md).
+#
+# Note: the anchor (offline enc-dec) is the existing 7sets run, which used seed 1 rather than the
+# seed 42 of the policy and reward models.
+#
+# Reward-model checkpoints: best val/loss of each run (the rhythm variants overfit after ~2.5k
+# steps). Run with scripts/jobscripts/train_variants/rl/submit_gapt.sh.
+
+$include:
+  - configs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5.yml
+  - configs/single_agent_rl/rl_realchords_base.yml
+
+# --- 7sets components (all in the 6198-token vocab) -------------------------------------------
+# rl_realchords_base.yml pins the old 2821-chord vocab (that is why every earlier RL run is
+# 5902-token); the 7sets components need the current 2969-chord one, in both places.
+chord_names_path: "data/cache/chord_names_augmented.json"
+lit_module_override_args:
+  chord_names_path: "data/cache/chord_names_augmented.json"
+  data_path: "data/hooktheory/Hooktheory.json.gz"
+  num_workers: 4
+pretrain_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_7mhnk76x/step=10000.ckpt"
+anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
+contrastive_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_jeti8h2l/step=4000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_7sets_qsnz0vp2/step=6000.ckpt"
+discriminative_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_7sets_ylftoy2r/step=2000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2_7sets_d2xc1z1b/step=3000.ckpt"
+contrastive_reward_rhythm_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_7sets_9rniogqs/step=2500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_2_7sets_4cbeo9m2/step=2500.ckpt"
+discriminative_reward_rhythm_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_7sets_i2ahny2s/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_2_7sets_abp8lry4/step=2500.ckpt"
+
+# --- reward weights / penalties (identical to realchords.yml) ---------------------------------
+contrastive_reward_weight: 1.0
+discriminative_reward_weight: 1.0
+contrastive_reward_rhythm_weight: 1.0
+discriminative_reward_rhythm_weight: 1.0
+early_stop_penalty_weight: 1.0
+invalid_output_penalty_weight: 1.0
+silence_penalty_weight: 1.0
+long_note_penalty_weight: 0.0
+repetition_penalty_weight: 1.0
+repetition_penalty_threshold: 4
+model_part: "chord"
+micro_rollout_batch_size: 384
+rollout_batch_size: 384
+micro_train_batch_size: 48
+train_batch_size: 48
+limit_eval_batches: 4
+num_steps: 1000
+
+# --- GAPT (same block as gapt_hooktheory.yml) -------------------------------------------------
+entropy_loss_coef: 0.01
+gail_reward_weight: 1.0
+gail_discriminative_model_configs:
+  dim: 512
+  depth: 8
+  heads: 8
+  dropout: 0.1
+gail_reward_learning_rate: !!float 9e-5
+reward_update_steps: 5 # update reward every n steps
+reward_update_early_stop_steps: 500
+enable_reward_label_smoothing: true
+gail_reward_formulation: "logits_prob_log"
+reward_update_strategy: "average"
+reward_average_steps: 3
+reward_update_threshold: 1.0
+reward_apply_threshold_after_steps: 200
+logits_vram_swap: true

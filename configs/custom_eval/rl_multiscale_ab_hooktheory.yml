@@ -1,0 +1,30 @@
+# Multiscale reward A/B (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md): how the window rewards reach
+# the policy. Sparse (all averaged onto the last token) vs dense (each window's score at its own
+# position) vs dense + gamma 0.99 (localised credit) vs dense + full-size per-window rewards.
+# MLE and full-context ReaLchords as references. All hooktheory-vocab (5902) models -> the
+# hooktheory reward models for Vendi and the reward-score metrics (in-family for the RL rows).
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/rl_multiscale_ab_hooktheory.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+model:
+  - "MLE=base"
+  - "ReaLchords=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_rerun/actor.pth"
+  - "ReaLchords-M=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale/actor.pth"
+  - "ReaLchords-M-dense=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale_dense/actor.pth"
+  - "ReaLchords-M-dense-gamma99=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale_dense_gamma099/actor.pth"
+  - "ReaLchords-M-dense-fullscale=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_multiscale_dense_fullscale/actor.pth"
+seed: 42
+
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/rl_multiscale_ab_hooktheory
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+clamp2_samples: 0
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+reward_score_contrastive_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward/step=8000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2/step=8000.ckpt"
+reward_score_discriminative_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs/step=1500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2/step=1500.ckpt"

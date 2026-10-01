@@ -14,7 +14,7 @@ log_every_n_steps: 1
 checkpoint_interval: 1000
 checkpoint_metric: "val/loss"
 checkpoint_mode: "min"
-checkpoint_top_k: 5 # 5 best by val/loss (all would be ~12 GB per run)
+checkpoint_top_k: -1 # keep every checkpoint: the aggregate val/loss picks a different step than each corpus would (see journal/DATASET_MIX_LOO.md)
 accelerator: "auto"
 devices: "auto"
 num_nodes: 1

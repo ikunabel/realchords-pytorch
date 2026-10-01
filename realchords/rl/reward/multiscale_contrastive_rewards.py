@@ -28,23 +28,13 @@ from realchords.model.reward_model import ContrastiveReward
 from realchords.rl.experience_maker import Samples
 from realchords.rl.reward.base import BaseRewardModel
 from realchords.rl.utils import assign_reward_to_last_token
-from realchords.utils.sequence_utils import add_bos_to_sequence, add_eos_to_sequence
+from realchords.utils.sequence_utils import (
+    add_bos_to_sequence,
+    add_eos_to_sequence,
+    window_starts,
+)
 
 MULTISCALE_OVERLAP_FRACTION = 0.5
-
-
-def window_starts(num_frames: int, window_len: int, stride: int) -> List[int]:
-    """Return frame start indices for sliding windows (matches segment dataset)."""
-    if num_frames <= 0:
-        return []
-    if num_frames <= window_len:
-        return [0]
-
-    starts = list(range(0, num_frames - window_len + 1, stride))
-    last_start = num_frames - window_len
-    if starts[-1] != last_start:
-        starts.append(last_start)
-    return starts
 
 
 def sliding_window_ends(
@@ -221,6 +211,7 @@ class MultiscaleContrastiveRewardFn(BaseRewardModel):
         model_part: str,
         max_windows_per_forward: int = 8192,
         dense_placement: bool = False,
+        dense_keep_window_scale: bool = False,
     ):
         super().__init__()
         if len(multiscale_models) != len(window_lens):
@@ -241,6 +232,11 @@ class MultiscaleContrastiveRewardFn(BaseRewardModel):
         self.model_part = model_part
         self.max_windows_per_forward = max_windows_per_forward
         self.dense_placement = dense_placement
+        # dense_keep_window_scale: place each window's score at full size instead of dividing it
+        # by the number of windows of that scale. The per-sequence sum then grows with the number
+        # of windows (short scales contribute most) rather than staying equal to the sparse
+        # variant's single score -- i.e. the local signal is no longer ~1% of a reward term.
+        self.dense_keep_window_scale = dense_keep_window_scale
 
     @property
     def device(self) -> torch.device:
@@ -383,7 +379,9 @@ class MultiscaleContrastiveRewardFn(BaseRewardModel):
                 stride = max(1, int(window_len * MULTISCALE_OVERLAP_FRACTION))
                 ends = sliding_window_ends(valid_lens, window_len, stride)
                 counts = torch.bincount(sample_idx, minlength=valid_lens.shape[0]).float()
-                values = window_scores / counts[sample_idx] / num_parts
+                values = window_scores / num_parts
+                if not self.dense_keep_window_scale:
+                    values = values / counts[sample_idx]
                 reward = reward + place_window_rewards(
                     sample_idx.to(sequence.device), ends.to(sequence.device),
                     values.to(sequence.device), action_mask,

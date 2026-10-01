@@ -1,0 +1,13 @@
+# A/B cell 1 on top of realchords_multiscale_dense.yml: discount the return.
+# With gamma = 1 (rl_realchords_base.yml) a reward placed at frame t still enters the advantage of
+# every earlier action at full weight, so even dense placement is effectively a global reward --
+# the locality the multi-scale windows carry (probe: window score vs local note-in-chord,
+# Pearson 0.56-0.68 on policy output, journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md) never reaches the
+# policy per position. gamma 0.99 keeps credit near the window that earned it
+# (0.99^100 ~ 0.37 over an interleaved rollout of ~340 actions).
+# Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
+
+$include:
+  - configs/rl/realchords_multiscale_dense.yml
+
+gamma: 0.99

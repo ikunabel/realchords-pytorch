@@ -1,0 +1,54 @@
+# Hooktheory-only decoder in the current 2969-chord vocab -- the "all other corpora held out"
+# variant of the dataset-mix study (journal/DATASET_MIX_LOO.md). The older hooktheory-only model
+# (decoder_only_online_chord) uses the 2821-chord vocab and so cannot be evaluated on the other
+# corpora, whose chords it partly lacks. Identical to the 7sets config except for the dataset list
+# (alpha is irrelevant with a single corpus).
+# Trainer hyperparameters, for Trainer and lit_module
+seed: 42
+train_steps: 50000
+val_interval: 1000
+sample_interval: 5000
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 1000
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: -1 # keep every checkpoint: the aggregate val/loss picks a different step than each corpus would (see journal/DATASET_MIX_LOO.md)
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+
+early_stopping_patience: 15
+
+# Data hyperparameters, for get_weighted_dataloader
+batch_size: 64
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "chord"
+model_type: "decoder_only"
+max_len: 512
+
+datasets: ["hooktheory"]
+alpha: 0.5
+data_augmentation: true
+
+# Optimizer hyperparameters
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
+# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+warmup_steps: 1000
+
+# Model hyperparameters
+DecoderTransformer.dim: 512
+DecoderTransformer.depth: 8
+DecoderTransformer.heads: 8
+DecoderTransformer.max_seq_len: 514 # bos, eos
+DecoderTransformer.dropout: 0.1

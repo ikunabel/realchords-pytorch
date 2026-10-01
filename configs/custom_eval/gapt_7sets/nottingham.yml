@@ -1,0 +1,25 @@
+# GAPT fine-tuned on the 7-dataset mixture vs its own MLE initialisation, on the nottingham test set.
+# First RL run in the 6198-token vocab, so unlike the hooktheory RL line it can use the 7sets
+# reward models: Vendi (contrastive_checkpoint) and the frozen-reward-model metrics
+# (reward_score_*, GT scored too as the reference level). CLaMP 2 off (slow, and its FMD is noisy).
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/gapt_7sets/nottingham.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_7mhnk76x/step=10000.ckpt"
+model:
+  - "MLE_7sets=base"
+  - "GAPT_7sets=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets/actor.pth"
+seed: 42
+
+dataset_name: nottingham
+dataset_split: test
+save_dir: logs/custom_eval/gapt_7sets/nottingham
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+clamp2_samples: 0
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_jeti8h2l/step=4000.ckpt"
+reward_score_contrastive_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_jeti8h2l/step=4000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_7sets_qsnz0vp2/step=6000.ckpt"
+reward_score_discriminative_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_7sets_ylftoy2r/step=2000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2_7sets_d2xc1z1b/step=3000.ckpt"

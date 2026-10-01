@@ -5,7 +5,9 @@ tested:
   1. dense: each sequence's summed reward == the combined score (sparse mode);
   2. dense: window rewards sit on model-lane positions (even action indices)
      inside the sequence, legacy share on the last action token;
-  3. default (sparse) mode: a single reward on the last token, as before.
+  3. default (sparse) mode: a single reward on the last token, as before;
+  4. dense + keep_window_scale: same positions, but each window's score is placed at full size,
+     so the per-sequence sum exceeds the combined score (more windows -> more reward).
 
 Run: python tests/test_multiscale_dense_placement.py
 """
@@ -81,7 +83,30 @@ def check(cls, name):
     print(f"{name}: OK")
 
 
+def check_keep_window_scale(cls, name):
+    """dense + keep_window_scale: same rewarded positions, larger sum than the scaled variant."""
+    torch.manual_seed(0)
+    samples, valid_frames = make_samples()
+    stub = lambda: nn.Linear(1, 1)
+    kwargs = dict(
+        legacy_models=[stub(), stub()], multiscale_models=[stub(), stub()],
+        window_lens=[16, 32], pad_token_id=PAD, bos_token_id=BOS, eos_token_id=EOS,
+        model_part="chord",
+    )
+    scaled = cls(**kwargs, dense_placement=True)(samples)["reward"]
+    full = cls(**kwargs, dense_placement=True, dense_keep_window_scale=True)(samples)["reward"]
+    assert (scaled.nonzero() == full.nonzero()).all(), f"{name}: placement changed"
+    for row, n in enumerate(valid_frames):
+        assert full[row].sum() > scaled[row].sum() + 1e-6, (
+            f"{name}: row {row} sum {full[row].sum():.5f} not larger than {scaled[row].sum():.5f}")
+        print(f"  {name} row {row} ({n} frames): full-scale sum {full[row].sum():.5f} "
+              f"vs scaled {scaled[row].sum():.5f}")
+    print(f"{name} keep_window_scale: OK")
+
+
 if __name__ == "__main__":
     check(StubContrastive, "contrastive")
     check(StubDiscriminative, "discriminative")
+    check_keep_window_scale(StubContrastive, "contrastive")
+    check_keep_window_scale(StubDiscriminative, "discriminative")
     print("all checks passed")

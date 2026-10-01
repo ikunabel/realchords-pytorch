@@ -1,0 +1,31 @@
+# Alpha sweep on the 7-set mixture (alpha = 0 / 0.25 / 0.5 / 1, seeds 42/43/44), on the
+# pop909 test set. Each cell contributes the checkpoint that is best on *this corpus's*
+# validation loss, not the alpha-weighted aggregate: the corpora's optima are up to 5x apart
+# in step at alpha=0 (jazzmus ~4k, hooktheory ~22k) and aggregate selection costs 4.6% there
+# against 0.6% at alpha=1, which would bias the comparison against low alpha.
+# See journal/DATASET_MIX_LOO.md. CLaMP 2 off (FMD cannot separate these).
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/alpha_sweep/pop909.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0_oh80o5uw/step=8000.ckpt"
+model:
+  - "a0.s42=base"
+  - "a0.s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0_dvcy9lth/step=10000.ckpt"
+  - "a0.s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0_kpfypmhp/step=9000.ckpt"
+  - "a0p25.s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.25_45w7avqy/step=9000.ckpt"
+  - "a0p25.s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0.25_886c2hra/step=9000.ckpt"
+  - "a0p25.s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0.25_xak6woo7/step=9000.ckpt"
+  - "a0p5.s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_jyn38tk8/step=9000.ckpt"
+  - "a0p5.s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0.5_66mbi6mg/step=9000.ckpt"
+  - "a0p5.s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0.5_khxa06xe/step=10000.ckpt"
+  - "a1.s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=1_nvx3f6rz/step=10000.ckpt"
+  - "a1.s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=1_yfo43iir/step=11000.ckpt"
+  - "a1.s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=1_bo6g1pl1/step=10000.ckpt"
+seed: 42
+
+dataset_name: pop909
+dataset_split: test
+save_dir: logs/custom_eval/alpha_sweep_allwin/pop909
+batch_size: 64
+num_batches: -1
+midi_samples: 0
+clamp2_samples: 0
+all_windows: true

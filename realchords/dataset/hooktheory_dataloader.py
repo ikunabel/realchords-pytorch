@@ -17,9 +17,18 @@ from copy import deepcopy
 
 from realchords.constants import DATA_PATH, FRAME_PER_BEAT
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
-from realchords.utils.sequence_utils import pad_and_get_mask
+from realchords.utils.sequence_utils import window_starts, pad_and_get_mask
 from realchords.utils.io_utils import CombinedJSONLIndexer, JSONLIndexer, save_jsonl
 from realchords.utils.logging_utils import logger
+
+# Splits that combine several cache files. "valid+test" is for evaluating datasets whose test
+# split alone is too small (e.g. WJD/FiloBass); note that valid was used for checkpoint selection.
+COMBINED_SPLITS = {"all": ("train", "valid", "test"), "valid+test": ("valid", "test")}
+
+
+def split_names(split: str) -> Tuple[str, ...]:
+    """Cache-file splits that make up ``split`` (itself, or the parts of a combined split)."""
+    return COMBINED_SPLITS.get(split, (split,))
 
 
 class HooktheoryDataset(Dataset):
@@ -37,6 +46,7 @@ class HooktheoryDataset(Dataset):
         cache_dir: str = "",
         data_augmentation: bool = True,
         load_augmented_chord_names: bool = False,
+        all_windows: bool = False,
         num_workers: int = 8,
         seed: int = 0,
         **kwargs,
@@ -49,7 +59,8 @@ class HooktheoryDataset(Dataset):
             frame_per_beat (int, optional): Number of frames per beat. Defaults to FRAME_PER_BEAT.
             chord_names_path (str, optional): Path to the chord names. Defaults to CHORD_NAMES_PATH.
             model_part (str, optional): Model part to use. Defaults to "chord".
-            split (str, optional): Split to use. Use "all" for train+valid+test combined.
+            split (str, optional): Split to use. Use "all" for train+valid+test combined,
+                "valid+test" for valid and test combined.
                 Defaults to "train".
             max_len (int, optional): Maximum length of the sequence. Defaults to 512.
             model_type (str, optional): Model type. Defaults to "decoder_only".
@@ -65,12 +76,12 @@ class HooktheoryDataset(Dataset):
                 stay genuinely random regardless of this seed. Defaults to 0.
 
         Raises:
-            ValueError: If the split is not in ["train", "valid", "test", "all"].
+            ValueError: If the split is not in ["train", "valid", "test", "all", "valid+test"].
             ValueError: If the model type is not in ["decoder_only", "encoder_decoder", "decoder_only_single"].
             ValueError: If the model part is not in ["chord", "melody"].
             FileNotFoundError: If cache files are not found at cache_dir.
         """
-        assert split in ["train", "valid", "test", "all"]
+        assert split in ["train", "valid", "test", *COMBINED_SPLITS]
         # decoder_only: ReaLchords, online representation
         # encoder_decoder: ReaLchords, offline representation
         # decoder_only_single: only one part, unconditional generation
@@ -97,6 +108,8 @@ class HooktheoryDataset(Dataset):
             )
         self.model_type = model_type
         self.data_augmentation = data_augmentation
+        self.all_windows = all_windows
+        self._window_index = None   # built lazily: [(row, start), ...] when all_windows
         self.load_augmented_chord_names = load_augmented_chord_names
         self.num_workers = num_workers
         self.seed = seed
@@ -128,13 +141,13 @@ class HooktheoryDataset(Dataset):
                 Path(self.cache_dir)
                 / f"chord_names{self.chord_names_cache_postfix}.json"
             )
-        if self.split == "all":
+        if self.split in COMBINED_SPLITS:
             cache_files_exist = all(
                 (
                     Path(self.cache_dir)
                     / f"{split_name}{self.cache_postfix}.jsonl"
                 ).exists()
-                for split_name in ("train", "valid", "test")
+                for split_name in split_names(self.split)
             )
         else:
             cache_files_exist = self.cache_path.exists()
@@ -153,14 +166,14 @@ class HooktheoryDataset(Dataset):
                 import time
 
                 start_time = time.time()
-                if self.split == "all":
+                if self.split in COMBINED_SPLITS:
                     cache_paths = [
                         Path(self.cache_dir)
                         / f"{split_name}{self.cache_postfix}.jsonl"
-                        for split_name in ("train", "valid", "test")
+                        for split_name in split_names(self.split)
                     ]
                     self.data = CombinedJSONLIndexer(cache_paths)
-                    logger.info(f"Loaded full dataset ({len(self.data)} items)")
+                    logger.info(f"Loaded {self.split} ({len(self.data)} items)")
                 else:
                     self.data = JSONLIndexer(self.cache_path)
                 end_time = time.time()
@@ -214,7 +227,28 @@ class HooktheoryDataset(Dataset):
         Returns:
             int: Number of items in the dataset.
         """
+        if self.all_windows:
+            return len(self._windows())
         return len(self.data)
+
+    def _windows(self):
+        """[(row index, crop start)] covering every song completely, built once.
+
+        One window per song loses most of a long song -- at a 16-bar window the single-crop eval
+        scored 21% of an average POP909 song. Non-overlapping windows (`stride == window_len`, with
+        a tail-aligned final window) cover 100% of every corpus, and metrics are averaged **within a
+        song first**, so each song still contributes one number and the song stays the unit of
+        inference. See journal/DATALOADER.md.
+        """
+        if self._window_index is None:
+            index = []
+            for row in range(len(self.data)):
+                item = self.process_item(self.data[row])
+                n = len(item["melody"])
+                for start in window_starts(n, self.max_len_per_part, self.max_len_per_part):
+                    index.append((row, start))
+            self._window_index = index
+        return self._window_index
 
     @property
     def num_tokens(self):
@@ -411,13 +445,19 @@ class HooktheoryDataset(Dataset):
                 - targets_mask (torch.Tensor): Mask for target sequence
                 - song_url (str): URL of the song
         """
+        start = None
+        if self.all_windows:
+            idx, start = self._windows()[idx]
         item = self.data[idx]
         item = self.process_item(item)
         melody = torch.tensor(item["melody"])
         chord = torch.tensor(item["chord"])
 
-        # Random crop
-        melody, chord = self.random_crop(melody, chord, idx)
+        if start is None:
+            melody, chord = self.random_crop(melody, chord, idx)
+        else:
+            end = start + self.max_len_per_part
+            melody, chord = melody[start:end], chord[start:end]
 
         # Serialize
         output = self.serialize(melody, chord)

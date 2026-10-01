@@ -25,12 +25,14 @@ passed) the standard [-6, +6] semitone transposition augmentation applied to
 TRAIN only. This keeps row counts equal to song counts in every split, same
 as every other dataset.
 
-All songs were engraved for guitar ("Nylon Guitar"), and about half the files
-declare ``<transpose><octave-change>-1</octave-change>`` (written a full
-octave above sounding pitch). ``extract_melody_and_chords_from_musicxml`` now
-calls ``score.toSoundingPitch()`` before reading pitches, so this is handled
-automatically -- without it, roughly half the corpus's melodies would come out
-a full octave too high.
+All songs were engraved for guitar ("Nylon Guitar"), which is notated an octave
+above sounding pitch. Two mechanisms are needed to land on sounding pitch:
+``extract_melody_and_chords_from_musicxml`` calls ``score.toSoundingPitch()``,
+which handles the 216 files that declare ``<transpose><octave-change>-1``; and
+``needs_guitar_octave_correction()`` handles the other 162, which omit the
+declaration altogether and would otherwise keep their melodies a full octave
+too high (median MIDI 76 against 62 for the declaring files, other corpora
+being near 69). Chord symbols are unaffected -- they are pitch classes.
 
 Usage::
 
@@ -42,6 +44,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import xml.etree.ElementTree as ET
 from copy import deepcopy
@@ -92,6 +95,32 @@ def _pick_representative_file(xml_files: List[Path]) -> Path:
         if f.stem.lower() == _REPRESENTATIVE_KEY_PREFERENCE:
             return f
     return xml_files[0]
+
+
+_TRANSPOSE_RE = re.compile(r"<octave-change>\s*(-?\d+)\s*</octave-change>")
+
+
+def needs_guitar_octave_correction(xml_file: Path) -> bool:
+    """True when this file is written an octave up but fails to declare it.
+
+    The corpus is engraved uniformly for nylon guitar, which is notated an octave above sounding
+    pitch. 216 of the 378 representative files declare that with
+    ``<transpose><octave-change>-1</octave-change>``, which ``score.toSoundingPitch()`` applies; the
+    remaining 162 omit the element entirely, so their melodies stay at *written* pitch -- a median
+    of MIDI 76 against MIDI 62 for the declaring files, where the other corpora sit near 69.
+
+    That the omission is a metadata defect rather than a genuinely higher register is visible in the
+    distributions: shifting the undeclared files down an octave aligns them with the declared ones
+    almost exactly (peak bucket MIDI 64-67, 81 songs against 79; next bucket 21 against 21). It is
+    also audible; the A/B renders used to confirm it are described in journal/DATASET_SUMMARY.md
+    and can be regenerated with scripts/data/render_cmd_octave_ab.py.
+
+    Only the melody is affected; chord symbols are pitch classes and carry no octave.
+    """
+    try:
+        return not _TRANSPOSE_RE.search(xml_file.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return False
 
 
 def discover_representative_xml_files(data_path: Path) -> List[Path]:
@@ -187,6 +216,8 @@ def process_chord_melody_file(
         return None
 
     melody_notes = parsed["melody"]
+    if needs_guitar_octave_correction(xml_file):
+        melody_notes = [{**note, "octave": note["octave"] - 1} for note in melody_notes]
     chords = _correct_chord_onsets(parsed["chords"], xml_file)
     if not melody_notes or not chords:
         return None

@@ -89,12 +89,22 @@ def discover_dataset_midi_dirs(gt_root: Path, split_mode: str) -> Dict[str, Path
     currently write). When both exist for the same base name, keep only the
     ``_all`` one -- it's a superset, so keeping both double-counts the same
     songs.
+
+    Two export layouts exist: older runs wrote the files straight into ``midi/``,
+    while ``export_paired_midis.py`` now writes one subdirectory per source
+    (``midi/gt/`` for a gt_only config, plus one per model elsewhere). The
+    ``gt`` subdirectory is preferred where present, so a directory holding
+    model output alongside the ground truth can never contribute both.
     """
     dirs: Dict[str, Path] = {}
     for dataset_dir in sorted(gt_root.iterdir()):
         midi_dir = dataset_dir / split_mode / "midi"
-        if midi_dir.is_dir() and any(midi_dir.glob("*.mid")):
-            dirs[dataset_dir.name] = midi_dir
+        if not midi_dir.is_dir():
+            continue
+        for candidate in (midi_dir / "gt", midi_dir):
+            if candidate.is_dir() and any(candidate.glob("*.mid")):
+                dirs[dataset_dir.name] = candidate
+                break
 
     deduped: Dict[str, Path] = {}
     for name, midi_dir in dirs.items():

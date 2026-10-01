@@ -1,0 +1,21 @@
+# Smoke test for the frozen-reward-model metrics + by-name vocab remap: hooktheory-vocab models
+# (5902 tokens) scored with the 7sets reward models (6198 tokens), 64 sequences. Delete freely.
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder_only_online_chord/step=11000.ckpt"
+model:
+  - "MLE=base"
+  - "ReaLchords=/hpcwork/thes2192/realchords/logs/my_logs/rl/realchords_rerun/actor.pth"
+seed: 42
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/_smoketest_reward_score
+batch_size: 32
+num_batches: 2
+midi_samples: 0
+clamp2_samples: 0
+contrastive_checkpoint: "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_jeti8h2l/step=4000.ckpt"
+reward_score_contrastive_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_jeti8h2l/step=4000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_7sets_qsnz0vp2/step=6000.ckpt"
+reward_score_discriminative_checkpoint:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_7sets_ylftoy2r/step=2000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2_7sets_d2xc1z1b/step=3000.ckpt"

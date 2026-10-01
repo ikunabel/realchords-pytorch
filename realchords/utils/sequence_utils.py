@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn.functional as F
-from typing import Tuple
+from typing import List, Tuple
 
 
 def pad_and_get_mask(
@@ -202,3 +202,24 @@ def get_seperated_parts_from_sequence(
     model_mask = model_tokens != pad_token_id
     context_mask = context_tokens != pad_token_id
     return context_tokens, model_tokens, context_mask, model_mask
+
+
+def window_starts(num_frames: int, window_len: int, stride: int) -> List[int]:
+    """Frame start indices for windows of `window_len`, advancing by `stride`.
+
+    `stride == window_len` gives non-overlapping windows, which is what the evaluation uses to score
+    a whole song instead of one sampled excerpt. A song shorter than the window yields a single
+    start of 0 (it is scored whole), and when the length is not a multiple of the stride a final
+    window aligned to the song's end is appended -- so the tail is never dropped, at the cost of that
+    last window overlapping its predecessor.
+    """
+    if num_frames <= 0:
+        return []
+    if num_frames <= window_len:
+        return [0]
+
+    starts = list(range(0, num_frames - window_len + 1, stride))
+    last_start = num_frames - window_len
+    if starts[-1] != last_start:
+        starts.append(last_start)
+    return starts

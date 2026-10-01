@@ -1,0 +1,39 @@
+# GAPT alpha sweep, evaluated under the same protocol as the MLE sweep: 16-bar window
+# (cropped_max_len 512), every non-overlapping window (all_windows), window as the unit,
+# eval seed 42. Labels match configs/custom_eval/alpha_sweep/ exactly, so a GAPT cell and
+# its MLE counterpart are scored on byte-identical windows and can be compared per window.
+#
+# base_model is only the architecture/vocab donor -- ".pth" entries load RL actor weights on
+# top of it (custom_evaluation.py: 'Label=path.pth  load RL actor weights on the base model').
+# All 12 actors descend from 7sets decoders, which share one chord vocab, so a single donor
+# is correct. It is deliberately NOT listed as a model row; the MLE reference numbers already
+# exist in logs/custom_eval/alpha_sweep_allwin/.
+#
+# The policies were trained against the retrained alpha=1 7sets reward ensembles
+# (contrastive_reward_7sets_pq9vuhz9 + _2_hhwz2yzr, both alpha=1). Vendi is left off here,
+# as in the MLE sweep, so both runs carry the same metric set.
+# Run: python scripts/eval/custom_eval/run_custom_eval.py configs/custom_eval/gapt_alpha/pop909.yml
+base_model: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0_oh80o5uw/step=8000.ckpt
+model:
+- a0.s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.seed=42/actor.pth
+- a0.s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.seed=43/actor.pth
+- a0.s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.seed=44/actor.pth
+- a0p25.s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.25.seed=42/actor.pth
+- a0p25.s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.25.seed=43/actor.pth
+- a0p25.s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.25.seed=44/actor.pth
+- a0p5.s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.5.seed=42/actor.pth
+- a0p5.s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.5.seed=43/actor.pth
+- a0p5.s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=0.5.seed=44/actor.pth
+- a1.s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=1.seed=42/actor.pth
+- a1.s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=1.seed=43/actor.pth
+- a1.s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_7sets.alpha=1.seed=44/actor.pth
+seed: 42
+dataset_name: pop909
+dataset_split: test
+save_dir: logs/custom_eval/gapt_alpha_allwin/pop909
+batch_size: 64
+num_batches: -1
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true

@@ -90,6 +90,7 @@ Outputs (all in --save_dir):
 import copy
 import json
 import re
+import sys
 from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -98,14 +99,17 @@ import types
 
 import argbind
 import numpy as np
+import yaml
 import torch
 from lightning import seed_everything
 from tqdm import tqdm
 
 from realchords.constants import FRAME_PER_BEAT
+from realchords.dataset.hooktheory_dataloader import COMBINED_SPLITS, split_names
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.lit_module.decoder_only import LitDecoder
 from realchords.lit_module.enc_dec import LitEncoderDecoder
+from realchords.rl.reward.model_based_rewards import ContrastiveRewardFn
 from realchords.utils.chord_diversity_analysis import (
     compute_vendi_score,
     load_contrastive_reward_direct,
@@ -143,6 +147,8 @@ from realchords.utils.experiment_utils_model_data import (
 )
 from realchords.utils.inference_utils import load_lit_model, load_rl_model
 from realchords.utils.clamp2_metrics import GT_KEY as CLAMP2_GT_KEY, compute_clamp2_metrics
+from realchords.utils.reward_scoring import build_token_remap, load_reward_model, reward_metrics
+from realchords.utils.experiment_summary import experiment_root, write_experiment_summary
 from realchords.utils.midi_export import (
     resolve_include_chord_bass,
     select_midi_indices,
@@ -281,6 +287,7 @@ def _compute_vendi_score(
     reward_model: torch.nn.Module,
     device: torch.device,
     batch_size: int = 128,
+    remap: Optional[torch.Tensor] = None,
 ) -> Optional[float]:
     """Vendi diversity score for one population: one source's (GT, or one
     model's) full accumulated tensor within one crop-variant run.
@@ -311,6 +318,8 @@ def _compute_vendi_score(
             batch = tensor[start : start + batch_size]
             if batch.size(1) == 0:
                 continue
+            if remap is not None:
+                batch = remap[batch]
             model_tokens, _, model_mask, _ = reward_wrapper.get_inputs_from_sequence(batch)
             chord_mask = (
                 (model_tokens != pad) & (model_tokens != bos) & (model_tokens != eos)
@@ -326,6 +335,31 @@ def _compute_vendi_score(
     return compute_vendi_score(embeddings)
 
 
+def _reward_scores(
+    tensor: torch.Tensor,
+    tokenizer,
+    checkpoints: Optional[Dict[str, List[str]]],
+    device: torch.device,
+    label: str,
+) -> Dict[str, float]:
+    """Frozen-reward-model scores for one source, or {} when none are configured.
+
+    See realchords/utils/reward_scoring.py: the same contrastive/discriminative models used as RL
+    rewards, applied as metrics, with GT scored too as the reference level. Token ids are
+    translated to the reward model's vocabulary by chord name where the two differ.
+    """
+    if not checkpoints or not any(checkpoints.values()):
+        return {}
+    scores = reward_metrics(
+        tensor, tokenizer,
+        contrastive_checkpoints=checkpoints.get("contrastive", []),
+        discriminative_checkpoints=checkpoints.get("discriminative", []),
+        device=device,
+    )
+    print(f"  {label} " + "  ".join(f"{k}={v:.4f}" for k, v in scores.items()))
+    return scores
+
+
 def _save_mean_metrics(
     tensor: torch.Tensor,
     tokenizer,
@@ -336,6 +370,7 @@ def _save_mean_metrics(
     reward_wrapper: Optional[object],
     reward_model: Optional[torch.nn.Module],
     device: torch.device,
+    vendi_remap_tokenizer=None,
 ) -> Dict[str, object]:
     """Rhythm/silence/synchronization metrics for one source (GT or a model).
 
@@ -391,7 +426,11 @@ def _save_mean_metrics(
     # _compute_vendi_score's docstring. Skipped entirely (None) when no
     # contrastive checkpoint was given.
     vendi_score = (
-        _compute_vendi_score(tensor, reward_wrapper, reward_model, device)
+        _compute_vendi_score(
+            tensor, reward_wrapper, reward_model, device,
+            remap=build_token_remap(tokenizer, vendi_remap_tokenizer)
+            if vendi_remap_tokenizer is not None else None,
+        )
         if reward_model is not None
         else None
     )
@@ -450,12 +489,13 @@ def _hooktheory_tonics(
     """
     if dataset_name.lower() != "hooktheory":
         return [None] * len(metadata)
-    path = Path(DATASET_CACHE_DIRS["hooktheory"]) / f"{dataset_split.lower()}.jsonl"
     keys_by_id: Dict[str, List[Dict]] = {}
-    with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            item = json.loads(line)
-            keys_by_id[item["hooktheory"]["id"]] = item["annotations"]["keys"]
+    for split in split_names(dataset_split.lower()):
+        path = Path(DATASET_CACHE_DIRS["hooktheory"]) / f"{split}.jsonl"
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                item = json.loads(line)
+                keys_by_id[item["hooktheory"]["id"]] = item["annotations"]["keys"]
     tonics: List[Optional[int]] = []
     for entry in metadata:
         keys = keys_by_id.get(entry.get("song_id"))
@@ -494,7 +534,7 @@ def _paired_chord_metrics(
 GROUP = __file__
 bind = partial(argbind.bind, group=GROUP)
 
-_VALID_DATASET_SPLITS = {"train", "valid", "test", "all"}
+_VALID_DATASET_SPLITS = {"train", "valid", "test", *COMBINED_SPLITS}
 
 
 def _slugify(label: str) -> str:
@@ -581,7 +621,7 @@ def _max_song_frames(
     longer than the crop length.
     """
     cache_dir = Path(DATASET_CACHE_DIRS[dataset_name.lower()])
-    splits = ["train", "valid", "test"] if dataset_split == "all" else [dataset_split]
+    splits = split_names(dataset_split)
     all_beats: List[int] = []
     for split in splits:
         split_path = cache_dir / f"{split}.jsonl"
@@ -724,6 +764,8 @@ def _run_eval(
     midi_samples: int = 10,
     seed: int = 42,
     clamp2_samples: int = 0,
+    reward_score_checkpoints: Optional[Dict[str, List[str]]] = None,
+    vendi_remap_tokenizer=None,
 ) -> None:
     """Run one full eval pass (dataloader → generation → save) into save_dir.
 
@@ -740,6 +782,7 @@ def _run_eval(
         model_part="chord",
         batch_size=args.batch_size,
         max_len=max_len,
+        all_windows=args.all_windows,
         chord_names_path=dataset_chord_names_path,
     )
     dataset_tokenizer = val_loader.dataset.tokenizer
@@ -920,7 +963,9 @@ def _run_eval(
     gt_means = _save_mean_metrics(
         gt_tensor, dataset_tokenizer, gt_out, gt_prefix, gt_chords,
         reward_wrapper=reward_wrapper, reward_model=reward_model, device=device,
+        vendi_remap_tokenizer=vendi_remap_tokenizer,
     )
+    gt_means.update(_reward_scores(gt_tensor, dataset_tokenizer, reward_score_checkpoints, device, "gt"))
     print(
         f"  gt/{gt_prefix}chord_durations.pt / {gt_prefix}note_durations.pt  "
         f"chord_entropy={gt_means['chord_duration_entropy']:.4f} "
@@ -979,6 +1024,10 @@ def _run_eval(
             model_means = _save_mean_metrics(
                 tensor, model_tokenizer, out_dir, "", model_chords,
                 reward_wrapper=reward_wrapper, reward_model=reward_model, device=device,
+                vendi_remap_tokenizer=vendi_remap_tokenizer,
+            )
+            model_means.update(
+                _reward_scores(tensor, model_tokenizer, reward_score_checkpoints, device, slug)
             )
             model_means_by_label[label] = model_means
             model_paired_metrics[label] = _paired_chord_metrics(
@@ -1045,6 +1094,9 @@ def _run_eval(
             # explicitly as the literal parallel to the ReaLchords paper's Table 1
             # "Test set" row, which is the same trivial self-comparison.
             "sync_emd_vs_gt": 0.0,
+            # frozen-reward-model scores (reward_scoring.py); GT is the reference level
+            **{key: _fmt_metric(value) for key, value in gt_means.items()
+               if key.startswith("reward_")},
             **{key: _fmt_metric(value) for key, value in clamp2_by_label.get(CLAMP2_GT_KEY, {}).items()},
         },
         "models": {},
@@ -1067,6 +1119,8 @@ def _run_eval(
             ),
             "chord_complexity_mean": _fmt_metric(model_means["chord_complexity_mean"]),
             "vendi_score": _fmt_metric(model_means["vendi_score"]),
+            **{key: _fmt_metric(value) for key, value in model_means.items()
+               if key.startswith("reward_")},
             **{key: _fmt_metric(value) for key, value in comparison.items()},
             **{key: _fmt_metric(value) for key, value in model_paired_metrics[label].items()},
             "num_sequences_with_key": num_keyed,
@@ -1163,9 +1217,13 @@ def main(
     seed: int = 42,
     device: str = "auto",
     contrastive_checkpoint: str = "",
+    reward_score_contrastive_checkpoint: List[str] = [],
+    reward_score_discriminative_checkpoint: List[str] = [],
     run_full_songs: bool = True,
     midi_samples: int = 10,
     clamp2_samples: int = 0,
+    cropped_max_len: int = 512,
+    all_windows: bool = False,
 ) -> None:
     """
     Args:
@@ -1212,6 +1270,18 @@ def main(
             disables. -1 renders every song (slow for large splits --
             prefer running scripts/eval/custom_eval/export_paired_midis.py
             separately for that instead of setting this to -1).
+        all_windows: Score every non-overlapping window of each song instead of one sampled
+            window. Covers 100% of every corpus (one window covers 21% of an average POP909 song)
+            and removes the eval-seed lottery, which moves a JAZZMUS cell by up to 0.042 -- as large
+            as the effects being compared. **The window is the unit**: metrics average over windows,
+            not over songs, which matches how Hooktheory is already treated (its rows are verse /
+            chorus / bridge sections of a song, not songs) and makes the unit "16 bars of music" in
+            every corpus. See journal/DATALOADER.md.
+        cropped_max_len: Window for the cropped_songs view, in *tokens*; the two lanes interleave,
+            so frames per lane is half this (512 -> 256 frames = 64 beats = 16 bars). Matches
+            `max_len` in the training configs. Was hardcoded at 256 (8 bars), i.e. models were
+            trained on 16-bar windows and scored on 8-bar ones, and the value was not recorded in
+            the run's args.yml. See journal/DATASET_SUMMARY.md.
         clamp2_samples: Model-comparison mode only. Number of randomly chosen
             sequences (same ones for GT and every model, seeded by seed) to
             render with the plain export voicing and score with CLaMP 2:
@@ -1261,6 +1331,14 @@ def main(
         with open(dataset_chord_names_path, encoding="utf-8") as fh:
             eval_vocab_num_tokens = HooktheoryTokenizer(chord_names=json.load(fh)).num_tokens
 
+    # Frozen reward models used as metrics (optional): contrastive "do the chords fit this
+    # melody" and discriminative "does this pair look real", scored for GT as well so the GT row
+    # is the reference level. See realchords/utils/reward_scoring.py.
+    reward_score_checkpoints = {
+        "contrastive": list(reward_score_contrastive_checkpoint),
+        "discriminative": list(reward_score_discriminative_checkpoint),
+    }
+
     # Vendi score is optional: it needs a contrastive reward checkpoint
     # whose chord embedding table (fixed at whatever vocab it was trained
     # on) matches eval_vocab_num_tokens exactly, since raw chord token ids
@@ -1275,11 +1353,31 @@ def main(
     # --contrastive_checkpoint and Vendi is simply not computed
     # (vendi_score: null in means.json) rather than computed wrong.
     reward_wrapper = reward_model = None
+    vendi_remap_tokenizer = None
     if contrastive_checkpoint:
         print(f"Loading contrastive reward ({contrastive_checkpoint}) for Vendi score …")
-        reward_wrapper, reward_model, vendi_device = load_contrastive_reward_direct(
-            contrastive_checkpoint, device_obj, eval_vocab_num_tokens
-        )
+        try:
+            reward_wrapper, reward_model, vendi_device = load_contrastive_reward_direct(
+                contrastive_checkpoint, device_obj, eval_vocab_num_tokens
+            )
+        except ValueError:
+            # Different vocab: score through the by-name token remap instead of refusing, so one
+            # contrastive model can be the common Vendi instrument for models whose vocabs differ
+            # (exact as long as every evaluated chord name exists in the reward model's vocab --
+            # checked in reward_scoring.build_token_remap). See realchords/utils/reward_scoring.py.
+            reward_model, vendi_remap_tokenizer = load_reward_model(
+                contrastive_checkpoint, "contrastive", device_obj
+            )
+            reward_wrapper = ContrastiveRewardFn(
+                model=reward_model,
+                pad_token_id=vendi_remap_tokenizer.pad_token,
+                bos_token_id=vendi_remap_tokenizer.bos_token,
+                eos_token_id=vendi_remap_tokenizer.eos_token,
+                model_part="chord",
+            )
+            vendi_device = next(reward_model.parameters()).device
+            print(f"  vocab differs ({eval_vocab_num_tokens} vs "
+                  f"{vendi_remap_tokenizer.num_tokens}) -- remapping tokens by chord name")
         print(f"  → on {vendi_device}")
     else:
         print("No --contrastive_checkpoint given -- Vendi score will not be computed.")
@@ -1290,6 +1388,7 @@ def main(
         batch_size=batch_size,
         num_batches=num_batches,
         gt_only=gt_only,
+        all_windows=all_windows,
     )
 
     if gt_only:
@@ -1303,7 +1402,7 @@ def main(
             model_tokenizer=model_tokenizer,
             model_specs=model_specs,
             model_types=model_types,
-            max_len=256,  # legacy crop length: 8-bar melody + 8-bar chord
+            max_len=cropped_max_len,
             save_dir=save_dir_path / "cropped_songs",
             run_label="cropped_songs",
             reward_wrapper=reward_wrapper,
@@ -1311,6 +1410,8 @@ def main(
             dataset_chord_names_path=dataset_chord_names_path,
             midi_samples=midi_samples,
             seed=seed,
+            reward_score_checkpoints=reward_score_checkpoints,
+            vendi_remap_tokenizer=vendi_remap_tokenizer,
         )
         if run_full_songs:
             # +1 bar of margin: num_beats can under-count by a frame or two
@@ -1338,6 +1439,8 @@ def main(
                 dataset_chord_names_path=dataset_chord_names_path,
                 midi_samples=midi_samples,
                 seed=seed,
+                reward_score_checkpoints=reward_score_checkpoints,
+            vendi_remap_tokenizer=vendi_remap_tokenizer,
             )
         else:
             print("run_full_songs=False -- skipping full_songs, cropped_songs only.")
@@ -1353,7 +1456,7 @@ def main(
             model_tokenizer=model_tokenizer,
             model_specs=model_specs,
             model_types=model_types,
-            max_len=256,  # legacy crop length: 8-bar melody + 8-bar chord
+            max_len=cropped_max_len,
             save_dir=save_dir_path,
             run_label="eval",
             reward_wrapper=reward_wrapper,
@@ -1362,11 +1465,54 @@ def main(
             midi_samples=midi_samples,
             seed=seed,
             clamp2_samples=clamp2_samples,
+            reward_score_checkpoints=reward_score_checkpoints,
+            vendi_remap_tokenizer=vendi_remap_tokenizer,
         )
+
+    # Plain summary of the whole experiment this run belongs to (logs/custom_eval/<experiment>/
+    # summary.json); every run of a multi-run experiment rewrites it, so it's complete once the
+    # last one finishes. Skipped for run_multi_model_eval.py's staging sub-runs.
+    summary_root = experiment_root(save_dir_path)
+    if summary_root is not None:
+        summary_path = write_experiment_summary(summary_root)
+        if summary_path is not None:
+            print(f"experiment summary → {summary_path}")
+
+
+def _reject_multi_model_config() -> None:
+    """Fail loudly if handed a run_multi_model_eval.py experiment yml.
+
+    argbind silently ignores yml keys that match no bound argument, so such a
+    config would not error here -- it would run the *default* model instead of
+    the listed ones and write a plausible-looking result under the experiment's
+    save_dir. The two schemas are told apart by their list key: this script
+    takes "model:" ("label=path" strings), that one takes "models:" (mappings).
+    """
+    argv = sys.argv[1:]
+    paths = []
+    for i, tok in enumerate(argv):
+        if tok == "--args.load" and i + 1 < len(argv):
+            paths.append(argv[i + 1])
+        elif tok.startswith("--args.load="):
+            paths.append(tok.split("=", 1)[1])
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                spec = yaml.safe_load(fh)
+        except (OSError, yaml.YAMLError):
+            continue  # let argbind report a malformed/missing config itself
+        if isinstance(spec, dict) and "models" in spec:
+            raise SystemExit(
+                f"{path} is a run_multi_model_eval.py experiment yml: it has a "
+                f"'models:' list, which this script would silently ignore. "
+                f"Run instead:\n"
+                f"  python scripts/eval/custom_eval/run_multi_model_eval.py {path}"
+            )
 
 
 if __name__ == "__main__":
     torch.set_grad_enabled(False)
+    _reject_multi_model_config()
     args = argbind.parse_args(group=GROUP)
     if args.get("save_dir"):
         argbind.dump_args(args, Path(args["save_dir"]) / "args.yml")

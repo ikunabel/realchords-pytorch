@@ -1,0 +1,57 @@
+# alpha sweep cell (journal/DATASET_MIX_LOO.md): the 7-set mixture at alpha=1,
+# everything else identical to the alpha=0.5 config it was copied from. alpha=0 is
+# uniform over corpora, alpha=1 proportional to frame count.
+# seed-42 run of the same mix, for the training-seed noise band. All runs identical except the
+# dataset list: seed 42, constant LR 1e-4, alpha 0.5, architecture of decoder_only_online_chord.
+# Checkpoint = lowest val/loss over the *training* datasets only (the held-out one isn't in the
+# val set), so the held-out dataset plays no part in model selection.
+# This one: all 7 datasets (baseline for the leave-one-out runs).
+# Trainer hyperparameters, for Trainer and lit_module
+seed: 43
+train_steps: 50000
+val_interval: 1000
+sample_interval: 5000
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 1000
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: -1 # keep every checkpoint: the aggregate val/loss picks a different step than each corpus would (see journal/DATASET_MIX_LOO.md)
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+
+early_stopping_patience: 15
+
+# Data hyperparameters, for get_weighted_dataloader
+batch_size: 64
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "chord"
+model_type: "decoder_only"
+max_len: 512
+
+datasets: ["hooktheory", "pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
+alpha: 1
+data_augmentation: true
+
+# Optimizer hyperparameters
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
+# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+warmup_steps: 1000
+
+# Model hyperparameters
+DecoderTransformer.dim: 512
+DecoderTransformer.depth: 8
+DecoderTransformer.heads: 8
+DecoderTransformer.max_seq_len: 514 # bos, eos
+DecoderTransformer.dropout: 0.1

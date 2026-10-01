@@ -27,6 +27,27 @@ from realchords.utils.data_utils import (
 )
 
 
+def parse_meter(meter: str) -> Dict:
+    """ABC ``M:`` header -> the cache's meter annotation.
+
+    ``M:6/8`` becomes ``{"beats_per_bar": 6, "beat_unit": 8}``; "C" (common time) and "C|" (cut
+    time) are spelled out. Falls back to 4/4 when the header is missing or unparsable.
+
+    Note for consumers: this is the notated metre, so the *pulse* of a compound metre is three of
+    its beat units (a 6/8 bar is two dotted-quarter pulses = 12 frames), not one beat_unit -- see
+    journal/DATASET_SUMMARY.md, "Rhythmic characterisation of the corpora".
+    """
+    text = (meter or "").strip()
+    if text in ("C", "c"):
+        return {"beat": 0, "beats_per_bar": 4, "beat_unit": 4}
+    if text in ("C|", "c|"):
+        return {"beat": 0, "beats_per_bar": 2, "beat_unit": 2}
+    match = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s*$", text)
+    if match:
+        return {"beat": 0, "beats_per_bar": int(match.group(1)), "beat_unit": int(match.group(2))}
+    return {"beat": 0, "beats_per_bar": 4, "beat_unit": 4}
+
+
 def parse_abc_header(abc_content: str) -> Dict:
     """Parse ABC notation header to extract metadata.
 
@@ -538,7 +559,7 @@ def parse_abc_file(abc_file_path: str) -> List[Dict]:
                 },
                 "annotations": {
                     "num_beats": (int(current_offset) if current_offset > 0 else 32),
-                    "meters": [{"beat": 0, "beats_per_bar": 4, "beat_unit": 4}],
+                    "meters": [parse_meter(metadata.get("meter", ""))],
                     "keys": [
                         {
                             "beat": 0,

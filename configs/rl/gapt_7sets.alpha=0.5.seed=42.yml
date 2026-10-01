@@ -1,0 +1,67 @@
+# GAPT on the 7-set mixture at alpha=0.5, seed 42 -- the RL half of the alpha sweep.
+# Policy and offline anchor are this cell's own MLE models (best val/loss). The reward
+# models are shared across all cells and trained at alpha=1: they are fixed apparatus, so
+# only the policy's mixture varies, and a discriminator wants hard negatives rather than a
+# matched output distribution (journal/DATASET_MIX_LOO.md).
+#
+#
+
+$include:
+  - configs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5.yml
+  - configs/single_agent_rl/rl_realchords_base.yml
+
+chord_names_path: "data/cache/chord_names_augmented.json"
+lit_module_override_args:
+  chord_names_path: "data/cache/chord_names_augmented.json"
+  data_path: "data/hooktheory/Hooktheory.json.gz"
+  num_workers: 4
+pretrain_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_jyn38tk8/step=9000.ckpt"
+anchor_model_path: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=42.alpha=0.5_17g8gs0m/step=15000.ckpt"
+contrastive_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_7sets_pq9vuhz9/step=7500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_2_7sets_hhwz2yzr/step=6500.ckpt"
+discriminative_reward_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_7sets_1qgxpr8d/step=2000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_128_bs_2_7sets_m85va5cr/step=3000.ckpt"
+contrastive_reward_rhythm_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_7sets_ehe4yx96/step=3000.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/contrastive_reward/contrastive_reward_no_augmentation_rhythm_2_7sets_8d35bmos/step=2500.ckpt"
+discriminative_reward_rhythm_model_path:
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_7sets_gbtrzzzd/step=2500.ckpt"
+  - "/hpcwork/thes2192/realchords/logs/my_logs/discriminative_reward/discriminative_reward_no_augmentation_rhythm_2_7sets_wn3do381/step=3000.ckpt"
+
+contrastive_reward_weight: 1.0
+discriminative_reward_weight: 1.0
+contrastive_reward_rhythm_weight: 1.0
+discriminative_reward_rhythm_weight: 1.0
+early_stop_penalty_weight: 1.0
+invalid_output_penalty_weight: 1.0
+silence_penalty_weight: 1.0
+long_note_penalty_weight: 0.0
+repetition_penalty_weight: 1.0
+repetition_penalty_threshold: 4
+model_part: "chord"
+micro_rollout_batch_size: 384
+rollout_batch_size: 384
+micro_train_batch_size: 48
+train_batch_size: 48
+limit_eval_batches: 4
+num_steps: 1000
+
+entropy_loss_coef: 0.01
+gail_reward_weight: 1.0
+gail_discriminative_model_configs:
+  dim: 512
+  depth: 8
+  heads: 8
+  dropout: 0.1
+gail_reward_learning_rate: !!float 9e-5
+reward_update_steps: 5 # update reward every n steps
+reward_update_early_stop_steps: 500
+enable_reward_label_smoothing: true
+gail_reward_formulation: "logits_prob_log"
+reward_update_strategy: "average"
+reward_average_steps: 3
+reward_update_threshold: 1.0
+reward_apply_threshold_after_steps: 200
+logits_vram_swap: true

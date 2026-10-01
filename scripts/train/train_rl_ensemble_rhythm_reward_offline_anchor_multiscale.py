@@ -300,6 +300,7 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
         eos_token_id=tokenizer.eos_token,
         model_part=args.model_part,
         dense_placement=getattr(args, "multiscale_dense_reward", False),
+        dense_keep_window_scale=getattr(args, "multiscale_dense_keep_window_scale", False),
     )
     multiscale_discriminative_reward_fn = MultiscaleDiscriminativeRewardFn(
         legacy_models=legacy_discriminative_models,
@@ -310,6 +311,7 @@ def main(args, save_dir: str = "", num_steps: int = 1000):
         eos_token_id=tokenizer.eos_token,
         model_part=args.model_part,
         dense_placement=getattr(args, "multiscale_dense_reward", False),
+        dense_keep_window_scale=getattr(args, "multiscale_dense_keep_window_scale", False),
     )
 
     reward_configs = [

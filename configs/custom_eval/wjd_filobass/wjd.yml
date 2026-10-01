@@ -1,0 +1,20 @@
+# Jazz / walking-bass datasets (WJD, FiloBass): encoder-decoder trained on WJD+FiloBass only
+# (seed 42, alpha 0.5, constant LR; best val/loss step 3000 of 5 kept) vs the 7sets
+# encoder-decoder (seed 1, alpha 0.5; step 13000 as in four_way_hooktheory_vs_7sets), which never
+# saw either dataset. Both offline (see the full melody), same 6198-token vocab -> one run.
+# No reward model for this vocab -> no Vendi. CLaMP 2 on all test sequences (FMD only
+# meaningful if N >> 768 -- see clamp2_num_sequences_*).
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/wjd_filobass/wjd.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.wjd_filobass.seed=42.alpha=0.5_643oteil/step=3000.ckpt"
+model:
+  - "EncDec_WJD_FiloBass=base"
+  - "EncDec_7sets=/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
+seed: 42
+
+dataset_name: wjd
+dataset_split: test
+save_dir: logs/custom_eval/wjd_filobass/wjd
+batch_size: 64
+num_batches: -1
+midi_samples: 10
+clamp2_samples: -1

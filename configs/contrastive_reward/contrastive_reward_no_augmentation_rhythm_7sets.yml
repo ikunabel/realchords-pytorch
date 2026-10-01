@@ -1,0 +1,49 @@
+# Reward model for the 7-dataset mix (hooktheory/pop909/nottingham/wikifonia/
+# chord_melody_dataset/jazzmus/emopia_plus), i.e. the same data and sampling (alpha 0.5) as the
+# 7sets policy and its offline anchor -- needed for GAPT on the 7sets mix (the existing reward
+# models are hooktheory- or 3-dataset-only and use a different chord vocab). Otherwise identical
+# to the 3-dataset version of the same reward model. See journal/DATASET_MIX_LOO.md.
+# Trainer hyperparameters, for Trainer and lit_module
+seed: 42
+train_steps: 8000
+val_interval: 100
+sample_interval: 1000
+max_log_examples: 8
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 500
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: 3 # 3 best by val/loss (was -1 = keep all; see journal/DATASET_MIX_LOO.md)
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+
+# Data hyperparameters, for get_weighted_dataloader
+batch_size: 196
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "chord"
+model_type: "encoder_decoder"
+max_len: 512
+datasets: ["hooktheory", "pop909", "nottingham", "wikifonia", "chord_melody_dataset", "jazzmus", "emopia_plus"]
+alpha: 1 # proportional: equalises per-item exposure and makes ~47% of in-batch negatives same-corpus (22% at 0.5) -- a discriminator needs hard negatives, not a matched output distribution
+data_augmentation: false
+load_augmented_chord_names: true
+
+# Optimizer hyperparameters
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+# Model hyperparameters
+ContrastiveReward.dim: 512
+ContrastiveReward.depth: 6
+ContrastiveReward.heads: 6
+ContrastiveReward.max_seq_len: 258 # bos, eos
+EncoderDecoderTransformer.dropout: 0.1
+
