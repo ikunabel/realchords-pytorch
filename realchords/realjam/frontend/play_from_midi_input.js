@@ -135,7 +135,7 @@ function showMainScreen() {
   });
 
   // Enable WEBMIDI.js and then prepare the input interfaces
-  WebMidi.enable().then(enableMIDIInputs).catch(err => alert(err));
+  enableMIDI();
 }
 
 /** Download audio recording and JSON of the most recent session */
@@ -176,6 +176,7 @@ function toggleLiveSession() {
     Tone.Transport.cancel();
     stopMetronome();
     pianoNotes.forEach(note => chordSynth.triggerRelease(note));
+    midiAllOff();
     visual.clearScheduledNotes(0);
     visual.stopAllNotes();
     recorder.stop();
@@ -327,6 +328,16 @@ function scheduleReferenceLoop(melody, chords, baseFrame, loopFrames) {
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
+  scheduleMidiMelody(melody, baseFrame);
+  // The whole melody is known in advance here, so it can fall towards the
+  // keys like the chords do. (Not in a live session with a robot melody:
+  // processAgentAction clears every scheduled note on each model response.)
+  // All onsets before any release, so a repeated pitch's release attaches
+  // to the right note (scheduleNoteOff picks the latest earlier onset).
+  melody.forEach(({ pitch, onset }) => visual.scheduleNoteOn(
+    pitch, baseFrame + Math.round(onset * fpb), 'orange', 1.0));
+  melody.forEach(({ pitch, offset }) => visual.scheduleNoteOff(
+    pitch, baseFrame + Math.round(offset * fpb)));
 
   chords.forEach(({ pitches, onset, offset, symbol }) => {
     const onFrame = baseFrame + Math.round(onset * fpb);
@@ -339,11 +350,36 @@ function scheduleReferenceLoop(melody, chords, baseFrame, loopFrames) {
       pitches, offFrame, frameToTransportTime(offFrame), false);
   });
 
+  if (midiChordOut) {
+    // Each annotated chord is a fresh strike. A release only goes out where
+    // the music actually rests: where the next chord starts at the same
+    // frame, releasing and pressing at once would defeat the piano's action.
+    const onsetFrames = new Set(
+      chords.map(({ onset }) => baseFrame + Math.round(onset * fpb)));
+    chords.forEach(({ pitches, onset, offset }, i) => {
+      const onFrame = baseFrame + Math.round(onset * fpb);
+      const offFrame = baseFrame + Math.round(offset * fpb);
+      // Previous chord, wrapping to the last one of the previous pass
+      const prevOnFrame = i > 0 ?
+        baseFrame + Math.round(chords[i - 1].onset * fpb) :
+        baseFrame - loopFrames + Math.round(chords[chords.length - 1].onset * fpb);
+      scheduleMidiChord(pitches, onFrame, true, prevOnFrame);
+      if (!onsetFrames.has(offFrame)) {
+        scheduleMidiChord([], offFrame, false);
+      }
+    });
+  }
+
+  // Schedule the next play-through ahead of the boundary rather than at it,
+  // so its opening notes are already falling into view, and so MIDI events
+  // sent early (Send Early) for its first beats aren't already stale.
+  const aheadFrames = Math.min(
+    Math.floor(loopFrames / 2), getLookaheadFrames() + 2 * fpb);
   Tone.Transport.scheduleOnce(() => {
     if (curSession && curSession.referenceOnly) {
       scheduleReferenceLoop(melody, chords, nextFrame, loopFrames);
     }
-  }, frameToTransportTime(nextFrame));
+  }, frameToTransportTime(nextFrame - aheadFrames));
 }
 
 /**
@@ -363,6 +399,7 @@ function scheduleMelodyLoop(notes, baseFrame, loopFrames) {
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
+  scheduleMidiMelody(notes, baseFrame);
 
   Tone.Transport.scheduleOnce(() => {
     // Stops the loop once the session has been ended some other way
@@ -392,11 +429,13 @@ function scheduleRobotNote(pitch, on, absFrame) {
     }
     curSession.noteHistory.push(
       { on, pitch, frame: absFrame - curSession.startFrame });
+    // With a MIDI output the piano plays the melody (scheduleMidiMelody);
+    // this event still feeds the model and the piano roll.
     if (on) {
-      melodySynth.triggerAttack(note, '+0', melodyVelocity);
+      if (!midiChordOut) melodySynth.triggerAttack(note, '+0', melodyVelocity);
       visual.noteOn(pitch);
     } else {
-      melodySynth.triggerRelease(note);
+      if (!midiChordOut) melodySynth.triggerRelease(note);
       visual.noteOff(pitch);
     }
   }, frameToTransportTime(absFrame));
@@ -628,14 +667,15 @@ async function advanceChordNow() {
 
   if (curSession.manualChord) {
     curSession.manualChord.pitches.forEach(pitch => {
-      chordSynth.triggerRelease(pitchToNote[pitch]);
+      if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
       visual.noteOff(pitch);
     });
   }
   chord.pitches.forEach(pitch => {
-    chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
+    if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
     visual.noteOn(pitch, 'blue');
   });
+  midiStrikeNow(chord.pitches);
 
   curSession.chordTokens[frame] = chord.onsetToken;
   curSession.manualChord = { ...chord, startFrame: frame };
@@ -760,6 +800,20 @@ function processAgentAction(
       eventID => Tone.Transport.clear(eventID));
   }
 
+  // MIDI chord changes for the frames being re-planned. Each poll re-plans
+  // every future frame, usually identically; MIDI events go out early, so
+  // cancelling and rescheduling an unchanged chord could double or delay it.
+  // Keep the existing event when the plan for its frame hasn't changed.
+  const midiReplanned = new Map();
+  midiScheduledByFrame.forEach((entry, frame) => {
+    if (frame >= clearFrame) {
+      midiReplanned.set(frame, entry);
+    }
+    if (frame >= clearFrame || frame < curFrame - 64) {
+      midiScheduledByFrame.delete(frame);
+    }
+  });
+
   // Track the most recent non-empty voicing (regardless of scheduling), so
   // it can be sent back as prevVoicing next poll for voice-leading
   // continuity across separate /play calls.
@@ -800,8 +854,30 @@ function processAgentAction(
         symbol,
         eventIDs: offEventIDs.concat(onEventIDs)
       });
+
+      if (midiChordOut) {
+        const key = `${on}|${pitches.join(',')}`;
+        const prior = midiReplanned.get(scheduleFrame);
+        if (prior && prior.key === key) {
+          midiReplanned.delete(scheduleFrame);
+          midiScheduledByFrame.set(scheduleFrame, prior);
+        } else {
+          // Latest earlier change on the piano, i.e. when the keys about to
+          // be re-struck were last pressed
+          const prevFrame = [...midiScheduledByFrame.keys()]
+            .filter(f => f < scheduleFrame)
+            .reduce((a, b) => Math.max(a, b), -Infinity);
+          midiScheduledByFrame.set(scheduleFrame, {
+            key, ids: scheduleMidiChord(pitches, scheduleFrame, on,
+              prevFrame === -Infinity ? undefined : prevFrame)
+          });
+        }
+      }
     }
   });
+
+  // Whatever wasn't re-planned identically is no longer part of the plan
+  midiReplanned.forEach(({ ids }) => ids.forEach(id => Tone.Transport.clear(id)));
 }
 
 /**
@@ -1139,7 +1215,9 @@ function playBrowsedVoicing() {
     voicingBrowserOffTimeout = null;
   }
   if (voicingBrowserActivePitches.length) {
-    chordSynth.triggerRelease(voicingBrowserActivePitches.map(pitch => pitchToNote[pitch]));
+    if (!midiChordOut) {
+      chordSynth.triggerRelease(voicingBrowserActivePitches.map(pitch => pitchToNote[pitch]));
+    }
     voicingBrowserActivePitches.forEach(pitch => visual.noteOff(pitch));
     voicingBrowserActivePitches = [];
   }
@@ -1147,7 +1225,12 @@ function playBrowsedVoicing() {
   const beatsPerMeasure = Tone.Transport.timeSignature;
   const barSeconds = (60 / Tone.Transport.bpm.value) * beatsPerMeasure;
   const noteNames = entry.pitches.map(pitch => pitchToNote[pitch]);
-  chordSynth.triggerAttackRelease(noteNames, barSeconds);
+  if (midiChordOut) {
+    // Replaces the previous voicing on the piano, re-pressing shared keys
+    midiStrikeNow(entry.pitches);
+  } else {
+    chordSynth.triggerAttackRelease(noteNames, barSeconds);
+  }
 
   // Highlight on the piano roll for the same duration as the audio -- plain
   // setTimeout (not Tone.Transport) since this tool runs outside any
@@ -1156,6 +1239,7 @@ function playBrowsedVoicing() {
   voicingBrowserActivePitches = entry.pitches;
   voicingBrowserOffTimeout = setTimeout(() => {
     entry.pitches.forEach(pitch => visual.noteOff(pitch));
+    midiApplyChord([], Tone.context.currentTime);
     voicingBrowserActivePitches = [];
     voicingBrowserOffTimeout = null;
   }, barSeconds * 1000);
@@ -1173,14 +1257,22 @@ function playBrowsedVoicing() {
  * @param {string} note
  * @param {number} velocity
  */
-function playNote(note, velocity) {
+function playNote(note, velocity, fromLaptop = false) {
   const keyIndex = noteToPitch[note];
   if (curSession) {
     curSession.noteHistory.push(
       { on: true, pitch: keyIndex, frame: getSessionCurrentFrame() });
     startGenerationLoop();
   }
-  melodySynth.triggerAttack(note, '+0', velocity);
+  // With a MIDI output the piano sounds the melody. Notes played on the
+  // laptop (keys or mouse) are pressed on the piano; notes coming from a MIDI
+  // input are not sent back, since on a Disklavier that input *is* the piano
+  // and the key is already down.
+  if (!midiChordOut) {
+    melodySynth.triggerAttack(note, '+0', velocity);
+  } else if (fromLaptop) {
+    midiKeyDown(keyIndex, 'laptop', midiMelodyVelocity(), Tone.context.currentTime);
+  }
   visual.noteOn(keyIndex);
 }
 
@@ -1188,13 +1280,17 @@ function playNote(note, velocity) {
  * Release melody note and add to history
  * @param {string} note
  */
-function releaseNote(note) {
+function releaseNote(note, fromLaptop = false) {
   const keyIndex = noteToPitch[note];
   if (curSession) {
     curSession.noteHistory.push(
       { on: false, pitch: keyIndex, frame: getSessionCurrentFrame() });
   }
-  melodySynth.triggerRelease(note);
+  if (!midiChordOut) {
+    melodySynth.triggerRelease(note);
+  } else if (fromLaptop) {
+    midiKeyUp(keyIndex, 'laptop', Tone.context.currentTime);
+  }
   visual.noteOff(keyIndex);
 }
 
@@ -1208,22 +1304,300 @@ function releaseNote(note) {
 function scheduleNote(note, on, playTime) {
   const keyIndex = noteToPitch[note];
   let eventID;
+  // With a MIDI chord output the piano makes the sound (see the MIDI chord
+  // output section below); these events then only drive the piano roll.
   if (on) {
     eventID = Tone.Transport.scheduleOnce(time => {
-      chordSynth.triggerAttack(note, '+0', chordVelocity);
+      if (!midiChordOut) chordSynth.triggerAttack(note, '+0', chordVelocity);
       Tone.Draw.schedule(() => {
         visual.noteOn(keyIndex, 'blue');
       }, time);
     }, playTime);
   } else {
     eventID = Tone.Transport.scheduleOnce(time => {
-      chordSynth.triggerRelease(note);
+      if (!midiChordOut) chordSynth.triggerRelease(note);
       Tone.Draw.schedule(() => {
         visual.noteOff(keyIndex);
       }, time);
     }, playTime);
   }
   return eventID;
+}
+
+/*
+ * MIDI chord output (e.g. a Disklavier)
+ *
+ * The browser-side part of what Aria-Duet does in demo_mlx.py's stream_midi:
+ * the piano's own MIDI IN Delay buffer (~500 ms) is meant to be switched off,
+ * and its mechanical latency is covered here by sending every chord change
+ * `midiLeadMs` early. All chords use one velocity (the MIDI Chord Velocity
+ * control), so one lead suffices -- but softer notes sound later, so the lead
+ * has to be re-tuned when the velocity changes. Note-ons and note-offs share
+ * the lead, which keeps their order intact.
+ *
+ * Exactly one chord sounds at a time, so the piano is driven as a state:
+ * midiApplyChord releases whatever isn't in the new chord and attacks what
+ * isn't sounding yet. Pitches shared by consecutive chords are held rather
+ * than released and re-pressed in the same instant, which the action can't
+ * do; resending the same chord is a no-op; and a re-planned chord can never
+ * leave notes stuck. A chord *onset* is a genuine re-strike, so its shared
+ * pitches are lifted midiRestrikeGapMs() early to let the action reset.
+ */
+let chordOutputSelect, midiLeadInput, midiVelocityInput, midiRestrikeInput,
+  midiMinHoldInput, midiMelodyVelocityInput;
+let midiChordOut = null;               // WebMidi Output; null = laptop synth
+const midiSounding = new Set();        // pitches currently held on the piano
+let midiScheduledByFrame = new Map();  // frame -> {key, ids}, see processAgentAction
+/**
+ * Longest a key is released before the same note is struck again. After a
+ * long note an upright's hammer rests on the backcheck and needs the key to
+ * come most of the way up before the jack resets; measured on the ENSPIRE
+ * U1 at velocity 40, 50 ms fails after holds over ~250 ms while 150 ms works;
+ * 200 leaves margin (one browser run at velocity 55 missed notes at 150).
+ * Louder notes repeat more easily, so soft ones set this value.
+ * @return {number}
+ */
+function midiRestrikeGapMs() {
+  const ms = midiRestrikeInput.valueAsNumber;  // NaN when the field is empty
+  return Number.isNaN(ms) ? 200 : Math.max(0, ms);
+}
+
+/**
+ * Shortest time a key is held before its release for a re-strike. A soft
+ * note needs ~100 ms of key travel before the hammer is thrown; release it
+ * sooner and the note is skipped or comes out weak.
+ * @return {number}
+ */
+function midiMinHoldMs() {
+  const ms = midiMinHoldInput.valueAsNumber;
+  return Number.isNaN(ms) ? 130 : Math.max(0, ms);
+}
+
+const MIDI_MIN_GAP_MS = 50;
+
+/**
+ * Release time before re-striking a key that was pressed `spacingSec`
+ * earlier. Long notes get the full gap. Fast repeats keep at least the min
+ * hold and give the release what's left: a short hold doesn't let the
+ * hammer settle on the backcheck, so it resets in as little as 50 ms
+ * (measured on the U1: hold 137 ms + release 50 ms repeats cleanly, hold
+ * 37 ms + release 150 ms skips notes). Below ~150 ms between strikes no
+ * split works on the upright; the gap then bottoms out at 50 ms.
+ * @param {number=} spacingSec - Time since the key was last pressed;
+ *   undefined when unknown
+ * @return {number} Seconds
+ */
+function midiRestrikeGapFor(spacingSec) {
+  const maxGap = midiRestrikeGapMs() / 1000;
+  if (spacingSec === undefined) return maxGap;
+  const fit = Math.max(MIDI_MIN_GAP_MS / 1000, spacingSec - midiMinHoldMs() / 1000);
+  return Math.min(maxGap, fit);
+}
+const MIDI_STALE_MS = 50;              // later than this, a note-on is skipped
+
+/**
+ * Turn an audio-clock event time into a Web MIDI timestamp, so the message
+ * goes out exactly then even if the callback ran a little early.
+ * @param {number} audioTime - AudioContext time from a Transport callback
+ * @return {number} performance.now()-based timestamp
+ */
+function midiTimestamp(audioTime) {
+  const aheadMs = (audioTime - Tone.context.currentTime) * 1000;
+  return performance.now() + Math.max(0, aheadMs);
+}
+
+/** Chord velocity on the piano, i.e. its loudness (1-127; 0 would be a note-off). */
+function midiVelocity() {
+  return Math.min(127, Math.max(1, Math.round(midiVelocityInput.valueAsNumber || 40)));
+}
+
+/** Robot-melody velocity on the piano (1-127). */
+function midiMelodyVelocity() {
+  return Math.min(127, Math.max(1, Math.round(midiMelodyVelocityInput.valueAsNumber || 55)));
+}
+
+/*
+ * Key arbiter. Chords and the robot melody play the same 88 keys, so each
+ * key records who is holding it: it goes down for its first holder and comes
+ * up only once nobody holds it. A chord change can then never cut off a
+ * melody note on a shared key, and vice versa. A note that lands on a key
+ * already held by the other part keeps sounding rather than being re-struck.
+ */
+const midiKeyHolders = new Map();  // pitch -> Set of 'chord' | 'melody'
+
+function midiKeyDown(pitch, holder, velocity, audioTime) {
+  const holders = midiKeyHolders.get(pitch) || new Set();
+  if (holders.size === 0) {
+    midiChordOut.send([0x90, pitch, velocity], { time: midiTimestamp(audioTime) });
+  }
+  holders.add(holder);
+  midiKeyHolders.set(pitch, holders);
+}
+
+function midiKeyUp(pitch, holder, audioTime) {
+  const holders = midiKeyHolders.get(pitch);
+  if (!holders || !holders.delete(holder)) return;
+  if (holders.size === 0) {
+    midiChordOut.send([0x80, pitch, 0], { time: midiTimestamp(audioTime) });
+    midiKeyHolders.delete(pitch);
+  }
+}
+
+function midiNoteOn(pitch, audioTime) {
+  midiKeyDown(pitch, 'chord', midiVelocity(), audioTime);
+  midiSounding.add(pitch);
+}
+
+function midiNoteOff(pitch, audioTime) {
+  midiKeyUp(pitch, 'chord', audioTime);
+  midiSounding.delete(pitch);
+}
+
+/**
+ * Schedule a robot melody on the piano, `midiLeadMs` early.
+ *
+ * The melody is known a whole loop ahead, so repeated notes can be handled
+ * like Aria's _adjust_previous_off_time: where the same pitch comes back
+ * sooner than the re-strike gap, its release is pulled earlier (never before
+ * its own onset) so the action has reset by the time it's struck again.
+ * Cleared with everything else by Tone.Transport.cancel() when the session
+ * stops.
+ * @param {Array<{pitch: number, onset: number, offset: number}>} notes
+ * @param {number} baseFrame - Transport frame the loop starts at
+ */
+function scheduleMidiMelody(notes, baseFrame) {
+  if (!midiChordOut) return;
+  const lead = (midiLeadInput.valueAsNumber || 0) / 1000;
+  const now = Tone.Transport.seconds;
+  const toSec = beats => Tone.Time(frameToTransportTime(
+    baseFrame + Math.round(beats * fpb))).toSeconds();
+
+  const timed = notes
+    .map(({ pitch, onset, offset }) => ({ pitch, on: toSec(onset), off: toSec(offset) }))
+    .sort((a, b) => a.on - b.on);
+  timed.forEach((note, i) => {
+    const next = timed.slice(i + 1).find(n => n.pitch === note.pitch);
+    const gap = next && midiRestrikeGapFor(next.on - note.on);
+    if (next && next.on - note.off < gap) {
+      note.off = Math.max(note.on, next.on - gap);
+    }
+  });
+
+  timed.forEach(({ pitch, on, off }) => {
+    const onAt = on - lead;
+    if (onAt < now - MIDI_STALE_MS / 1000) return;  // too late to sound on time
+    const velocity = midiMelodyVelocity();
+    Tone.Transport.scheduleOnce(t => midiKeyDown(pitch, 'melody', velocity, t),
+      Math.max(onAt, now + 0.002));
+    Tone.Transport.scheduleOnce(t => midiKeyUp(pitch, 'melody', t),
+      Math.max(off - lead, onAt, now + 0.002));
+  });
+}
+
+/** Move the piano from whatever it's holding to exactly `pitches`. */
+function midiApplyChord(pitches, audioTime) {
+  if (!midiChordOut) return;
+  const target = new Set(pitches);
+  [...midiSounding].forEach(p => { if (!target.has(p)) midiNoteOff(p, audioTime); });
+  target.forEach(p => { if (!midiSounding.has(p)) midiNoteOn(p, audioTime); });
+}
+
+/** Lift any of `pitches` currently held, ahead of a re-strike. */
+function midiLift(pitches, audioTime) {
+  if (!midiChordOut) return;
+  pitches.forEach(p => { if (midiSounding.has(p)) midiNoteOff(p, audioTime); });
+}
+
+/**
+ * Schedule a chord change on the piano for `frame`, `midiLeadMs` early.
+ * @param {Array<number>} pitches - New chord; [] releases everything
+ * @param {number} frame - Transport frame the chord should *sound* at
+ * @param {boolean} restrike - Re-press pitches already held (a chord onset)
+ * @param {number=} prevFrame - Frame the previous chord was pressed at,
+ *   which sets how long its keys were held (see midiRestrikeGapFor)
+ * @return {Array<number>} Transport event IDs, cancellable
+ */
+function scheduleMidiChord(pitches, frame, restrike, prevFrame) {
+  const lead = (midiLeadInput.valueAsNumber || 0) / 1000;
+  const now = Tone.Transport.seconds;
+  const soundAt = Tone.Time(frameToTransportTime(frame)).toSeconds();
+  const gap = midiRestrikeGapFor(prevFrame === undefined ? undefined :
+    (frame - prevFrame) * Tone.Time('16n').toSeconds());  // a frame is a 16th
+  let sendAt = soundAt - lead;
+  const ids = [];
+
+  if (sendAt < now - MIDI_STALE_MS / 1000 && pitches.length) {
+    // Learned about this chord too late to sound it on time. Skip it, as
+    // Aria does, rather than play it late; the next change resyncs.
+    return ids;
+  }
+  if (restrike && pitches.length) {
+    const liftAt = Math.max(sendAt - gap, now + 0.002);
+    sendAt = Math.max(sendAt, liftAt + gap);
+    ids.push(Tone.Transport.scheduleOnce(t => midiLift(pitches, t), liftAt));
+  }
+  sendAt = Math.max(sendAt, now + 0.002);
+  ids.push(Tone.Transport.scheduleOnce(t => midiApplyChord(pitches, t), sendAt));
+  return ids;
+}
+
+let midiStrikeToken = 0;
+
+/** Strike a chord right now, outside the Transport schedule (key presses). */
+function midiStrikeNow(pitches) {
+  if (!midiChordOut) return;
+  const token = ++midiStrikeToken;
+  const held = pitches.filter(p => midiSounding.has(p));
+  // New pitches sound at once and the old chord is released, including the
+  // pitches it shares with the new one; those are pressed again once the
+  // action has had time to reset.
+  midiApplyChord(pitches.filter(p => !held.includes(p)), Tone.context.currentTime);
+  if (held.length) {
+    setTimeout(() => {
+      if (token === midiStrikeToken) {  // not superseded by a later press
+        midiApplyChord(pitches, Tone.context.currentTime);
+      }
+    }, midiRestrikeGapMs());
+  }
+}
+
+/** Release everything on the piano, including the sustain pedal. */
+function midiAllOff() {
+  if (!midiChordOut) return;
+  midiStrikeToken++;  // drop any re-press still waiting on its gap
+  midiScheduledByFrame.forEach(({ ids }) => ids.forEach(id => Tone.Transport.clear(id)));
+  midiScheduledByFrame = new Map();
+  [...midiKeyHolders.keys()].forEach(p =>
+    midiChordOut.send([0x80, p, 0], { time: midiTimestamp(Tone.context.currentTime) }));
+  midiKeyHolders.clear();
+  midiSounding.clear();
+  midiChordOut.send([0xB0, 123, 0]);  // all notes off
+  midiChordOut.send([0xB0, 64, 0]);   // sustain pedal up
+}
+
+/** Rebuild the chord output list, keeping the current choice if possible. */
+function refreshMIDIOutputs() {
+  const previous = chordOutputSelect.value;
+  chordOutputSelect.innerHTML = '<option value="">Laptop (instruments)</option>';
+  WebMidi.outputs.forEach(output => {
+    const option = document.createElement('option');
+    option.textContent = output.name;
+    option.value = output.name;
+    chordOutputSelect.appendChild(option);
+  });
+  if (WebMidi.outputs.some(o => o.name === previous)) {
+    chordOutputSelect.value = previous;
+  } else {
+    selectChordOutput('');
+  }
+}
+
+/** @param {string} name - MIDI output name, or '' for the laptop synth */
+function selectChordOutput(name) {
+  midiAllOff();
+  chordSynth.releaseAll();
+  midiChordOut = name ? WebMidi.getOutputByName(name) || null : null;
+  chordOutputSelect.value = midiChordOut ? name : '';
 }
 
 /**
@@ -1329,13 +1703,13 @@ function enableClickingInputs() {
     const playKey = () => {
       index = key.getAttribute('data-index');
       note = pianoNotes[index];
-      playNote(note, melodyVelocity);
+      playNote(note, melodyVelocity, true);
     };
 
     const releaseKey = () => {
       index = key.getAttribute('data-index');
       note = pianoNotes[index];
-      releaseNote(note);
+      releaseNote(note, true);
     };
 
     key.addEventListener('mousedown', playKey);
@@ -1406,7 +1780,7 @@ function enableKeyboardInputs() {
     const note = keysToNotes[event.key];
     if (note && !heldNotes[note]) {
       heldNotes[note] = true;
-      playNote(note, melodyVelocity);
+      playNote(note, melodyVelocity, true);
     }
   });
   document.addEventListener('keyup', event => {
@@ -1416,7 +1790,7 @@ function enableKeyboardInputs() {
     const note = keysToNotes[event.key];
     if (note) {
       heldNotes[note] = false;
-      releaseNote(note);
+      releaseNote(note, true);
     } else if (event.key === 'z') {
       compKeyboardOctave =
         Math.max(compKeyboardOctave - 1, compKeyOctaveRange[0]);
@@ -1430,23 +1804,73 @@ function enableKeyboardInputs() {
 }
 
 /** Create MIDI input dropdown options */
-function enableMIDIInputs() {
-  if (WebMidi.inputs.length < 1) {
-    console.log('No MIDI device detected.');
-    webMIDIInputs = [];
-    interfaceSelect.style = 'display: none';
-  } else {
-    console.log('MIDI devices detected.');
-    webMIDIInputs = WebMidi.inputs;
-    webMIDIInputs.forEach(input => {
-      const name = document.createTextNode(input.name);
-      const option = document.createElement('option');
-      option.append(name);
-      option.value = input.name;
-      interfaceSelect.appendChild(option);
-    });
-    selectMIDIInterface(webMIDIInputs[0].name);
+/**
+ * Show a single disabled status line in the MIDI interface dropdown, so it
+ * says why it's empty instead of silently showing nothing.
+ * @param {string} text
+ */
+function showMIDIStatus(text) {
+  interfaceSelect.innerHTML = '';
+  const option = document.createElement('option');
+  option.textContent = text;
+  option.disabled = true;
+  option.selected = true;
+  interfaceSelect.appendChild(option);
+}
+
+/** Request MIDI access, then keep the input list in sync with hot-plugging */
+function enableMIDI() {
+  if (!window.isSecureContext) {
+    // Web MIDI only exists on https:// or localhost, not on 0.0.0.0 or a LAN IP
+    showMIDIStatus('MIDI needs http://localhost');
+    console.warn('Web MIDI unavailable: open the app via http://localhost:<port>');
+    return;
   }
+  // Chrome asks for MIDI permission via an icon in the address bar; until
+  // it's answered, enable() stays pending
+  showMIDIStatus('Waiting for MIDI permission…');
+  WebMidi.enable()
+    .then(() => {
+      refreshMIDIInputs();
+      refreshMIDIOutputs();
+      WebMidi.addListener('connected', () => {
+        refreshMIDIInputs();
+        refreshMIDIOutputs();
+      });
+      WebMidi.addListener('disconnected', () => {
+        refreshMIDIInputs();
+        refreshMIDIOutputs();
+      });
+    })
+    .catch(err => {
+      showMIDIStatus('MIDI unavailable');
+      console.error('WebMidi.enable failed:', err);
+    });
+}
+
+/**
+ * Rebuild the input dropdown. Keeps the current choice if it's still
+ * connected; otherwise prefers a real device over virtual ports such as
+ * Linux's "Midi Through", which ALSA always lists first.
+ */
+function refreshMIDIInputs() {
+  const previous = interfaceSelect.value;
+  webMIDIInputs = WebMidi.inputs;
+  if (webMIDIInputs.length < 1) {
+    showMIDIStatus('No MIDI device found');
+    return;
+  }
+  interfaceSelect.innerHTML = '';
+  webMIDIInputs.forEach(input => {
+    const option = document.createElement('option');
+    option.textContent = input.name;
+    option.value = input.name;
+    interfaceSelect.appendChild(option);
+  });
+  const names = webMIDIInputs.map(input => input.name);
+  const preferred = names.includes(previous) ? previous :
+    (names.find(n => !/through/i.test(n)) || names[0]);
+  selectMIDIInterface(preferred);
 }
 
 /**
@@ -1458,12 +1882,15 @@ function selectMIDIInterface(name) {
 
   webMIDIInputs.forEach(input => input.removeListener());
   let curInterface = webMIDIInputs.find(input => input.name === name);
+  if (!curInterface) {
+    return;
+  }
 
-  // Display the note name and play the note
-  curInterface.channels[1].addListener('noteon', e => {
+  // Listen on all channels: devices differ in which one they send on
+  curInterface.addListener('noteon', e => {
     playNote(e.note.identifier, e.velocity);
   });
-  curInterface.channels[1].addListener('noteoff', e => {
+  curInterface.addListener('noteoff', e => {
     releaseNote(e.note.identifier);
   });
 }
@@ -1656,6 +2083,21 @@ async function initializeMIDIReader(visual_arg) {
   chordInstSelect = document.getElementById('chord-inst-select');
   melodyInstSelect = document.getElementById('melody-inst-select');
   setupInstrumentSelection();
+  chordOutputSelect = document.getElementById('chord-output-select');
+  chordOutputSelect.addEventListener('change', event => {
+    selectChordOutput(event.target.value);
+    chordOutputSelect.blur();
+  });
+  midiVelocityInput = bindSliderValueDisplay(
+    'midi-velocity-input', 'midi-velocity-value', 0);
+  midiLeadInput = document.getElementById('midi-lead-input');
+  addNumericInputEventListener(midiLeadInput);
+  midiMelodyVelocityInput = bindSliderValueDisplay(
+    'midi-melody-velocity-input', 'midi-melody-velocity-value', 0);
+  midiRestrikeInput = document.getElementById('midi-restrike-input');
+  addNumericInputEventListener(midiRestrikeInput);
+  midiMinHoldInput = document.getElementById('midi-min-hold-input');
+  addNumericInputEventListener(midiMinHoldInput);
 
   // Do initial setup with server
   establishServerConnection();

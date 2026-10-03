@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Tuple, TypedDict
 from urllib.parse import unquote
 
 from realchords.constants import ZERO_OCTAVE
+from realchords.realjam.demo_songs import demo_songs
 from realchords.utils.data_utils import to_chord_name
 
 
@@ -136,6 +137,11 @@ def build_catalogue(
                     "artist": artist,
                 })
                 song_index[(dataset_dir, split, song_id)] = record
+
+    # Synthetic calibration songs for driving a Disklavier (see demo_songs.py)
+    for entry, record in demo_songs():
+        catalogue.append(entry)
+        song_index[(entry["dataset"], entry["split"], entry["id"])] = record
 
     catalogue.sort(key=lambda e: (e["title"].lower(), e["artist"].lower()))
     return catalogue, song_index

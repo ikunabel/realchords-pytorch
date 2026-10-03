@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">
 
-  <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/webmidi@3.3.1/dist/iife/webmidi.iife.js"></script>
   <script src="https://unpkg.com/tone" type="module"></script>
   <script src="https://unpkg.com/@tonejs/midi"></script>
   <script src="tonejs_instruments.js"></script>
@@ -150,6 +150,36 @@
         <div class="flex-wide">
           <label for="melody-inst-select">Melody Instrument</label>
           <select id="melody-inst-select"></select>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="flex-wide">
+          <label for="chord-output-select" title="Where chords and the robot melody play. A MIDI device (e.g. the Disklavier) replaces the laptop instruments for both.">Output</label>
+          <select id="chord-output-select">
+            <option value="">Laptop (instruments)</option>
+          </select>
+        </div>
+        <div class="flex-wide">
+          <label for="midi-velocity-input" title="How hard the piano plays the chords (MIDI velocity). Softer notes sound later, so re-tune Send Early after changing this.">MIDI Chord Velocity</label>
+          <input id="midi-velocity-input" type="range" min="1" max="127" step="1" value="40" />
+          <span id="midi-velocity-value" class="slider-value">40</span>
+        </div>
+        <div class="flex-wide">
+          <label for="midi-melody-velocity-input" title="How hard the piano plays the robot melody (song playback).">MIDI Melody Velocity</label>
+          <input id="midi-melody-velocity-input" type="range" min="1" max="127" step="1" value="55" />
+          <span id="midi-melody-velocity-value" class="slider-value">55</span>
+        </div>
+        <div class="flex-wide">
+          <label for="midi-lead-input" title="Send chords this much early to cover the piano's mechanical latency. Calibrate with MIDI IN Delay off.">MIDI Send Early (ms)</label>
+          <input id="midi-lead-input" type="number" min="0" max="600" step="5" value="100" />
+        </div>
+        <div class="flex-wide">
+          <label for="midi-restrike-input" title="How long a key is released before the same note is struck again, after a long note. Too short and the action can't reset, so the note keeps ringing instead of sounding again. 200 ms works on the ENSPIRE U1 (louder notes need more). Fast repeats get less (see Min Hold).">MIDI Re-strike Gap (ms)</label>
+          <input id="midi-restrike-input" type="number" min="0" max="500" step="10" value="200" />
+        </div>
+        <div class="flex-wide">
+          <label for="midi-min-hold-input" title="For fast repeats of the same key, keep it held at least this long and shorten the re-strike gap instead (down to 50 ms): a soft note released too soon doesn't sound, while a briefly held key resets quickly. Lower it to give fast repeats a longer release instead.">MIDI Min Hold (ms)</label>
+          <input id="midi-min-hold-input" type="number" min="0" max="500" step="10" value="130" />
         </div>
       </div>
       <div class="stack">
