@@ -219,6 +219,10 @@ function startSession(options = {}) {
     loopStarted: false,     // If the generation loop has been kicked off
     manualChord: null,      // Manual mode: chord currently being sustained
     pendingChord: null,     // Manual mode: chord the next space press fires
+    triggeredChord: null,   // Triggered mode: chord sustaining since the
+                             // last space press
+    triggerHistory: [],     // Triggered mode: {frame, symbol, pitches} per
+                             // press, frame relative to session start
     referenceOnly: !!options.referenceOnly,  // Playing ground truth, no model
   };
   liveSessionBtn.textContent = 'Stop Live Session';
@@ -505,6 +509,19 @@ function isManualChordMode() {
 }
 
 /**
+ * If chords follow auto mode's schedule but only sound when the performer
+ * presses space. The model runs exactly as in auto mode -- same polling,
+ * lookahead, commit and chord history, never told about the presses -- so
+ * the schedule is the one auto mode would play; a press plays whatever that
+ * schedule has sounding at that moment. See triggerScheduledChord.
+ * @return {boolean}
+ */
+function isTriggeredChordMode() {
+  return chordTimingSelect.value === 'triggered' &&
+    !(curSession && curSession.referenceOnly);
+}
+
+/**
  * Kick off whichever generation loop the current chord-timing mode uses.
  * Idempotent -- called from several places that can each be the first to
  * happen in a session (first melody note, robot playback, session start in
@@ -690,8 +707,66 @@ async function advanceChordNow() {
   fetchPendingChord();
 }
 
+/**
+ * The schedule's entry sounding at an absolute Transport frame (latest
+ * chordHistory entry at or before it), or null before the first chord.
+ * @param {number} targetFrame
+ * @return {?Object}
+ */
+function getScheduledChordAt(targetFrame) {
+  for (let i = curSession.chordHistory.length - 1; i >= 0; i--) {
+    if (curSession.chordHistory[i].scheduleFrame <= targetFrame) {
+      return curSession.chordHistory[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * Play the chord the schedule has sounding right now, releasing the one
+ * held since the last press. Bound to space in triggered mode. A press
+ * before the scheduled change re-strikes the current chord; the schedule
+ * itself is untouched, so the model never hears about the presses.
+ */
+function triggerScheduledChord() {
+  const entry = getScheduledChordAt(Math.floor(getTransportFrame()));
+  const pitches = entry ? entry.pitches || [] : [];
+
+  if (curSession.triggeredChord) {
+    curSession.triggeredChord.forEach(pitch => {
+      if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
+      visual.noteOff(pitch);
+    });
+  }
+  pitches.forEach(pitch => {
+    if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
+    visual.noteOn(pitch, 'blue');
+  });
+  midiStrikeNow(pitches);
+
+  curSession.triggeredChord = pitches;
+  curSession.triggerHistory.push({
+    frame: getSessionCurrentFrame(),
+    symbol: entry ? entry.symbol : '',
+    pitches,
+  });
+  updateChordTimingInfo();
+}
+
 /** Show what is sounding and what space will play next */
 function updateChordTimingInfo() {
+  if (chordTimingSelect.value === 'triggered') {
+    if (!curSession) {
+      chordTimingInfo.textContent =
+        'Start a session; space plays the chord scheduled at that moment';
+      return;
+    }
+    const last = curSession.triggerHistory[curSession.triggerHistory.length - 1];
+    const now = getScheduledChordAt(Math.floor(getTransportFrame()));
+    chordTimingInfo.textContent =
+      `Playing: ${last && last.symbol || '--'}   Space plays: ${now && now.symbol || '--'}`;
+    return;
+  }
   if (!isManualChordMode()) {
     chordTimingInfo.textContent =
       'Chords play on the model\'s own predicted timing';
@@ -740,7 +815,10 @@ function scheduleChordPitches(
   const bassPitch =
     pitches.reduce((lowest, pitch) => Math.min(lowest, pitch), 1000);
   pitches.forEach(pitch => {
-    eventIDs.push(scheduleNote(pitchToNote[pitch], on, time));
+    // In triggered mode the schedule only falls into view; space plays it
+    if (!isTriggeredChordMode()) {
+      eventIDs.push(scheduleNote(pitchToNote[pitch], on, time));
+    }
     if (showChordsCheck.checked) {
       if (on) {
         visual.scheduleNoteOn(
@@ -814,15 +892,6 @@ function processAgentAction(
     }
   });
 
-  // Track the most recent non-empty voicing (regardless of scheduling), so
-  // it can be sent back as prevVoicing next poll for voice-leading
-  // continuity across separate /play calls.
-  for (const [, pitches] of newChords) {
-    if (pitches && pitches.length) {
-      curSession.lastVoicing = pitches;
-    }
-  }
-
   // Schedule note hits and releases for sent frames
   newChords.forEach(([symbol, pitches, on], frameOffset) => {
     const scheduleFrame = targetFrame + frameOffset;
@@ -839,11 +908,16 @@ function processAgentAction(
 
     const isCommitted = frameOffset < getCommitaheadFrames();
     const prevFramePitches = getChordPitchesAtFrame(scheduleFrame - 1);
+    // Custom voicings are chosen per frame (they follow the melody), so a
+    // hold of the same chord can come back with different pitches. That's
+    // not a change of mind -- keep the voicing the chord started with.
+    const prevEntry = getScheduledChordAt(scheduleFrame - 1);
+    const sameChordHeld = !on && prevEntry && prevEntry.symbol === symbol;
 
     // Onsets - release previous chord and play new chord (or rest)
     // Holds - release previous and play chord if different than previous
     //  (indicates model changed its mind about what chord to play)
-    if (on || !arraysEqual(pitches, prevFramePitches)) {
+    if (on || (!sameChordHeld && !arraysEqual(pitches, prevFramePitches))) {
       const offEventIDs =
         scheduleChordPitches(prevFramePitches, scheduleFrame, time, false);
       const onEventIDs = scheduleChordPitches(
@@ -855,7 +929,7 @@ function processAgentAction(
         eventIDs: offEventIDs.concat(onEventIDs)
       });
 
-      if (midiChordOut) {
+      if (midiChordOut && !isTriggeredChordMode()) {
         const key = `${on}|${pitches.join(',')}`;
         const prior = midiReplanned.get(scheduleFrame);
         if (prior && prior.key === key) {
@@ -878,6 +952,22 @@ function processAgentAction(
 
   // Whatever wasn't re-planned identically is no longer part of the plan
   midiReplanned.forEach(({ ids }) => ids.forEach(id => Tone.Transport.clear(id)));
+
+  // The latest planned voicing, sent back as prevVoicing next poll for
+  // voice-leading continuity across separate /play calls. Taken from what
+  // is actually scheduled, so a re-voiced hold that was kept out above
+  // doesn't become the reference.
+  for (let i = curSession.chordHistory.length - 1; i >= 0; i--) {
+    const { pitches } = curSession.chordHistory[i];
+    if (pitches && pitches.length) {
+      curSession.lastVoicing = pitches;
+      break;
+    }
+  }
+
+  if (isTriggeredChordMode()) {
+    updateChordTimingInfo();
+  }
 }
 
 /**
@@ -1774,6 +1864,13 @@ function enableKeyboardInputs() {
       event.preventDefault();
       if (!event.repeat) {
         advanceChordNow();
+      }
+      return;
+    }
+    if (event.code === 'Space' && curSession && isTriggeredChordMode()) {
+      event.preventDefault();
+      if (!event.repeat) {
+        triggerScheduledChord();
       }
       return;
     }

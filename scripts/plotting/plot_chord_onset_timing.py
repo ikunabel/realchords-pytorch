@@ -65,6 +65,9 @@ def style_axis(ax) -> None:
     ax.set_axisbelow(True)
 
 
+LOG_DIR = Path("logs/eval/chord_onset_timing")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -147,11 +150,12 @@ def main() -> None:
              f"{n_frames:,} frames",
              ha="right", fontsize=7, color=INK_MUTED)
 
-    out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, bbox_inches="tight", facecolor=SURFACE)
-    fig.savefig(out.with_suffix(".png"), bbox_inches="tight", facecolor=SURFACE)
-    print(f"Written {out} and {out.with_suffix('.png')}")
+    # Also keep a copy next to the result JSONs it was drawn from
+    for out in (Path(args.output), LOG_DIR / Path(args.output).name):
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, bbox_inches="tight", facecolor=SURFACE)
+        fig.savefig(out.with_suffix(".png"), bbox_inches="tight", facecolor=SURFACE)
+        print(f"Written {out} and {out.with_suffix('.png')}")
 
 
 if __name__ == "__main__":
