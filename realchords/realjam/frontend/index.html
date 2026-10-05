@@ -29,177 +29,157 @@
   </div>
 
   <div class="loaded" hidden>
+    <button id="controls-toggle" title="Hide or show the controls">Controls ▴</button>
     <div class="footer">
-      <div class="stack">
-        <div class="flex-wide">
-          <button id="metronome-button" class="footer-button">
-            <span>Enable Metronome</span>
+      <fieldset class="group">
+        <legend>Session</legend>
+        <div class="row wide">
+          <button id="live-session-button" class="footer-button" disabled>
+            <span>Start Live Session</span>
           </button>
-          <buton id="metronome-freq-button" class="footer-button">
-            <span>1/4</span>
-            </button>
         </div>
-        <div class="flex-wide">
-          <label for="bpm-input">Beats per Minute</label>
-          <input id="bpm-input" type="number" min="1" max="300" step="1" />
+        <div class="row">
+          <label for="bpm-input">Beats per minute</label>
+          <div class="ctl"><input id="bpm-input" type="number" min="1" max="300" step="1" /></div>
         </div>
-        <div class="flex-wide">
-          <label for="time-sig-input">Beats per Measure</label>
-          <input id="time-sig-input" type="number" min="1" max="16" step="1" />
+        <div class="row">
+          <label for="time-sig-input">Beats per measure</label>
+          <div class="ctl"><input id="time-sig-input" type="number" min="1" max="16" step="1" /></div>
         </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="silence-input">Initial Beats of Silence</label>
-          <input id="silence-input" type="number" min="0" max="16" step="1" />
+        <div class="row">
+          <label>Metronome</label>
+          <div class="ctl">
+            <button id="metronome-button" class="footer-button"><span>Enable Metronome</span></button>
+            <buton id="metronome-freq-button" class="footer-button"><span>1/4</span></buton>
+          </div>
         </div>
-        <div class="flex-wide">
-          <label for="lookahead-input">Lookahead Beats</label>
-          <input id="lookahead-input" type="number" min="1" max="8" step="1" />
+        <div class="row">
+          <label for="metronome-check">Metronome at session start</label>
+          <div class="ctl"><input id="metronome-check" type="checkbox" checked="checked" /></div>
         </div>
-        <div class="flex-wide">
-          <label for="commitahead-input">Commit Beats</label>
-          <input id="commitahead-input" type="number" min="0" max="8" step="1" />
+        <div class="row">
+          <label for="download-session-check">Download sessions</label>
+          <div class="ctl"><input id="download-session-check" type="checkbox" /></div>
         </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="temperature-input">Temperature</label>
-          <input id="temperature-input" type="number" min="0" max="3" step="0.1" />
-        </div>
-        <div class="flex-wide">
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Model</legend>
+        <div class="row">
           <label for="model-select">Model</label>
-          <select id="model-select"></select>
+          <div class="ctl"><select id="model-select"></select></div>
         </div>
-      </div>
-      <div class="stack">
-        <button id="live-session-button" class="footer-button" disabled>
-          <span>Start Live Session</span>
-        </button>
-        <div class="flex-wide">
-          <label for="download-session-check">Download Sessions</label>
-          <input id="download-session-check" type="checkbox" />
+        <div class="row">
+          <label for="temperature-input">Temperature</label>
+          <div class="ctl"><input id="temperature-input" type="number" min="0" max="3" step="0.1" /></div>
         </div>
-        <div class="flex-wide">
-          <label for="metronome-check">Metronome Enabled</label>
-          <input id="metronome-check" type="checkbox" checked="checked" />
+        <div class="row">
+          <label for="lookahead-input">Lookahead (beats)</label>
+          <div class="ctl"><input id="lookahead-input" type="number" min="1" max="8" step="1" /></div>
         </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="song-search-input">Robot Melody: Search</label>
-          <input id="song-search-input" type="text" autocomplete="off"
-            placeholder="song or artist..." />
+        <div class="row">
+          <label for="commitahead-input">Commit (beats)</label>
+          <div class="ctl"><input id="commitahead-input" type="number" min="0" max="8" step="1" /></div>
         </div>
-        <div class="flex-wide">
-          <label for="reference-mode-check">Play Ground Truth (no model)</label>
-          <input id="reference-mode-check" class="centered" type="checkbox" />
+        <div class="row">
+          <label for="silence-input">Initial silence (beats)</label>
+          <div class="ctl"><input id="silence-input" type="number" min="0" max="16" step="1" /></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Chords</legend>
+        <div class="row">
+          <label for="chord-timing-select">Chord timing</label>
+          <div class="ctl"><select id="chord-timing-select"> <option value="auto">Auto (model decides when)</option> <option value="manual">Manual (space plays next chord)</option> <option value="triggered">Triggered (hold space to play the scheduled chord)</option> <option value="complete">Complete (play notes, the model completes the chord)</option> </select></div>
+        </div>
+        <div class="row wide info"><span id="chord-timing-info">Press space during a session to play the next chord</span></div>
+        <div class="row">
+          <label for="show-chords-check">Show incoming chords</label>
+          <div class="ctl"><input id="show-chords-check" type="checkbox" checked="checked" /></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Voicing</legend>
+        <div class="row">
+          <label for="voice-around-melody-check" title="Auto, triggered and manual mode: voice each chord as a 3-note chord in the inversion that sits best just below the melody note you're playing and moves least from the previous chord, plus an optional bass note, so it follows your melody's register. In auto mode a chord is voiced when it first appears in the plan, around the melody at that moment. Ground-truth playback and complete mode keep their own voicing.">Voice around melody</label>
+          <div class="ctl"><input id="voice-around-melody-check" type="checkbox" checked="checked" /></div>
+        </div>
+        <div class="row">
+          <label for="voice-bass-check" title="Voice Around Melody: add the root (or a slash chord's bass) as a bass note a fourth or more below the 3-note chord, like a pianist's left hand.">Bass note</label>
+          <div class="ctl"><input id="voice-bass-check" type="checkbox" checked="checked" /></div>
+        </div>
+        <div class="row">
+          <label for="melody-gap-input" title="How many semitones below your melody note the chord's highest note sits, at least (3 = a minor third).">Chord top below melody (semitones)</label>
+          <div class="ctl"><input id="melody-gap-input" type="number" min="0" max="24" step="1" value="3" /></div>
+        </div>
+        <div class="row">
+          <label for="custom-voicings-check">Custom voicings (database)</label>
+          <div class="ctl"><input id="custom-voicings-check" type="checkbox" /></div>
+        </div>
+        <div class="row">
+          <label for="voicing-browser-chord-select">Voicing browser</label>
+          <div class="ctl"><select id="voicing-browser-chord-select"><option value="">-- choose chord --</option></select></div>
+        </div>
+        <div class="row wide info"><span id="voicing-browser-info">Select a chord, then use &#8592;/&#8594; to browse its stored voicings (plays outside any session)</span></div>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Song Playback</legend>
+        <div class="row">
+          <label for="song-search-input">Search</label>
+          <div class="ctl"><input id="song-search-input" type="text" autocomplete="off" placeholder="song or artist..." /></div>
+        </div>
+        <div class="row">
+          <label for="reference-mode-check">Play ground truth (no model)</label>
+          <div class="ctl"><input id="reference-mode-check" type="checkbox" /></div>
         </div>
         <div id="song-search-results" class="search-results"></div>
-      </div>
-      <div class="stack">
-        <label for="show-chords-check">Show Incoming Chords</label>
-        <div class="flex-wide">
-          <input id="show-chords-check" class="centered" type="checkbox" checked="checked" />
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Input &amp; Sound</legend>
+        <div class="row">
+          <label for="interface-select">MIDI input</label>
+          <div class="ctl"><select id="interface-select"></select></div>
         </div>
-      </div>
-      <div class="stack">
-        <label for="custom-voicings-check">Use Custom Voicings</label>
-        <div class="flex-wide">
-          <input id="custom-voicings-check" class="centered" type="checkbox" />
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="voice-around-melody-check" title="Auto, triggered and manual mode: voice each chord as a 3-note chord in the inversion that sits best just below the melody note you're playing and moves least from the previous chord, plus an optional bass note, so it follows your melody's register. In auto mode a chord is voiced when it first appears in the plan, around the melody at that moment. Ground-truth playback and complete mode keep their own voicing.">Voice Around Melody</label>
-          <input id="voice-around-melody-check" class="centered" type="checkbox" checked="checked" />
-        </div>
-        <div class="flex-wide">
-          <label for="voice-bass-check" title="Voice Around Melody: add the root (or a slash chord's bass) as a bass note a fourth or more below the 3-note chord, like a pianist's left hand.">Bass Note</label>
-          <input id="voice-bass-check" class="centered" type="checkbox" checked="checked" />
-        </div>
-        <div class="flex-wide">
-          <label for="melody-gap-input" title="How many semitones below your melody note the chord's highest note sits, at least (3 = a minor third).">Chord Top Below Melody (semitones)</label>
-          <input id="melody-gap-input" type="number" min="0" max="24" step="1" value="3" />
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="chord-timing-select">Chord Timing</label>
-          <select id="chord-timing-select">
-            <option value="auto">Auto (model decides when)</option>
-            <option value="manual">Manual (space plays next chord)</option>
-            <option value="triggered">Triggered (hold space to play the scheduled chord)</option>
-            <option value="complete">Complete (play notes, the model completes the chord)</option>
-          </select>
-        </div>
-        <div class="flex-wide">
-          <span id="chord-timing-info">Press space during a session to play the next chord</span>
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="voicing-browser-chord-select">Voicing Browser: Chord</label>
-          <select id="voicing-browser-chord-select"><option value="">-- choose chord --</option></select>
-        </div>
-        <div class="flex-wide">
-          <span id="voicing-browser-info">Select a chord, then use &#8592;/&#8594; to browse its stored voicings (plays outside any session)</span>
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="chord-inst-select">Chord Instrument</label>
-          <select id="chord-inst-select"></select>
-        </div>
-        <div class="flex-wide">
-          <label for="melody-inst-select">Melody Instrument</label>
-          <select id="melody-inst-select"></select>
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
+        <div class="row">
           <label for="chord-output-select" title="Where chords and the robot melody play. A MIDI device (e.g. the Disklavier) replaces the laptop instruments for both.">Output</label>
-          <select id="chord-output-select">
-            <option value="">Laptop (instruments)</option>
-          </select>
+          <div class="ctl"><select id="chord-output-select"><option value="">Laptop (instruments)</option></select></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-velocity-input" title="How hard the piano plays the chords (MIDI velocity). Softer notes sound later, so re-tune Send Early after changing this.">MIDI Chord Velocity</label>
-          <input id="midi-velocity-input" type="range" min="1" max="127" step="1" value="40" />
-          <span id="midi-velocity-value" class="slider-value">40</span>
+        <div class="row">
+          <label for="chord-inst-select">Chord instrument (laptop)</label>
+          <div class="ctl"><select id="chord-inst-select"></select></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-melody-velocity-input" title="How hard the piano plays the robot melody (song playback).">MIDI Melody Velocity</label>
-          <input id="midi-melody-velocity-input" type="range" min="1" max="127" step="1" value="40" />
-          <span id="midi-melody-velocity-value" class="slider-value">40</span>
+        <div class="row">
+          <label for="melody-inst-select">Melody instrument (laptop)</label>
+          <div class="ctl"><select id="melody-inst-select"></select></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-lead-input" title="Send chords this much early to cover the piano's mechanical latency. Calibrate with MIDI IN Delay off.">MIDI Send Early (ms)</label>
-          <input id="midi-lead-input" type="number" min="0" max="600" step="5" value="100" />
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Piano (MIDI Output)</legend>
+        <div class="row">
+          <label for="midi-velocity-input" title="How hard the piano plays the chords (MIDI velocity). Softer notes sound later, so re-tune Send Early after changing this.">Chord velocity</label>
+          <div class="ctl"><input id="midi-velocity-input" type="range" min="1" max="127" step="1" value="40" /><span id="midi-velocity-value" class="slider-value">40</span></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-release-16-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 187.5 ms later (1/16 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/16 (ms)</label>
-          <input id="midi-release-16-input" type="number" min="0" max="500" step="0.5" value="70" />
+        <div class="row">
+          <label for="midi-melody-velocity-input" title="How hard the piano plays the robot melody (song playback).">Melody velocity</label>
+          <div class="ctl"><input id="midi-melody-velocity-input" type="range" min="1" max="127" step="1" value="40" /><span id="midi-melody-velocity-value" class="slider-value">40</span></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-release-8-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 375 ms later (1/8 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/8 (ms)</label>
-          <input id="midi-release-8-input" type="number" min="0" max="500" step="0.5" value="150" />
+        <div class="row">
+          <label for="midi-lead-input" title="Send chords this much early to cover the piano's mechanical latency. Calibrate with MIDI IN Delay off.">Send early (ms)</label>
+          <div class="ctl"><input id="midi-lead-input" type="number" min="0" max="600" step="5" value="100" /></div>
         </div>
-        <div class="flex-wide">
-          <label for="midi-release-4-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 750 ms later (1/4 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/4 (ms)</label>
-          <input id="midi-release-4-input" type="number" min="0" max="500" step="0.5" value="300" />
+        <div class="row wide"><span title="How long a key is released before it is struck again, by how far apart the two strikes are (note values at 80 BPM). The note is held for the rest; other spacings are blended.">Release before repeat (ms)</span></div>
+        <div class="row wide minis">
+          <span class="mini"><label for="midi-release-16-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 187.5 ms later (1/16 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">1/16</label><input id="midi-release-16-input" type="number" min="0" max="500" step="0.5" value="70" /></span>
+          <span class="mini"><label for="midi-release-8-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 375 ms later (1/8 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">1/8</label><input id="midi-release-8-input" type="number" min="0" max="500" step="0.5" value="150" /></span>
+          <span class="mini"><label for="midi-release-4-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 750 ms later (1/4 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">1/4</label><input id="midi-release-4-input" type="number" min="0" max="500" step="0.5" value="300" /></span>
+          <span class="mini"><label for="midi-release-2-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 1500 or more ms later (1/2+ at 80 BPM). The note is held for the rest. Other spacings are blended between these.">1/2+</label><input id="midi-release-2-input" type="number" min="0" max="500" step="0.5" value="300" /></span>
         </div>
-        <div class="flex-wide">
-          <label for="midi-release-2-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 1500 or more ms later (1/2+ at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/2+ (ms)</label>
-          <input id="midi-release-2-input" type="number" min="0" max="500" step="0.5" value="300" />
-        </div>
-      </div>
-      <div class="stack">
-        <div class="flex-wide">
-          <label for="interface-select">MIDI Interface</label>
-          <select id="interface-select"></select>
-        </div>
-      </div>
+      </fieldset>
     </div>
     <div class="background"></div>
   </div>

@@ -2639,6 +2639,15 @@ async function initializeMIDIReader(visual_arg) {
   metronomeCheck = document.getElementById('metronome-check');
   showChordsCheck = document.getElementById('show-chords-check');
   customVoicingsCheck = document.getElementById('custom-voicings-check');
+  const controlsToggle = document.getElementById('controls-toggle');
+  controlsToggle.addEventListener('click', () => {
+    const footer = document.querySelector('.footer');
+    footer.classList.toggle('collapsed');
+    controlsToggle.textContent =
+      footer.classList.contains('collapsed') ? 'Controls ▾' : 'Controls ▴';
+    controlsToggle.blur();  // so space keeps triggering chords, not this button
+    window.dispatchEvent(new Event('resize'));  // let the piano roll re-fit
+  });
   voiceAroundMelodyCheck = document.getElementById('voice-around-melody-check');
   voiceBassCheck = document.getElementById('voice-bass-check');
   melodyGapInput = document.getElementById('melody-gap-input');

@@ -317,6 +317,9 @@ class Agent:
         # (see decode_chord_token_custom_voicing) so it's safe to share
         # across concurrently connected clients.
         self.voicing_selector: Optional[VoicingSelector] = None
+        if voicings_path and not os.path.exists(voicings_path) and \
+                os.path.exists(voicings_path + ".gz"):
+            voicings_path += ".gz"  # as shipped in the realjam-data repository
         if voicings_path and os.path.exists(voicings_path):
             try:
                 self.voicing_selector = VoicingSelector(voicings_path)

@@ -69,6 +69,7 @@ Usage::
 """
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -147,7 +148,8 @@ class VoicingSelector:
         density_weight: float = 0.0,
         density_target: float = 0.5,
     ) -> None:
-        with open(voicings_path, encoding="utf-8") as f:
+        opener = gzip.open if str(voicings_path).endswith(".gz") else open
+        with opener(voicings_path, "rt", encoding="utf-8") as f:
             self._lookup: Dict[str, List[Dict]] = json.load(f)
 
         self.target_mid = target_mid

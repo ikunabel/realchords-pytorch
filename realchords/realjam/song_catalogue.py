@@ -21,6 +21,7 @@ otherwise show up as near-duplicate catalogue entries.
 
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, TypedDict
@@ -84,11 +85,17 @@ def _prettify(text: str) -> str:
 
 
 def _load_split(cache_root: Path, dataset_dir: str, split: str) -> List[dict]:
+    # Plain where the data was built; gzip-compressed in the realjam-data
+    # repository used to bring the data to other machines
     path = cache_root / dataset_dir / f"{split}.jsonl"
+    opener = open
     if not path.exists():
-        return []
+        path = path.with_suffix(".jsonl.gz")
+        opener = gzip.open
+        if not path.exists():
+            return []
     records = []
-    with open(path, encoding="utf-8") as f:
+    with opener(path, "rt", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:

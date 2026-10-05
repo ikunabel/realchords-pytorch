@@ -11,7 +11,8 @@ html,
 body {
   height: 100%;
   width: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 * { box-sizing: border-box; }
@@ -130,12 +131,141 @@ button.splash-button.small {
 .footer {
   position: relative;
   display: flex;
+  /* Wrap the control groups onto rows that fit the window, so the page never
+     scrolls sideways (a sideways trackpad swipe is also the browser's back
+     gesture on a Mac); tall panels scroll vertically inside themselves. */
+  flex-wrap: wrap;
+  max-height: 55vh;
+  overflow-y: auto;
   background-color: lightgray;
   padding: 10px;
   text-align: center;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-around;
   z-index: 9999;
+}
+
+/* Groups in aligned columns: as many as fit the width, rows line up */
+.footer:has(> .group) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 6px;
+  padding: 26px 10px 6px;  /* top: room for the Controls button */
+}
+
+.footer .row.wide > span {
+  font-size: 14px;
+}
+
+.footer.collapsed {
+  display: none;
+}
+
+/* Control groups: one box per function, each a two-column grid of rows
+   with labels left-aligned and controls right-aligned, so they line up. */
+.footer .group {
+  border: 1px solid #9a9a9a;
+  border-radius: 6px;
+  margin: 0;
+  padding: 0 10px 6px;
+  min-width: 0;
+  text-align: left;
+}
+
+.footer .group legend {
+  font-weight: bold;
+  font-size: 13px;
+  padding: 0 4px;
+}
+
+.footer .row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 27px;
+}
+
+.footer .row > label {
+  margin: 0;
+  font-size: 14px;
+}
+
+.footer .row .ctl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* A row with a single item spanning both columns (buttons, info lines) */
+.footer .row.wide {
+  grid-template-columns: 1fr;
+}
+
+.footer .row.wide > .footer-button {
+  width: 100%;
+}
+
+.footer .row.info {
+  font-size: 12px;
+  opacity: 0.75;
+  max-width: 300px;
+}
+
+.footer .group select,
+.footer .group input {
+  font-size: 14px;
+}
+
+.footer .group select {
+  max-width: 200px;
+}
+
+.footer .group input[type="number"] {
+  width: 64px;
+}
+
+.footer .group .footer-button {
+  font-size: 14px;
+  padding: 3px 10px;
+}
+
+.footer .group input[type="range"] {
+  width: 110px;
+}
+
+.footer .group #song-search-input {
+  width: 180px;
+}
+
+/* The four release values side by side, each with its note value above */
+.footer .row.minis {
+  grid-template-columns: repeat(4, 1fr);
+  column-gap: 6px;
+}
+
+.footer .mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 13px;
+}
+
+.footer .mini input {
+  width: 58px;
+}
+
+/* Shows/hides the control panel; stays put in the corner */
+#controls-toggle {
+  position: fixed;
+  top: 6px;
+  right: 6px;
+  z-index: 10000;
+  padding: 2px 8px;
+  font-size: 12px;
+  opacity: 0.8;
+  cursor: pointer;
 }
 
 .footer button {

@@ -273,10 +273,19 @@ def main() -> None:
 
     try:
         song_catalogue_index, song_record_index = song_catalogue.build_catalogue()
+        n_real = sum(e["dataset"] != "demo" for e in song_catalogue_index)
         print(
             f"Loaded robot-melody song catalogue: "
-            f"{len(song_catalogue_index)} songs"
+            f"{len(song_catalogue_index)} songs ({n_real} from datasets)"
         )
+        if n_real == 0:
+            print(
+                "  No dataset songs found under data/cache/ (data/ is git-ignored, "
+                "so a fresh checkout has none). Copy data/cache/<dataset>/"
+                "{train,valid,test}.jsonl for hooktheory, pop909, nottingham, "
+                "wikifonia, chord_melody_dataset and jazzmus from a machine that "
+                "has them, and start the server from the repository root."
+            )
     except Exception as e:
         print(
             f"Could not build song catalogue ({e}); "
