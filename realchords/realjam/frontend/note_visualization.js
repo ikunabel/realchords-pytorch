@@ -1043,9 +1043,11 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
   /**
    * Schedule a note release, find correct one in case multiple scheduled
    * @param {number} noteNumber
-   * @param {number} stopFrame
+   * @param {number} stopFrame - may be fractional
+   * @param {boolean=} exact - Draw the release where it is, without the
+   *   separating gap (the caller's timing already separates repeated notes)
    */
-  scheduleNoteOff(noteNumber, stopFrame) {
+  scheduleNoteOff(noteNumber, stopFrame, exact = false) {
     // Find corresponding note that is scheduled closest to stopFrame
     let closestNote;
     for (const note of this.notes) {
@@ -1056,6 +1058,7 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
     }
     if (closestNote) {
       closestNote.stopFrame = stopFrame;
+      closestNote.exact = exact;
     }
   }
 
@@ -1656,13 +1659,14 @@ class NoteVisual {
   /**
    * For anticipation, schedule a note to be released at given frame
    * @param {number} noteNumber
-   * @param {number} frame
+   * @param {number} frame - may be fractional
+   * @param {boolean=} exact - Draw it at its real time, without the gap
    */
-  scheduleNoteOff(noteNumber, frame) {
+  scheduleNoteOff(noteNumber, frame, exact = false) {
     if (this.animationType !== 'anticipation') {
       throw new Error('Only supported for anticipation');
     }
-    this.painter.scheduleNoteOff(noteNumber, frame);
+    this.painter.scheduleNoteOff(noteNumber, frame, exact);
   }
 
   /**

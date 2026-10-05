@@ -78,7 +78,7 @@
         </button>
         <div class="flex-wide">
           <label for="download-session-check">Download Sessions</label>
-          <input id="download-session-check" type="checkbox" checked="checked" />
+          <input id="download-session-check" type="checkbox" />
         </div>
         <div class="flex-wide">
           <label for="metronome-check">Metronome Enabled</label>
@@ -111,14 +111,16 @@
       </div>
       <div class="stack">
         <div class="flex-wide">
-          <label for="vl-weight-input">Voicing: Voice Leading</label>
-          <input id="vl-weight-input" type="range" min="0" max="1" step="0.05" value="0.5" />
-          <span id="vl-weight-value" class="slider-value">0.50</span>
+          <label for="voice-around-melody-check" title="Auto, triggered and manual mode: voice each chord as a 3-note chord in the inversion that sits best just below the melody note you're playing and moves least from the previous chord, plus an optional bass note, so it follows your melody's register. In auto mode a chord is voiced when it first appears in the plan, around the melody at that moment. Ground-truth playback and complete mode keep their own voicing.">Voice Around Melody</label>
+          <input id="voice-around-melody-check" class="centered" type="checkbox" checked="checked" />
         </div>
         <div class="flex-wide">
-          <label for="reg-weight-input">Voicing: Register</label>
-          <input id="reg-weight-input" type="range" min="0" max="1" step="0.05" value="0.2" />
-          <span id="reg-weight-value" class="slider-value">0.20</span>
+          <label for="voice-bass-check" title="Voice Around Melody: add the root (or a slash chord's bass) as a bass note a fourth or more below the 3-note chord, like a pianist's left hand.">Bass Note</label>
+          <input id="voice-bass-check" class="centered" type="checkbox" checked="checked" />
+        </div>
+        <div class="flex-wide">
+          <label for="melody-gap-input" title="How many semitones below your melody note the chord's highest note sits, at least (3 = a minor third).">Chord Top Below Melody (semitones)</label>
+          <input id="melody-gap-input" type="number" min="0" max="24" step="1" value="3" />
         </div>
       </div>
       <div class="stack">
@@ -127,7 +129,8 @@
           <select id="chord-timing-select">
             <option value="auto">Auto (model decides when)</option>
             <option value="manual">Manual (space plays next chord)</option>
-            <option value="triggered">Triggered (space plays the scheduled chord)</option>
+            <option value="triggered">Triggered (hold space to play the scheduled chord)</option>
+            <option value="complete">Complete (play notes, the model completes the chord)</option>
           </select>
         </div>
         <div class="flex-wide">
@@ -167,20 +170,28 @@
         </div>
         <div class="flex-wide">
           <label for="midi-melody-velocity-input" title="How hard the piano plays the robot melody (song playback).">MIDI Melody Velocity</label>
-          <input id="midi-melody-velocity-input" type="range" min="1" max="127" step="1" value="55" />
-          <span id="midi-melody-velocity-value" class="slider-value">55</span>
+          <input id="midi-melody-velocity-input" type="range" min="1" max="127" step="1" value="40" />
+          <span id="midi-melody-velocity-value" class="slider-value">40</span>
         </div>
         <div class="flex-wide">
           <label for="midi-lead-input" title="Send chords this much early to cover the piano's mechanical latency. Calibrate with MIDI IN Delay off.">MIDI Send Early (ms)</label>
           <input id="midi-lead-input" type="number" min="0" max="600" step="5" value="100" />
         </div>
         <div class="flex-wide">
-          <label for="midi-restrike-input" title="How long a key is released before the same note is struck again, after a long note. Too short and the action can't reset, so the note keeps ringing instead of sounding again. 200 ms works on the ENSPIRE U1 (louder notes need more). Fast repeats get less (see Min Hold).">MIDI Re-strike Gap (ms)</label>
-          <input id="midi-restrike-input" type="number" min="0" max="500" step="10" value="200" />
+          <label for="midi-release-16-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 187.5 ms later (1/16 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/16 (ms)</label>
+          <input id="midi-release-16-input" type="number" min="0" max="500" step="0.5" value="70" />
         </div>
         <div class="flex-wide">
-          <label for="midi-min-hold-input" title="For fast repeats of the same key, keep it held at least this long and shorten the re-strike gap instead (down to 50 ms): a soft note released too soon doesn't sound, while a briefly held key resets quickly. Lower it to give fast repeats a longer release instead.">MIDI Min Hold (ms)</label>
-          <input id="midi-min-hold-input" type="number" min="0" max="500" step="10" value="130" />
+          <label for="midi-release-8-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 375 ms later (1/8 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/8 (ms)</label>
+          <input id="midi-release-8-input" type="number" min="0" max="500" step="0.5" value="150" />
+        </div>
+        <div class="flex-wide">
+          <label for="midi-release-4-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 750 ms later (1/4 at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/4 (ms)</label>
+          <input id="midi-release-4-input" type="number" min="0" max="500" step="0.5" value="300" />
+        </div>
+        <div class="flex-wide">
+          <label for="midi-release-2-input" title="How long the key is released before it is struck again, when the next strike of the same key comes 1500 or more ms later (1/2+ at 80 BPM). The note is held for the rest. Other spacings are blended between these.">MIDI Release before repeat, 1/2+ (ms)</label>
+          <input id="midi-release-2-input" type="number" min="0" max="500" step="0.5" value="300" />
         </div>
       </div>
       <div class="stack">

@@ -14,7 +14,7 @@ let playBtn, metronomeBtn, bpmInput, timeSigInput, metronomeFreqBtn,
   interfaceSelect, liveSessionBtn, temperatureInput, silenceInput,
   lookaheadInput, commitaheadInput, modelSelect, chordInstSelect,
   melodyInstSelect, showChordsCheck, downloadSessionCheck, metronomeCheck,
-  customVoicingsCheck, vlWeightInput, regWeightInput, songSearchInput,
+  customVoicingsCheck, voiceAroundMelodyCheck, voiceBassCheck, melodyGapInput, songSearchInput,
   songSearchResults, voicingBrowserChordSelect, voicingBrowserInfo,
   chordTimingSelect, chordTimingInfo, referenceModeCheck;
 let songCatalogue = [];   // [{dataset, split, id, title, artist}, ...]
@@ -221,6 +221,14 @@ function startSession(options = {}) {
     pendingChord: null,     // Manual mode: chord the next space press fires
     triggeredChord: null,   // Triggered mode: chord sustaining since the
                              // last space press
+    voicedByFrame: new Map(),  // Auto mode, Voice Around Melody: frame ->
+                                // {key, voiced}, see autoModeVoicing
+    candidates: null,       // Complete mode: model's ranked chord onsets
+    heldKeys: new Set(),    // Complete mode: keys the performer is holding
+    gestureTimer: null,     // Complete mode: gathering a chord gesture
+    completion: null,       // Complete mode: completed chord sounding
+    completionHistory: [],  // Complete mode: {frame, held, symbol, pitches,
+                             // prob, rank} per completed chord
     triggerHistory: [],     // Triggered mode: {frame, symbol, pitches} per
                              // press, frame relative to session start
     referenceOnly: !!options.referenceOnly,  // Playing ground truth, no model
@@ -234,7 +242,7 @@ function startSession(options = {}) {
 
   // Manual mode drives chords independently of the melody, so it doesn't wait
   // for a first note the way the auto loop does (see playNote).
-  if (isManualChordMode() && !curSession.referenceOnly) {
+  if ((isManualChordMode() || isCompleteMode()) && !curSession.referenceOnly) {
     startGenerationLoop();
   }
   updateChordTimingInfo();
@@ -332,16 +340,23 @@ function scheduleReferenceLoop(melody, chords, baseFrame, loopFrames) {
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
-  scheduleMidiMelody(melody, baseFrame);
+  const midiReleases = scheduleMidiMelody(melody, baseFrame, loopFrames, true);
   // The whole melody is known in advance here, so it can fall towards the
   // keys like the chords do. (Not in a live session with a robot melody:
   // processAgentAction clears every scheduled note on each model response.)
   // All onsets before any release, so a repeated pitch's release attaches
   // to the right note (scheduleNoteOff picks the latest earlier onset).
+  // With a MIDI output each block ends at its real note-off, re-strike gap
+  // included, so the waterfall shows what the piano is actually sent.
   melody.forEach(({ pitch, onset }) => visual.scheduleNoteOn(
     pitch, baseFrame + Math.round(onset * fpb), 'orange', 1.0));
-  melody.forEach(({ pitch, offset }) => visual.scheduleNoteOff(
-    pitch, baseFrame + Math.round(offset * fpb)));
+  if (midiReleases) {
+    midiReleases.forEach(({ pitch, offFrame }) =>
+      visual.scheduleNoteOff(pitch, offFrame, true));
+  } else {
+    melody.forEach(({ pitch, offset }) => visual.scheduleNoteOff(
+      pitch, baseFrame + Math.round(offset * fpb)));
+  }
 
   chords.forEach(({ pitches, onset, offset, symbol }) => {
     const onFrame = baseFrame + Math.round(onset * fpb);
@@ -367,7 +382,31 @@ function scheduleReferenceLoop(melody, chords, baseFrame, loopFrames) {
       const prevOnFrame = i > 0 ?
         baseFrame + Math.round(chords[i - 1].onset * fpb) :
         baseFrame - loopFrames + Math.round(chords[chords.length - 1].onset * fpb);
-      scheduleMidiChord(pitches, onFrame, true, prevOnFrame);
+      const spf = Tone.Time('16n').toSeconds();
+      // The gap is decided shortly before the re-strike, from the settings
+      // then; if it differs from what was drawn, move the drawn releases of
+      // the previous chord's shared keys to match.
+      const prev = chords[i > 0 ? i - 1 : chords.length - 1];
+      const prevOffFrame = prevOnFrame + Math.round((prev.offset - prev.onset) * fpb);
+      const drawnGap = midiRestrikeGapFor((onFrame - prevOnFrame) * spf);
+      scheduleMidiChordLive(pitches, onFrame, prevOnFrame, gap => {
+        if (!showChordsCheck.checked || gap === drawnGap || prevOffFrame !== onFrame) return;
+        prev.pitches.filter(p => pitches.includes(p)).forEach(p =>
+          visual.scheduleNoteOff(p, onFrame - gap / spf, true));
+      });
+      // Draw the releases the piano is sent: keys the next chord shares are
+      // lifted a re-strike gap before it, the rest at the change itself
+      if (showChordsCheck.checked) {
+        const next = chords[i + 1] ||
+          (chords[0] && { ...chords[0], onset: chords[0].onset + loopFrames / fpb });
+        const nextOnFrame = next && baseFrame + Math.round(next.onset * fpb);
+        pitches.forEach(pitch => {
+          const lifted = nextOnFrame === offFrame && next.pitches.includes(pitch);
+          const gapFrames = lifted
+            ? midiRestrikeGapFor((nextOnFrame - onFrame) * spf) / spf : 0;
+          visual.scheduleNoteOff(pitch, offFrame - gapFrames, true);
+        });
+      }
       if (!onsetFrames.has(offFrame)) {
         scheduleMidiChord([], offFrame, false);
       }
@@ -403,7 +442,7 @@ function scheduleMelodyLoop(notes, baseFrame, loopFrames) {
     scheduleRobotNote(pitch, true, onFrame);
     scheduleRobotNote(pitch, false, offFrame);
   });
-  scheduleMidiMelody(notes, baseFrame);
+  scheduleMidiMelody(notes, baseFrame, loopFrames);
 
   Tone.Transport.scheduleOnce(() => {
     // Stops the loop once the session has been ended some other way
@@ -522,6 +561,19 @@ function isTriggeredChordMode() {
 }
 
 /**
+ * Chord completion: the performer plays some notes and the model completes
+ * them into a chord. All played notes are constraints, not melody -- the
+ * model's melody input stays silent and it relies on the chord history it
+ * builds up. The model's ranked candidates are fetched ahead of time (see
+ * candidateLoop), so a gesture is completed without a round trip.
+ * @return {boolean}
+ */
+function isCompleteMode() {
+  return chordTimingSelect.value === 'complete' &&
+    !(curSession && curSession.referenceOnly);
+}
+
+/**
  * Kick off whichever generation loop the current chord-timing mode uses.
  * Idempotent -- called from several places that can each be the first to
  * happen in a session (first melody note, robot playback, session start in
@@ -535,6 +587,8 @@ function startGenerationLoop() {
   getSessionCurrentFrame();  // Anchor session frame 0 before scheduling
   if (isManualChordMode()) {
     pendingChordLoop();
+  } else if (isCompleteMode()) {
+    candidateLoop();
   } else {
     syncWithServer();
   }
@@ -566,8 +620,8 @@ async function syncWithServer() {
       introSet: curSession.introSet,
       useCustomVoicings: customVoicingsCheck.checked,
       prevVoicing: curSession.lastVoicing,
-      vlWeight: vlWeightInput.valueAsNumber,
-      regWeight: regWeightInput.valueAsNumber,
+      vlWeight: CUSTOM_VOICING_VL_WEIGHT,
+      regWeight: CUSTOM_VOICING_REG_WEIGHT,
     })
   });
   const json = await result.json();
@@ -640,8 +694,8 @@ async function fetchPendingChord() {
       temperature: temperatureInput.valueAsNumber,
       useCustomVoicings: customVoicingsCheck.checked,
       prevVoicing: curSession.lastVoicing,
-      vlWeight: vlWeightInput.valueAsNumber,
-      regWeight: regWeightInput.valueAsNumber,
+      vlWeight: CUSTOM_VOICING_VL_WEIGHT,
+      regWeight: CUSTOM_VOICING_REG_WEIGHT,
     })
   });
   const chord = await result.json();
@@ -679,7 +733,9 @@ async function advanceChordNow() {
     }
   }
 
-  const chord = curSession.pendingChord;
+  const chord = { ...curSession.pendingChord };
+  chord.pitches = voiceAroundMelody(chord.pitches,
+    curSession.manualChord && curSession.manualChord.pitches);
   const frame = getSessionCurrentFrame();
 
   if (curSession.manualChord) {
@@ -692,7 +748,7 @@ async function advanceChordNow() {
     if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
     visual.noteOn(pitch, 'blue');
   });
-  midiStrikeNow(chord.pitches);
+  midiPlayNow(chord.pitches);
 
   curSession.chordTokens[frame] = chord.onsetToken;
   curSession.manualChord = { ...chord, startFrame: frame };
@@ -705,6 +761,125 @@ async function advanceChordNow() {
   curSession.pendingChord = null;
   updateChordTimingInfo();
   fetchPendingChord();
+}
+
+// Custom-voicing scoring weights; were sliders, fixed at their old defaults
+const CUSTOM_VOICING_VL_WEIGHT = 0.5;
+const CUSTOM_VOICING_REG_WEIGHT = 0.2;
+
+/**
+ * The melody note to voice around: the highest one sounding now, else the
+ * last one played, else middle C.
+ * @return {number}
+ */
+function currentMelodyPitch() {
+  const active = new Map();  // pitch -> still held
+  let last = null;
+  for (const { on, pitch } of curSession.noteHistory) {
+    if (on) {
+      active.set(pitch, true);
+      last = pitch;
+    } else {
+      active.delete(pitch);
+    }
+  }
+  if (active.size) return Math.max(...active.keys());
+  return last !== null ? last : 60;
+}
+
+/**
+ * Voice a chord like a pianist's two hands, just below the melody (auto,
+ * triggered and manual mode, Voice Around Melody on):
+ * - Upper chord: three notes, each pitch class once, in close position, in
+ *   whichever inversion fits best -- its top as close under the ceiling
+ *   (melody - gap) as possible, and moving as little as possible from
+ *   `prevPitches` -- so successive chords take varied positions. Chords with
+ *   more notes keep the most characteristic ones (VOICE_AROUND_PRIORITY:
+ *   3rds, 7ths, 6th, 9ths, ..., the fifth last); triads use root, 3rd, 5th.
+ * - Bass (Bass Note on): the given voicing's lowest pitch class -- the root,
+ *   or a slash chord's bass -- at least a fourth below the upper chord.
+ * Returns the given voicing unchanged when the option is off.
+ * @param {Array<number>} pitches - Voicing from the server
+ * @param {Array<number>=} prevPitches - The previous chord's voicing
+ * @return {Array<number>}
+ */
+function voiceAroundMelody(pitches, prevPitches) {
+  if (!voiceAroundMelodyCheck.checked || !pitches || !pitches.length) return pitches;
+  const gapValue = melodyGapInput.valueAsNumber;
+  const gap = Number.isNaN(gapValue) ? 3 : Math.max(0, gapValue);
+  const ceiling = currentMelodyPitch() - gap;
+  const mod = (x, m) => ((x % m) + m) % m;
+  const bassPc = Math.min(...pitches) % 12;
+
+  // Upper pitch classes: the most characteristic intervals above the bass,
+  // topped up with the bass pitch class itself for a triad
+  const intervals = [...new Set(pitches.map(p => mod(p - bassPc, 12)))]
+    .filter(i => i !== 0)
+    .sort((x, y) => VOICE_AROUND_PRIORITY.indexOf(x) - VOICE_AROUND_PRIORITY.indexOf(y))
+    .slice(0, VOICE_AROUND_UPPER_NOTES);
+  const upperPcs = intervals.map(i => (bassPc + i) % 12);
+  if (upperPcs.length < VOICE_AROUND_UPPER_NOTES) upperPcs.push(bassPc);
+
+  // Every inversion in close position, each as high as fits under the ceiling
+  const prevUpper = prevPitches && prevPitches.length > 1
+    ? prevPitches.filter(p => p !== Math.min(...prevPitches)) : prevPitches || [];
+  let best = null;
+  upperPcs.forEach(lowestPc => {
+    const others = upperPcs.filter(pc => pc !== lowestPc)
+      .map(pc => mod(pc - lowestPc, 12)).sort((x, y) => x - y);
+    const span = others.length ? others[others.length - 1] : 0;
+    const low = ceiling - span - mod(ceiling - span - lowestPc, 12);
+    const voicing = [low, ...others.map(i => low + i)];
+    const fromCeiling = ceiling - voicing[voicing.length - 1];
+    const movement = prevUpper.length
+      ? voicing.reduce((sum, p) => sum + Math.min(...prevUpper.map(q => Math.abs(p - q))), 0)
+      : 0;
+    const score = fromCeiling + VOICE_AROUND_MOVEMENT_WEIGHT * movement;
+    if (!best || score < best.score) best = { voicing, score };
+  });
+  let out = best.voicing;
+
+  if (voiceBassCheck.checked) {
+    const lowest = Math.min(...out);
+    const bass = (lowest - 5) - mod(lowest - 5 - bassPc, 12);  // a 4th or more below
+    if (bass >= LOWEST_PIANO_PITCH) out = [bass, ...out];
+  }
+  while (Math.min(...out) < LOWEST_PIANO_PITCH) out = out.map(p => p + 12);
+  return out.sort((x, y) => x - y);
+}
+const VOICE_AROUND_UPPER_NOTES = 3;
+// Intervals above the root, most characteristic first: thirds, sevenths,
+// sixth, ninths, fourth / tritone, the fifth last (it adds the least colour)
+const VOICE_AROUND_PRIORITY = [4, 3, 10, 11, 9, 2, 1, 5, 6, 8, 7];
+// Semitones of top-note distance from the melody worth one semitone of
+// voice movement from the previous chord
+const VOICE_AROUND_MOVEMENT_WEIGHT = 0.5;
+
+/**
+ * Voice Around Melody for chords the model plans in auto (and triggered)
+ * mode. A chord is voiced when it first appears in the plan, around the
+ * melody note sounding then (or last played); when later polls re-plan the
+ * same chord for that frame it keeps that voicing, so a chord whose MIDI
+ * may already be on its way is never re-voiced. A hold of the same chord
+ * keeps the voicing of the chord it holds. Only a changed chord is voiced
+ * afresh, from the melody at that moment.
+ * @return {Array<number>}
+ */
+function autoModeVoicing(frame, symbol, on, pitches) {
+  if (!voiceAroundMelodyCheck.checked || !pitches || !pitches.length) return pitches;
+  const key = `${on}|${symbol}|${pitches.join(',')}`;
+  const prior = curSession.voicedByFrame.get(frame);
+  if (prior && prior.key === key) return prior.voiced;
+  let voiced;
+  const held = !on && getScheduledChordAt(frame - 1);
+  if (held && held.symbol === symbol && held.pitches.length) {
+    voiced = held.pitches;
+  } else {
+    const prev = getScheduledChordAt(frame - 1);
+    voiced = voiceAroundMelody(pitches, prev && prev.pitches);
+  }
+  curSession.voicedByFrame.set(frame, { key, voiced });
+  return voiced;
 }
 
 /**
@@ -730,7 +905,8 @@ function getScheduledChordAt(targetFrame) {
  */
 function triggerScheduledChord() {
   const entry = getScheduledChordAt(Math.floor(getTransportFrame()));
-  const pitches = entry ? entry.pitches || [] : [];
+  const pitches = voiceAroundMelody(entry ? entry.pitches || [] : [],
+    curSession.triggeredChord || curSession.lastTriggered);
 
   if (curSession.triggeredChord) {
     curSession.triggeredChord.forEach(pitch => {
@@ -742,9 +918,10 @@ function triggerScheduledChord() {
     if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
     visual.noteOn(pitch, 'blue');
   });
-  midiStrikeNow(pitches);
+  midiPlayNow(pitches);
 
   curSession.triggeredChord = pitches;
+  if (pitches.length) curSession.lastTriggered = pitches;
   curSession.triggerHistory.push({
     frame: getSessionCurrentFrame(),
     symbol: entry ? entry.symbol : '',
@@ -753,12 +930,198 @@ function triggerScheduledChord() {
   updateChordTimingInfo();
 }
 
+const COMPLETION_WINDOW_MS = 50;  // notes this close together form one gesture
+
+/** Fetch the model's ranked chord onsets for the next frame */
+async function fetchCandidates() {
+  if (!curSession) return;
+  fillManualChordTokens();
+  try {
+    const result = await fetch(`${window.location.origin}/chord_candidates`, {
+      'method': 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelSelect.value,
+        notes: [],  // the performer's notes are constraints, not melody
+        chordTokens: curSession.chordTokens,
+        frame: getSessionCurrentFrame() + 1,
+      })
+    });
+    const candidates = await result.json();
+    if (curSession) curSession.candidates = candidates;
+  } catch (e) {
+    console.warn('Could not fetch chord candidates', e);
+  }
+}
+
+/** Keep the candidates fresh, once per beat, while waiting for gestures */
+async function candidateLoop() {
+  if (!curSession || !isCompleteMode()) return;
+  await fetchCandidates();
+  if (!curSession || !isCompleteMode()) return;
+  setTimeout(candidateLoop, 60000 / Tone.Transport.bpm.value);
+}
+
+/** Performer pressed a key in complete mode */
+function onCompletionNoteDown(pitch) {
+  curSession.heldKeys.add(pitch);
+  // A chord is already sounding, or this key joins a gesture being gathered
+  if (curSession.completion || curSession.gestureTimer) return;
+  curSession.gestureTimer = setTimeout(completeHeldNotes, COMPLETION_WINDOW_MS);
+}
+
+/** Performer released a key; the chord ends with the last one */
+function onCompletionNoteUp(pitch) {
+  curSession.heldKeys.delete(pitch);
+  if (!curSession.heldKeys.size && curSession.completion) {
+    releaseCompletion();
+  }
+}
+
+/**
+ * Sample a chord among the candidates containing every pitch class held (or,
+ * if none does, those sharing the most), weighted by the model's
+ * probability sharpened or flattened by the Temperature field: p^(1/T).
+ * Temperature 0 always takes the most probable.
+ * @return {?{chord: Object, rank: number}}
+ */
+function pickCandidate(candidates, held) {
+  const need = new Set(held.map(p => p % 12));
+  const scored = candidates.map((chord, rank) => ({
+    chord, rank, overlap: chord.pitchClasses.filter(pc => need.has(pc)).length,
+  }));
+  const bestOverlap = Math.max(...scored.map(c => c.overlap));
+  const compatible = scored.filter(c => c.overlap === bestOverlap);
+  if (!compatible.length) return null;
+  const temperature = temperatureInput.valueAsNumber;
+  if (!(temperature > 0)) return compatible[0];  // candidates are sorted
+  const weights = compatible.map(c => Math.pow(c.chord.prob, 1 / temperature));
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < compatible.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return compatible[i];
+  }
+  return compatible[compatible.length - 1];
+}
+
+/**
+ * The chord tones the performer isn't playing, placed around their hand,
+ * plus the root in the bass unless they're already playing it lowest.
+ * Never a key the performer is holding.
+ * @param {Object} chord - Candidate with pitchClasses and root
+ * @param {Array<number>} held
+ * @return {Array<number>}
+ */
+function completeAround(chord, held) {
+  const heldSet = new Set(held);
+  const heldPcs = new Set(held.map(p => p % 12));
+  const low = Math.min(...held), high = Math.max(...held);
+  const center = (low + high) / 2;
+  const out = [];
+  chord.pitchClasses.forEach(pc => {
+    if (heldPcs.has(pc)) return;
+    let best = null;
+    for (let p = low - 12; p <= high; p++) {
+      if (p % 12 === pc && !heldSet.has(p) &&
+          (best === null || Math.abs(p - center) < Math.abs(best - center))) {
+        best = p;
+      }
+    }
+    if (best !== null) out.push(best);
+  });
+  if (low % 12 !== chord.root) {
+    let bass = low - 1;
+    while (bass % 12 !== chord.root) bass--;
+    if (low - bass < 12) bass -= 12;
+    if (bass < LOWEST_PIANO_PITCH) bass += 12;
+    if (!heldSet.has(bass) && !out.includes(bass)) out.push(bass);
+  }
+  return out.sort((a, b) => a - b);
+}
+const LOWEST_PIANO_PITCH = 21;
+
+/** Complete the notes gathered in the gesture window */
+async function completeHeldNotes() {
+  if (!curSession) return;
+  curSession.gestureTimer = null;
+  if (!curSession.candidates) {
+    await fetchCandidates();  // session just started: take the round trip once
+  }
+  if (!curSession || !curSession.candidates || !curSession.heldKeys.size) {
+    return;  // stopped, no candidates, or released before they arrived
+  }
+  const held = [...curSession.heldKeys];
+  const picked = pickCandidate(curSession.candidates, held);
+  if (!picked) return;
+  const { chord, rank } = picked;
+  const pitches = completeAround(chord, held);
+
+  pitches.forEach(pitch => {
+    if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
+    visual.noteOn(pitch, 'blue');
+  });
+  midiStrikeNow(pitches);
+
+  const frame = getSessionCurrentFrame();
+  fillManualChordTokens();
+  curSession.chordTokens[frame] = chord.onsetToken;
+  curSession.manualChord = { ...chord, pitches, startFrame: frame };
+  curSession.completion = { pitches };
+  curSession.chordHistory.push(
+    { scheduleFrame: frame, pitches, symbol: chord.symbol, eventIDs: [] });
+  curSession.completionHistory.push(
+    { frame, held, symbol: chord.symbol, pitches, prob: chord.prob, rank });
+  updateChordTimingInfo();
+}
+
+/** All keys released: the completed chord ends */
+function releaseCompletion() {
+  fillManualChordTokens();     // the chord held up to now
+  curSession.manualChord = null;
+  curSession.completion.pitches.forEach(pitch => {
+    if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
+    visual.noteOff(pitch);
+  });
+  midiStrikeToken++;           // cancel a re-press midiStrikeNow may have pending
+  midiApplyChord([], Tone.context.currentTime);
+  curSession.completion = null;
+  fetchCandidates();           // history changed
+}
+
+/** Space let go in triggered mode: the chord stops */
+function releaseTriggeredChord() {
+  if (!curSession.triggeredChord) return;
+  curSession.triggeredChord.forEach(pitch => {
+    if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
+    visual.noteOff(pitch);
+  });
+  midiStrikeToken++;  // cancel a re-press midiStrikeNow may still have pending
+  midiApplyChord([], Tone.context.currentTime);
+  curSession.triggeredChord = null;
+  curSession.triggerHistory.push(
+    { frame: getSessionCurrentFrame(), symbol: '', pitches: [], release: true });
+  updateChordTimingInfo();
+}
+
 /** Show what is sounding and what space will play next */
 function updateChordTimingInfo() {
+  if (chordTimingSelect.value === 'complete') {
+    if (!curSession) {
+      chordTimingInfo.textContent =
+        'Start a session, then play a few notes: the model completes the chord';
+      return;
+    }
+    const last = curSession.completionHistory[curSession.completionHistory.length - 1];
+    chordTimingInfo.textContent = last
+      ? `Completed: ${last.symbol} (model's #${last.rank + 1} choice)` +
+        `${curSession.completion ? '' : ' -- released'}`
+      : (curSession.candidates ? 'Play a few notes' : 'thinking...');
+    return;
+  }
   if (chordTimingSelect.value === 'triggered') {
     if (!curSession) {
       chordTimingInfo.textContent =
-        'Start a session; space plays the chord scheduled at that moment';
+        'Start a session; hold space to play the chord scheduled at that moment';
       return;
     }
     const last = curSession.triggerHistory[curSession.triggerHistory.length - 1];
@@ -878,6 +1241,11 @@ function processAgentAction(
       eventID => Tone.Transport.clear(eventID));
   }
 
+  if (!curSession.voicedByFrame) curSession.voicedByFrame = new Map();
+  curSession.voicedByFrame.forEach((_, frame) => {
+    if (frame < curFrame - 64) curSession.voicedByFrame.delete(frame);
+  });
+
   // MIDI chord changes for the frames being re-planned. Each poll re-plans
   // every future frame, usually identically; MIDI events go out early, so
   // cancelling and rescheduling an unchanged chord could double or delay it.
@@ -905,6 +1273,7 @@ function processAgentAction(
     if (scheduleFrame < curFrame || scheduleFrame < silenceFrame) {
       return;
     }
+    pitches = autoModeVoicing(scheduleFrame, symbol, on, pitches);
 
     const isCommitted = frameOffset < getCommitaheadFrames();
     const prevFramePitches = getChordPitchesAtFrame(scheduleFrame - 1);
@@ -1349,7 +1718,8 @@ function playBrowsedVoicing() {
  */
 function playNote(note, velocity, fromLaptop = false) {
   const keyIndex = noteToPitch[note];
-  if (curSession) {
+  const completing = curSession && isCompleteMode();
+  if (curSession && !completing) {
     curSession.noteHistory.push(
       { on: true, pitch: keyIndex, frame: getSessionCurrentFrame() });
     startGenerationLoop();
@@ -1364,6 +1734,7 @@ function playNote(note, velocity, fromLaptop = false) {
     midiKeyDown(keyIndex, 'laptop', midiMelodyVelocity(), Tone.context.currentTime);
   }
   visual.noteOn(keyIndex);
+  if (completing) onCompletionNoteDown(keyIndex);
 }
 
 /**
@@ -1372,7 +1743,8 @@ function playNote(note, velocity, fromLaptop = false) {
  */
 function releaseNote(note, fromLaptop = false) {
   const keyIndex = noteToPitch[note];
-  if (curSession) {
+  const completing = curSession && isCompleteMode();
+  if (curSession && !completing) {
     curSession.noteHistory.push(
       { on: false, pitch: keyIndex, frame: getSessionCurrentFrame() });
   }
@@ -1382,6 +1754,7 @@ function releaseNote(note, fromLaptop = false) {
     midiKeyUp(keyIndex, 'laptop', Tone.context.currentTime);
   }
   visual.noteOff(keyIndex);
+  if (completing) onCompletionNoteUp(keyIndex);
 }
 
 /**
@@ -1431,57 +1804,67 @@ function scheduleNote(note, on, playTime) {
  * than released and re-pressed in the same instant, which the action can't
  * do; resending the same chord is a no-op; and a re-planned chord can never
  * leave notes stuck. A chord *onset* is a genuine re-strike, so its shared
- * pitches are lifted midiRestrikeGapMs() early to let the action reset.
+ * pitches are lifted early (midiRestrikeGapFor) to let the action reset.
  */
-let chordOutputSelect, midiLeadInput, midiVelocityInput, midiRestrikeInput,
-  midiMinHoldInput, midiMelodyVelocityInput;
+let chordOutputSelect, midiLeadInput, midiVelocityInput, midiMelodyVelocityInput;
 let midiChordOut = null;               // WebMidi Output; null = laptop synth
 const midiSounding = new Set();        // pitches currently held on the piano
 let midiScheduledByFrame = new Map();  // frame -> {key, ids}, see processAgentAction
 /**
- * Longest a key is released before the same note is struck again. After a
- * long note an upright's hammer rests on the backcheck and needs the key to
- * come most of the way up before the jack resets; measured on the ENSPIRE
- * U1 at velocity 40, 50 ms fails after holds over ~250 ms while 150 ms works;
- * 200 leaves margin (one browser run at velocity 55 missed notes at 150).
- * Louder notes repeat more easily, so soft ones set this value.
- * @return {number}
+ * How long a key is released before it is struck again, by how far apart
+ * the two strikes are. Calibrated per note length on the ENSPIRE U1 at
+ * 80 BPM with the disklavier_fifths-sweep demos: the hold is whatever is
+ * left of the note (spacing - release). A long hold lets the hammer settle
+ * on the backcheck, which then needs a long release to reset; after a short
+ * hold it is still rebounding and resets quickly. Anchors are in ms (the
+ * mechanics don't care about tempo); spacings between them are blended
+ * linearly, beyond them the nearest value is used.
  */
+// Calibrated 2026-10-05: piano volume 2.5/5, velocity 40 (chords and melody),
+// 80 BPM; hold = spacing - release: 117.5 / 225 / 450 / 1200 ms.
+const MIDI_RELEASE_ANCHORS = [
+  { id: 'midi-release-16-input', spacingMs: 187.5, fallback: 70 },   // 1/16 at 80 BPM
+  { id: 'midi-release-8-input', spacingMs: 375, fallback: 150 },     // 1/8
+  { id: 'midi-release-4-input', spacingMs: 750, fallback: 300 },     // 1/4
+  { id: 'midi-release-2-input', spacingMs: 1500, fallback: 300 },    // 1/2 and longer
+];
+
+/** Release (ms) set for anchor i */
+function midiReleaseMs(i) {
+  const anchor = MIDI_RELEASE_ANCHORS[i];
+  const ms = anchor.input ? anchor.input.valueAsNumber : NaN;
+  return Number.isNaN(ms) ? anchor.fallback : Math.max(0, ms);
+}
+
+/** Release (ms) after a long hold, for strikes whose spacing is unknown */
 function midiRestrikeGapMs() {
-  const ms = midiRestrikeInput.valueAsNumber;  // NaN when the field is empty
-  return Number.isNaN(ms) ? 200 : Math.max(0, ms);
+  return midiReleaseMs(MIDI_RELEASE_ANCHORS.length - 1);
 }
-
-/**
- * Shortest time a key is held before its release for a re-strike. A soft
- * note needs ~100 ms of key travel before the hammer is thrown; release it
- * sooner and the note is skipped or comes out weak.
- * @return {number}
- */
-function midiMinHoldMs() {
-  const ms = midiMinHoldInput.valueAsNumber;
-  return Number.isNaN(ms) ? 130 : Math.max(0, ms);
-}
-
-const MIDI_MIN_GAP_MS = 50;
 
 /**
  * Release time before re-striking a key that was pressed `spacingSec`
- * earlier. Long notes get the full gap. Fast repeats keep at least the min
- * hold and give the release what's left: a short hold doesn't let the
- * hammer settle on the backcheck, so it resets in as little as 50 ms
- * (measured on the U1: hold 137 ms + release 50 ms repeats cleanly, hold
- * 37 ms + release 150 ms skips notes). Below ~150 ms between strikes no
- * split works on the upright; the gap then bottoms out at 50 ms.
+ * earlier, from the release table. Never longer than the spacing itself
+ * (the note would get no hold at all).
  * @param {number=} spacingSec - Time since the key was last pressed;
- *   undefined when unknown
+ *   undefined when unknown (the long-hold value is used)
  * @return {number} Seconds
  */
 function midiRestrikeGapFor(spacingSec) {
-  const maxGap = midiRestrikeGapMs() / 1000;
-  if (spacingSec === undefined) return maxGap;
-  const fit = Math.max(MIDI_MIN_GAP_MS / 1000, spacingSec - midiMinHoldMs() / 1000);
-  return Math.min(maxGap, fit);
+  if (spacingSec === undefined) return midiRestrikeGapMs() / 1000;
+  const ms = spacingSec * 1000;
+  const anchors = MIDI_RELEASE_ANCHORS;
+  let release;
+  if (ms <= anchors[0].spacingMs) {
+    release = midiReleaseMs(0);
+  } else if (ms >= anchors[anchors.length - 1].spacingMs) {
+    release = midiReleaseMs(anchors.length - 1);
+  } else {
+    const i = anchors.findIndex(a => a.spacingMs >= ms);
+    const lo = anchors[i - 1], hi = anchors[i];
+    const t = (ms - lo.spacingMs) / (hi.spacingMs - lo.spacingMs);
+    release = midiReleaseMs(i - 1) + t * (midiReleaseMs(i) - midiReleaseMs(i - 1));
+  }
+  return Math.min(release, ms) / 1000;
 }
 const MIDI_STALE_MS = 50;              // later than this, a note-on is skipped
 
@@ -1503,7 +1886,7 @@ function midiVelocity() {
 
 /** Robot-melody velocity on the piano (1-127). */
 function midiMelodyVelocity() {
-  return Math.min(127, Math.max(1, Math.round(midiMelodyVelocityInput.valueAsNumber || 55)));
+  return Math.min(127, Math.max(1, Math.round(midiMelodyVelocityInput.valueAsNumber || 40)));
 }
 
 /*
@@ -1530,8 +1913,11 @@ function midiKeyUp(pitch, holder, audioTime) {
   if (holders.size === 0) {
     midiChordOut.send([0x80, pitch, 0], { time: midiTimestamp(audioTime) });
     midiKeyHolders.delete(pitch);
+    midiReleasedAt.set(pitch, audioTime);
   }
 }
+/** pitch -> audio time its key was last released, for midiStrikeNow */
+const midiReleasedAt = new Map();
 
 function midiNoteOn(pitch, audioTime) {
   midiKeyDown(pitch, 'chord', midiVelocity(), audioTime);
@@ -1544,44 +1930,68 @@ function midiNoteOff(pitch, audioTime) {
 }
 
 /**
- * Schedule a robot melody on the piano, `midiLeadMs` early.
+ * Schedule the robot melody on the piano for one loop pass.
  *
- * The melody is known a whole loop ahead, so repeated notes can be handled
- * like Aria's _adjust_previous_off_time: where the same pitch comes back
- * sooner than the re-strike gap, its release is pulled earlier (never before
- * its own onset) so the action has reset by the time it's struck again.
- * Cleared with everything else by Tone.Transport.cancel() when the session
- * stops.
+ * A note is pressed `lead` early. Its release is worked out when it is
+ * pressed, not when the pass is scheduled, so the MIDI release settings
+ * and the melody velocity can be changed while a loop plays: where the same
+ * pitch comes back, the release is pulled earlier by midiRestrikeGapFor
+ * (like Aria's _adjust_previous_off_time, never before the note's own
+ * onset). The next pass's notes count as "coming back" too (`loopFrames`),
+ * so a loop restarting on the same pitch gets its gap like any other
+ * repeat. Cleared with everything else by Tone.Transport.cancel() when the
+ * session stops.
  * @param {Array<{pitch: number, onset: number, offset: number}>} notes
  * @param {number} baseFrame - Transport frame the loop starts at
+ * @param {number=} loopFrames - Loop period, if the notes repeat
+ * @param {boolean=} redraw - Move a note's drawn release if the settings
+ *   changed after it was drawn (ground-truth playback draws the melody)
+ * @return {?Array<{pitch: number, offFrame: number}>} each note's release
+ *   with the current settings, for drawing (null without a MIDI output)
  */
-function scheduleMidiMelody(notes, baseFrame) {
-  if (!midiChordOut) return;
+function scheduleMidiMelody(notes, baseFrame, loopFrames, redraw = false) {
+  if (!midiChordOut) return null;
   const lead = (midiLeadInput.valueAsNumber || 0) / 1000;
   const now = Tone.Transport.seconds;
+  const spf = Tone.Time('16n').toSeconds();
   const toSec = beats => Tone.Time(frameToTransportTime(
     baseFrame + Math.round(beats * fpb))).toSeconds();
 
   const timed = notes
     .map(({ pitch, onset, offset }) => ({ pitch, on: toSec(onset), off: toSec(offset) }))
     .sort((a, b) => a.on - b.on);
-  timed.forEach((note, i) => {
-    const next = timed.slice(i + 1).find(n => n.pitch === note.pitch);
-    const gap = next && midiRestrikeGapFor(next.on - note.on);
-    if (next && next.on - note.off < gap) {
-      note.off = Math.max(note.on, next.on - gap);
-    }
-  });
+  const upcoming = loopFrames
+    ? [...timed, ...timed.map(n => ({ ...n, on: n.on + loopFrames * spf }))]
+    : timed;
 
-  timed.forEach(({ pitch, on, off }) => {
+  /** When `note` is released under the current settings, in seconds */
+  const releaseOf = note => {
+    const next = upcoming.find(n => n.pitch === note.pitch && n.on > note.on);
+    if (!next) return note.off;
+    const gap = midiRestrikeGapFor(next.on - note.on);
+    return next.on - note.off < gap ? Math.max(note.on, next.on - gap) : note.off;
+  };
+
+  const releases = [];
+  timed.forEach(note => {
+    const { pitch, on } = note;
+    const drawnOff = releaseOf(note);
+    releases.push({ pitch, offFrame: drawnOff / spf });
     const onAt = on - lead;
     if (onAt < now - MIDI_STALE_MS / 1000) return;  // too late to sound on time
-    const velocity = midiMelodyVelocity();
-    Tone.Transport.scheduleOnce(t => midiKeyDown(pitch, 'melody', velocity, t),
-      Math.max(onAt, now + 0.002));
-    Tone.Transport.scheduleOnce(t => midiKeyUp(pitch, 'melody', t),
-      Math.max(off - lead, onAt, now + 0.002));
+    Tone.Transport.scheduleOnce(t => {
+      midiKeyDown(pitch, 'melody', midiMelodyVelocity(), t);
+      const off = releaseOf(note);
+      if (redraw && off !== drawnOff) visual.scheduleNoteOff(pitch, off / spf, true);
+      // A hair early, so a release at the same moment as the next press of
+      // this key (gap 0) is still sent before it
+      // (Transport time, not `t`: callbacks get audio-context time, whose
+      // clock has been running since the page loaded.)
+      Tone.Transport.scheduleOnce(t2 => midiKeyUp(pitch, 'melody', t2),
+        Math.max(off - lead - 0.0005, Tone.Transport.seconds + 0.0005));
+    }, Math.max(onAt, now + 0.002));
   });
+  return releases;
 }
 
 /** Move the piano from whatever it's holding to exactly `pitches`. */
@@ -1594,8 +2004,32 @@ function midiApplyChord(pitches, audioTime) {
 
 /** Lift any of `pitches` currently held, ahead of a re-strike. */
 function midiLift(pitches, audioTime) {
-  if (!midiChordOut) return;
-  pitches.forEach(p => { if (midiSounding.has(p)) midiNoteOff(p, audioTime); });
+  if (!midiChordOut) return [];
+  const lifted = pitches.filter(p => midiSounding.has(p));
+  lifted.forEach(p => midiNoteOff(p, audioTime));
+  return lifted;
+}
+
+/**
+ * Schedule a re-strike: lift the keys of `pitches` still held at `liftAt`,
+ * press the chord at `sendAt`. When the lift came too late to leave the full
+ * release before `sendAt` (a chord decided at the last moment), only the
+ * keys actually lifted wait out their release; the rest of the chord still
+ * sounds on time.
+ * @return {Array<number>} Transport event IDs
+ */
+function scheduleMidiRestrike(pitches, liftAt, sendAt, gap) {
+  let lifted = [];
+  const ids = [Tone.Transport.scheduleOnce(t => { lifted = midiLift(pitches, t); }, liftAt)];
+  const repressAt = liftAt + gap;
+  if (repressAt <= sendAt) {
+    ids.push(Tone.Transport.scheduleOnce(t => midiApplyChord(pitches, t), sendAt));
+  } else {
+    ids.push(Tone.Transport.scheduleOnce(
+      t => midiApplyChord(pitches.filter(p => !lifted.includes(p)), t), sendAt));
+    ids.push(Tone.Transport.scheduleOnce(t => midiApplyChord(pitches, t), repressAt));
+  }
+  return ids;
 }
 
 /**
@@ -1621,15 +2055,47 @@ function scheduleMidiChord(pitches, frame, restrike, prevFrame) {
     // Aria does, rather than play it late; the next change resyncs.
     return ids;
   }
-  if (restrike && pitches.length) {
-    const liftAt = Math.max(sendAt - gap, now + 0.002);
-    sendAt = Math.max(sendAt, liftAt + gap);
-    ids.push(Tone.Transport.scheduleOnce(t => midiLift(pitches, t), liftAt));
-  }
   sendAt = Math.max(sendAt, now + 0.002);
+  if (restrike && pitches.length) {
+    // Lift first: with no time to spare both share a time, and insertion
+    // order holds
+    return ids.concat(scheduleMidiRestrike(
+      pitches, Math.min(Math.max(sendAt - gap, now + 0.002), sendAt), sendAt, gap));
+  }
   ids.push(Tone.Transport.scheduleOnce(t => midiApplyChord(pitches, t), sendAt));
   return ids;
 }
+
+/**
+ * scheduleMidiChord for pre-planned chords that are never re-planned
+ * (ground-truth playback), with the re-strike gap decided just before it is
+ * needed rather than when the chord is scheduled, so the gap settings can be
+ * changed while a loop plays. The decision runs MIDI_DECIDE_AHEAD before the
+ * chord is sent -- more than the largest gap the setting allows -- and then
+ * schedules the lift and the press. Not used for auto mode, whose events
+ * must stay cancellable by id when the model re-plans.
+ * @param {Array<number>} pitches
+ * @param {number} frame - Transport frame the chord should sound at
+ * @param {number=} prevFrame - Frame the previous chord was pressed at
+ * @param {function(number)=} onGap - Told the gap (s) once decided
+ */
+function scheduleMidiChordLive(pitches, frame, prevFrame, onGap) {
+  const lead = (midiLeadInput.valueAsNumber || 0) / 1000;
+  const now = Tone.Transport.seconds;
+  const spf = Tone.Time('16n').toSeconds();
+  const sendAt = Tone.Time(frameToTransportTime(frame)).toSeconds() - lead;
+  if (sendAt < now - MIDI_STALE_MS / 1000 && pitches.length) return;  // too late
+  Tone.Transport.scheduleOnce(() => {
+    const nowT = Tone.Transport.seconds;
+    const gap = midiRestrikeGapFor(
+      prevFrame === undefined ? undefined : (frame - prevFrame) * spf);
+    const pressAt = Math.max(sendAt, nowT + 0.002);
+    scheduleMidiRestrike(
+      pitches, Math.min(Math.max(sendAt - gap, nowT + 0.002), pressAt), pressAt, gap);
+    if (onGap) onGap(gap);
+  }, Math.max(sendAt - MIDI_DECIDE_AHEAD, now + 0.001));
+}
+const MIDI_DECIDE_AHEAD = 0.55;  // s; the gap setting goes up to 500 ms
 
 let midiStrikeToken = 0;
 
@@ -1637,18 +2103,39 @@ let midiStrikeToken = 0;
 function midiStrikeNow(pitches) {
   if (!midiChordOut) return;
   const token = ++midiStrikeToken;
+  const now = Tone.context.currentTime;
+  const gap = midiRestrikeGapMs() / 1000;
   const held = pitches.filter(p => midiSounding.has(p));
+  // Keys released less than a gap ago (e.g. space let go and tapped again)
+  // haven't reset yet either: they wait out the rest of their gap.
+  const recent = pitches.filter(p => !held.includes(p) &&
+    midiReleasedAt.has(p) && midiReleasedAt.get(p) > now - gap);
   // New pitches sound at once and the old chord is released, including the
   // pitches it shares with the new one; those are pressed again once the
   // action has had time to reset.
-  midiApplyChord(pitches.filter(p => !held.includes(p)), Tone.context.currentTime);
-  if (held.length) {
+  midiApplyChord(pitches.filter(p => !held.includes(p) && !recent.includes(p)), now);
+  const wait = Math.max(held.length ? gap : 0,
+    ...recent.map(p => midiReleasedAt.get(p) + gap - now));
+  if (wait > 0) {
     setTimeout(() => {
       if (token === midiStrikeToken) {  // not superseded by a later press
         midiApplyChord(pitches, Tone.context.currentTime);
       }
-    }, midiRestrikeGapMs());
+    }, wait * 1000);
   }
+}
+
+/**
+ * Sound a chord the performer just triggered (triggered and manual mode)
+ * with no re-strike gap: keys it shares with the chord already down are
+ * simply held, new keys are pressed and the rest released, all at once.
+ * Nothing waits for the action to reset, so a chord is never delayed --
+ * at the price that a shared or just-released key isn't struck again.
+ */
+function midiPlayNow(pitches) {
+  if (!midiChordOut) return;
+  midiStrikeToken++;  // drop any re-press an earlier strike left pending
+  midiApplyChord(pitches, Tone.context.currentTime);
 }
 
 /** Release everything on the piano, including the sustain pedal. */
@@ -1882,6 +2369,12 @@ function enableKeyboardInputs() {
   });
   document.addEventListener('keyup', event => {
     if (isTypingTarget(event)) {
+      return;
+    }
+    // In triggered mode the chord lasts while space is held
+    if (event.code === 'Space' && curSession && isTriggeredChordMode()) {
+      event.preventDefault();
+      releaseTriggeredChord();
       return;
     }
     const note = keysToNotes[event.key];
@@ -2146,8 +2639,10 @@ async function initializeMIDIReader(visual_arg) {
   metronomeCheck = document.getElementById('metronome-check');
   showChordsCheck = document.getElementById('show-chords-check');
   customVoicingsCheck = document.getElementById('custom-voicings-check');
-  vlWeightInput = bindSliderValueDisplay('vl-weight-input', 'vl-weight-value', 2);
-  regWeightInput = bindSliderValueDisplay('reg-weight-input', 'reg-weight-value', 2);
+  voiceAroundMelodyCheck = document.getElementById('voice-around-melody-check');
+  voiceBassCheck = document.getElementById('voice-bass-check');
+  melodyGapInput = document.getElementById('melody-gap-input');
+  addNumericInputEventListener(melodyGapInput);
   songSearchInput = document.getElementById('song-search-input');
   songSearchInput.addEventListener('input', onSongSearchInput);
   songSearchInput.addEventListener('keydown', onSongSearchKeydown);
@@ -2191,10 +2686,10 @@ async function initializeMIDIReader(visual_arg) {
   addNumericInputEventListener(midiLeadInput);
   midiMelodyVelocityInput = bindSliderValueDisplay(
     'midi-melody-velocity-input', 'midi-melody-velocity-value', 0);
-  midiRestrikeInput = document.getElementById('midi-restrike-input');
-  addNumericInputEventListener(midiRestrikeInput);
-  midiMinHoldInput = document.getElementById('midi-min-hold-input');
-  addNumericInputEventListener(midiMinHoldInput);
+  MIDI_RELEASE_ANCHORS.forEach(anchor => {
+    anchor.input = document.getElementById(anchor.id);
+    addNumericInputEventListener(anchor.input);
+  });
 
   // Do initial setup with server
   establishServerConnection();

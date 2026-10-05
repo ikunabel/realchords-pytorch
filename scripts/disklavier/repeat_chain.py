@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Play bar 1 of the disklavier_hold-time demo straight to the piano.
+"""Play three legato quarters on one key straight to the piano.
+
+(Mirrors bar 1 of the former disklavier_hold-time demo, since removed.)
 
 Three legato quarter notes on one key (80 BPM by default), each released
 --gap_ms before the next, repeated in --groups groups with a rest between.

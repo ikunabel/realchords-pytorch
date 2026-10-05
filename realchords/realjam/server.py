@@ -104,8 +104,8 @@ def get_song_reference(dataset: str, split: str, song_id: str) -> str:
     chords = []
     prev_voicing = None
     for chord in song_catalogue.extract_reference_chords(record):
-        pitches = None
-        if selector is not None:
+        pitches = chord.get("pitches")  # a demo song's exact keys, if given
+        if pitches is None and selector is not None:
             pitches = selector.select(
                 chord["symbol"],
                 prev_voicing=prev_voicing,
@@ -207,6 +207,24 @@ def advance_chord() -> str:
             prev_voicing=payload.get("prevVoicing"),
             vl_weight=payload.get("vlWeight"),
             reg_weight=payload.get("regWeight"),
+        )
+    )
+
+
+@app.post("/chord_candidates")
+def chord_candidates() -> str:
+    """Ranked chord onsets the model would start now, for chord-completion
+    mode: the client picks the most probable one containing the notes the
+    performer plays."""
+    assert agent is not None
+    payload = flask.request.get_json()
+    return json.dumps(
+        agent.chord_candidates(
+            payload["model"],
+            payload["notes"],
+            payload["chordTokens"],
+            payload["frame"],
+            top_k=int(payload.get("topK", 200)),
         )
     )
 

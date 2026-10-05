@@ -1,0 +1,74 @@
+# Everything this project's .venv needs: training, evaluation, data conversion,
+# the ReaLJam server and the Disklavier scripts, in one standalone list
+# (requirements.txt + requirements_realjam.txt + packages added since).
+#
+# Works on Linux and on Apple Silicon Macs; platform-specific packages carry
+# environment markers, so the same file installs cleanly on both.
+#
+#   uv venv --python 3.11 .venv
+#   uv pip install --python .venv/bin/python -r requirements_custom.txt
+#   # Linux laptop without a GPU: add --extra-index-url https://download.pytorch.org/whl/cpu
+#   # to get the smaller CPU-only torch build. On a Mac the default build is right.
+#
+# Not included on purpose:
+#   flash-attn, ring-flash-attn, openrlhf  -- need CUDA; GPU RL training on the
+#                                             cluster only, and would make the
+#                                             install fail on a Mac
+
+# --- Core ---------------------------------------------------------------------
+numpy<2.0,>=1.23.0
+torch
+torchaudio
+# Pin x-transformers because of this regression:
+# https://github.com/lucidrains/x-transformers/issues/352
+x-transformers>=2.1.2,<=2.11.23
+einops
+lightning
+# RL training only (realchords/rl/), never imported by ReaLJam. Its build step
+# needs torch already installed, which fails on macOS, so Linux only.
+deepspeed==0.16.4; sys_platform == "linux"
+transformers  # Optional, only used in base class
+peft  # Optional, only used in base class
+argbind
+pyyaml
+tqdm
+pqdm
+wandb
+
+# --- Music / MIDI ---------------------------------------------------------------
+pretty_midi
+note_seq
+librosa
+music21   # Nottingham conversion
+openpyxl  # POP909 conversion (reads the dataset's .xlsx metadata)
+
+# --- Evaluation and plotting ----------------------------------------------------
+scipy
+pandas
+scikit-learn
+matplotlib
+seaborn
+bokeh==2.4.3
+vendi-score
+frechet_music_distance  # CLaMP2 wrapper (embedding pilot, scripts/eval/embed_midi_clamp2.py)
+rapidfuzz
+
+# --- Data collection ------------------------------------------------------------
+wget
+selenium
+beautifulsoup4
+
+# --- ReaLJam server -------------------------------------------------------------
+flask
+pyopenssl  # --ssl (adhoc certificate), needed when the browser is on another device
+onnxruntime==1.21.0
+onnx==1.17.0
+# Apple Silicon backend: python -m realchords.realjam.server --port 1234 --ssl --mlx
+mlx; sys_platform == "darwin" and platform_machine == "arm64"
+
+# --- Disklavier (scripts/disklavier/) -------------------------------------------
+mido
+# mido's MIDI backend (CoreMIDI on macOS, ALSA on Linux). Where no wheel exists
+# it builds from source, which on Linux needs the ALSA headers
+# (Fedora: sudo dnf install alsa-lib-devel).
+python-rtmidi

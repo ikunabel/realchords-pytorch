@@ -173,11 +173,12 @@ def extract_reference_chords(record: dict) -> List[ReferenceChord]:
             )
         except Exception:
             continue
-        chords.append({
-            "symbol": symbol,
-            "onset": chord["onset"],
-            "offset": chord["offset"],
-        })
+        entry = {"symbol": symbol, "onset": chord["onset"], "offset": chord["offset"]}
+        if "pitches" in chord:
+            # Exact keys, for synthetic demo songs (demo_songs.py); real
+            # songs never carry this and are voiced from the symbol
+            entry["pitches"] = list(chord["pitches"])
+        chords.append(entry)
     return chords
 
 

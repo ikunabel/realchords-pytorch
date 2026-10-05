@@ -1,32 +1,43 @@
-"""Calibration demos for a Disklavier, listed in the robot-melody song search.
+"""Calibration demo for a Disklavier, listed in the robot-melody song search.
 
-Each demo isolates one of the MIDI output settings so that changing it is
-plainly audible. Play them with "Play Ground Truth" ticked (no model), the
-Disklavier selected as Output, and the metronome on.
+``disklavier_sixteenths`` -- middle E (E4) as sixteenth notes back to back,
+for four bars on a loop: the densest repetition ReaLJam can send, since the
+model's chords and the played-back melodies sit on a sixteenth-note grid and
+two notes on neighbouring frames leave no time between them in the schedule.
+Every repeat therefore depends entirely on the re-strike handling (MIDI
+Release before repeat settings) or, with the piano's MIDI IN Delay on, on the
+instrument itself. Play it with "Play Ground Truth" ticked (no model) and the
+Disklavier selected as Output; the Disklavier presets describe what each
+configuration does to it.
 
-* ``disklavier_send_early`` -- short notes exactly on every beat, alternating
-  pitches so the re-strike gap never applies. The metronome still clicks on
-  the laptop, which makes it the reference: with the right "MIDI Send Early"
-  the piano lands with the click, too little and it drags behind, too much
-  and it rushes ahead.
-* ``disklavier_re-strike-gap`` -- a C major chord repeated legato in
-  quarters, eighths, then sixteenths. A "MIDI Re-strike Gap" in the
-  50-100 ms range makes repetitions fail (keys pressed again mid-return);
-  far too large and the short notes don't reach the bottom.
-* ``disklavier_hold-time`` -- middle C alone, repeated legato in shrinking
-  note lengths, so at a fixed gap the time each key is held before its
-  release steps down bar by bar.
+The gap settings and velocities are read per note or chord, just before it
+is played, so they can be changed while a demo plays. Send Early applies from the
+next loop pass.
 
 Records use the same schema as the data cache (see convert_*_to_cache.py), so
 the existing melody/reference endpoints serve them unchanged. Times are in
-beats, so the demos follow whatever tempo the session is set to. Slider
-changes take effect from the next repetition of the loop, since a whole loop
-is scheduled when it starts.
+beats, so the demo follows whatever tempo the session is set to.
+
+``disklavier_e3-b3-halves`` -- E3 and B3 together (an E5 chord, given as
+exact keys so no bass note is added) held for 8 frames (a half note) and
+struck again immediately, eight times, on a loop, with no melody: the
+long-hold case, where every key is shared with the next chord and has come
+to rest on the backcheck before it must repeat.
+
+``disklavier_fifths-sweep-halves`` / ``-quarters`` / ``-eighths`` /
+``-sixteenths`` -- the same fifth moved up a semitone at a time from E3 + B3
+to E4 + B4 (13 positions), each held for that note value and struck four
+times back to back: repetition across
+an octave of keys, since it was found to differ between keys.
+
+Earlier demos (disklavier_send_early, disklavier_re-strike-gap,
+disklavier_hold-time) were removed after the calibration they served; see
+journal/DISKLAVIER.md.
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from realchords.constants import ZERO_OCTAVE
 
@@ -40,14 +51,19 @@ def _note(pitch: int, onset: float, offset: float) -> dict:
     return {"onset": onset, "offset": offset, "octave": octave, "pitch_class": pitch_class}
 
 
-def _chord(root_pitch_class: int, intervals: List[int], onset: float, offset: float) -> dict:
-    return {
+def _chord(root_pitch_class: int, intervals: List[int], onset: float, offset: float,
+           pitches: Optional[List[int]] = None) -> dict:
+    chord = {
         "onset": onset,
         "offset": offset,
         "root_pitch_class": root_pitch_class,
         "root_position_intervals": intervals,
         "inversion": 0,
     }
+    if pitches is not None:
+        # Exact keys to play, bypassing voicing (which would add a bass note)
+        chord["pitches"] = pitches
+    return chord
 
 
 def _record(song_id: str, num_beats: int, melody: List[dict], harmony: List[dict]) -> dict:
@@ -62,64 +78,38 @@ def _record(song_id: str, num_beats: int, melody: List[dict], harmony: List[dict
     }
 
 
-def send_early_demo() -> dict:
-    """Two bars of staccato notes on every beat.
-
-    Bar lines on C6, other beats alternating G4 / C5, so no pitch repeats on
-    consecutive beats and the re-strike gap stays out of the picture. Notes
-    last half a beat: long enough to hear clearly, short enough that each
-    onset is a distinct event against the click.
-    """
-    melody = []
-    for beat in range(8):
-        pitch = 84 if beat % 4 == 0 else (67 if beat % 2 else 72)
-        melody.append(_note(pitch, beat, beat + 0.5))
-    return _record("disklavier_send_early", 8, melody, [])
+def sixteenths_demo() -> dict:
+    """E4 sixteenths, legato, four bars."""
+    melody = [_note(64, i / 4, (i + 1) / 4) for i in range(16 * 4)]
+    return _record("disklavier_sixteenths", 16, melody, [])
 
 
-def restrike_gap_demo() -> dict:
-    """A C major chord repeated legato: a bar each of quarters, eighths and
-    sixteenths.
+def e3_b3_halves_demo() -> dict:
+    """E3 + B3 held for 8 frames (a half note), struck again at once, x8."""
+    harmony = [_chord(4, [7], 2 * i, 2 * i + 2, pitches=[52, 59]) for i in range(8)]
+    return _record("disklavier_e3-b3-halves", 16, [], harmony)
 
-    Every chord starts exactly where the previous one ends, so each
-    repetition is a release and a press of the same keys. Measured on the
-    ENSPIRE U1 at 80 BPM, velocity 40: a gap of 0 (release and press sent
-    together) re-strikes cleanly; 50-100 ms fails, the press arriving while
-    the key is still on its way up; 150 ms works again; 300 ms leaves the
-    eighths too short a hold to reach the bottom.
-    """
+
+def fifths_sweep_demo(name: str, beats: float) -> dict:
+    """The E3 + B3 fifth moved up a semitone at a time to E4 + B4, each
+    position held for `beats` and struck four times back to back."""
     harmony = []
-    for bar, per_beat in enumerate((1, 2, 4)):
-        step = 1 / per_beat
-        for i in range(4 * per_beat):
-            onset = 4 * bar + i * step
-            harmony.append(_chord(0, [4, 3], onset, onset + step))
-    return _record("disklavier_re-strike-gap", 12, [], harmony)
-
-
-def hold_time_demo() -> dict:
-    """Middle C repeated legato, one note length per bar, shortest last.
-
-    Each bar plays three beats of repeats -- quarters, dotted eighths,
-    eighths, sixteenths -- then rests a beat so the action settles between
-    groups. At a fixed re-strike gap, each key is held for (note length -
-    gap), so the bars step the hold time down while the release time stays
-    the same: for testing whether a repeat depends on how long the key was
-    held before it, not just on the gap (e.g. at 80 BPM and a 50 ms gap the
-    holds are 700, 512, 325 and 137 ms). Change the BPM to move the steps.
-    """
-    melody = []
-    for bar, length in enumerate((1, 0.75, 0.5, 0.25)):
-        for i in range(round(3 / length)):
-            onset = 4 * bar + i * length
-            melody.append(_note(60, onset, onset + length))
-    return _record("disklavier_hold-time", 16, melody, [])
+    for step in range(13):                       # E5, F5, F#5, ... E5 an octave up
+        for repeat in range(4):
+            onset = beats * (4 * step + repeat)
+            harmony.append(_chord((4 + step) % 12, [7], onset, onset + beats,
+                                  pitches=[52 + step, 59 + step]))
+    return _record(name, round(beats * 4 * 13), [], harmony)
 
 
 def demo_songs() -> List[Tuple[dict, dict]]:
     """(catalogue entry, record) for every demo, ready for build_catalogue."""
     out = []
-    for record in (send_early_demo(), restrike_gap_demo(), hold_time_demo()):
+    for record in (sixteenths_demo(), e3_b3_halves_demo(),
+                   fifths_sweep_demo("disklavier_fifths-sweep-halves", 2),
+                   fifths_sweep_demo("disklavier_fifths-sweep-quarters", 1),
+                   fifths_sweep_demo("disklavier_fifths-sweep-eighths", 0.5),
+                   fifths_sweep_demo("disklavier_fifths-sweep-sixteenths", 0.25)):
         meta = record[DEMO_DATASET]
         entry = {
             "dataset": DEMO_DATASET,

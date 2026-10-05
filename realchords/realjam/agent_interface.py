@@ -756,6 +756,80 @@ class Agent:
         logging.info("[Advance] Chord: %s", result)
         return result
 
+    def _onset_chord_info(self) -> Dict[int, Dict]:
+        """Pitch classes and root of every chord onset token, computed once.
+
+        Tokens whose symbol note_seq can't parse are left out -- they could
+        never be completed into sounding pitches anyway.
+        """
+        if getattr(self, "_onset_info_cache", None) is None:
+            info = {}
+            lo, hi = self.tokenizer.chord_on_token_range
+            for token in range(lo, hi + 1):
+                symbol = self.tokenizer.id_to_name[token].replace("CHORD_ON_", "")
+                try:
+                    pcs = {p % 12 for p in note_seq.chord_symbol_pitches(symbol)}
+                    pcs.add(note_seq.chord_symbol_bass(symbol) % 12)
+                    root = note_seq.chord_symbol_root(symbol) % 12
+                except (note_seq.ChordSymbolError, TypeError):
+                    continue
+                info[token] = {"symbol": symbol, "pitchClasses": sorted(pcs),
+                               "root": root}
+            self._onset_info_cache = info
+        return self._onset_info_cache
+
+    def chord_candidates(
+        self,
+        model_name: str,
+        notes: List[NoteInfo],
+        chord_tokens: List[int],
+        frame: int,
+        top_k: int = 200,
+    ) -> List[Dict]:
+        """The model's most likely chord onsets at `frame`, for chord completion.
+
+        Like advance_chord, the model is asked which chord would start now
+        (onset tokens only), but instead of sampling one, the renormalised
+        onset distribution is returned as a ranked list. The client fetches
+        it ahead of time and, when the performer plays some notes, picks the
+        most probable candidate containing them -- so completion needs no
+        round trip at press time.
+
+        Returns:
+          up to `top_k` dicts, most probable first, with the chord symbol,
+          onset and hold token ids, renormalised probability, pitch classes
+          and root pitch class.
+        """
+        if self.onnx or self.mlx:
+            raise NotImplementedError(
+                "chord_candidates needs the PyTorch backend (it reads logits "
+                "from a single forward pass)")
+        model = self.models[model_name]
+        note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
+        prompt, _, _ = self._build_interleaved_prompt(
+            note_token_hist, chord_tokens, frame, self.max_frames - 1
+        )
+        with torch.no_grad():
+            logits, _ = model.net(prompt, return_intermediates=True)
+        lo, hi = self.tokenizer.chord_on_token_range
+        probs = torch.softmax(logits[0, -1, lo:hi + 1].float(), dim=-1)
+
+        info = self._onset_chord_info()
+        result = []
+        for idx in torch.argsort(probs, descending=True).tolist():
+            token = lo + idx
+            if token not in info:
+                continue
+            result.append({
+                **info[token],
+                "onsetToken": token,
+                "holdToken": self.tokenizer.chord_on_id_to_chord_id(token),
+                "prob": float(probs[idx]),
+            })
+            if len(result) >= top_k:
+                break
+        return result
+
     def _prepare_model(self, model):
         """Prepare model for inference.
         Args:
