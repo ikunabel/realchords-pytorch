@@ -909,8 +909,10 @@ function getScheduledChordAt(targetFrame) {
  */
 function triggerScheduledChord() {
   const entry = getScheduledChordAt(Math.floor(getTransportFrame()));
-  const pitches = voiceAroundMelody(entry ? entry.pitches || [] : [],
-    curSession.triggeredChord || curSession.lastTriggered);
+  // Exactly the voicing the waterfall shows (already voiced around the
+  // melody when it entered the plan, see autoModeVoicing), so what falls
+  // into view is what sounds
+  const pitches = entry ? entry.pitches || [] : [];
 
   if (curSession.triggeredChord) {
     curSession.triggeredChord.forEach(pitch => {
@@ -925,7 +927,6 @@ function triggerScheduledChord() {
   midiPlayNow(pitches);
 
   curSession.triggeredChord = pitches;
-  if (pitches.length) curSession.lastTriggered = pitches;
   curSession.triggerHistory.push({
     frame: getSessionCurrentFrame(),
     symbol: entry ? entry.symbol : '',
