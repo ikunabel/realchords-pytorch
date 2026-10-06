@@ -1,0 +1,51 @@
+# Leave-one-out grid, retrained 2026-10-05 on the corrected caches, scored under
+# the 16-bar all-windows protocol (cropped_max_len 512, all_windows true), the same
+# protocol as configs/custom_eval/alpha_sweep/.
+#
+# One checkpoint per run, chosen by minimum AGGREGATE val/loss over that run's own
+# training corpora. Not per-test-corpus as in the alpha sweep: the held-out corpus
+# has no validation loss in its own LOO run, so a per-corpus rule is undefined there.
+# The aggregate rule is identical across variants and keeps the held-out corpus out
+# of model selection entirely. See scripts/data/select_loo_checkpoints.py.
+
+# Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/dataset_loo_new/chord_melody_dataset.yml
+base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt"
+model:
+  - "7sets_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt"
+  - "7sets_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=43.alpha=0.5_tbje9kfr/step=10000.ckpt"
+  - "7sets_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=44.alpha=0.5_8xgqaxuk/step=10000.ckpt"
+  - "hooktheory_only_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory_only.seed=42_hnvfc6w2/step=11000.ckpt"
+  - "hooktheory_only_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory_only.seed=43_ere0k146/step=12000.ckpt"
+  - "hooktheory_only_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.hooktheory_only.seed=44_1y8bkqvc/step=11000.ckpt"
+  - "7sets_no_hooktheory_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_hooktheory.seed=42.alpha=0.5_4dz3t1xo/step=5000.ckpt"
+  - "7sets_no_hooktheory_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_hooktheory.seed=43.alpha=0.5_5sduyngb/step=5000.ckpt"
+  - "7sets_no_hooktheory_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_hooktheory.seed=44.alpha=0.5_qr7tmhvl/step=5500.ckpt"
+  - "7sets_no_pop909_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_pop909.seed=42.alpha=0.5_k3bky94f/step=9000.ckpt"
+  - "7sets_no_pop909_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_pop909.seed=43.alpha=0.5_gp2zosdx/step=8000.ckpt"
+  - "7sets_no_pop909_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_pop909.seed=44.alpha=0.5_mwy96hj2/step=9000.ckpt"
+  - "7sets_no_emopia_plus_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_emopia_plus.seed=42.alpha=0.5_6vzsr8v4/step=9000.ckpt"
+  - "7sets_no_emopia_plus_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_emopia_plus.seed=43.alpha=0.5_kxcfg5mz/step=10000.ckpt"
+  - "7sets_no_emopia_plus_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_emopia_plus.seed=44.alpha=0.5_lap49usz/step=10000.ckpt"
+  - "7sets_no_nottingham_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_nottingham.seed=42.alpha=0.5_pzpj7d2x/step=9000.ckpt"
+  - "7sets_no_nottingham_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_nottingham.seed=43.alpha=0.5_1oy07uc9/step=9000.ckpt"
+  - "7sets_no_nottingham_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_nottingham.seed=44.alpha=0.5_dp1914gu/step=9000.ckpt"
+  - "7sets_no_wikifonia_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_wikifonia.seed=42.alpha=0.5_4vdbhqa0/step=9000.ckpt"
+  - "7sets_no_wikifonia_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_wikifonia.seed=43.alpha=0.5_kft9zts1/step=9000.ckpt"
+  - "7sets_no_wikifonia_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_wikifonia.seed=44.alpha=0.5_j8qnfwqz/step=9000.ckpt"
+  - "7sets_no_chord_melody_dataset_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_chord_melody_dataset.seed=42.alpha=0.5_yg21teqm/step=11000.ckpt"
+  - "7sets_no_chord_melody_dataset_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_chord_melody_dataset.seed=43.alpha=0.5_ssd0k0l0/step=10000.ckpt"
+  - "7sets_no_chord_melody_dataset_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_chord_melody_dataset.seed=44.alpha=0.5_k9ig1si5/step=10000.ckpt"
+  - "7sets_no_jazzmus_s42=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_jazzmus.seed=42.alpha=0.5_7t9pujqc/step=10000.ckpt"
+  - "7sets_no_jazzmus_s43=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_jazzmus.seed=43.alpha=0.5_aiheir6r/step=10000.ckpt"
+  - "7sets_no_jazzmus_s44=/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets_no_jazzmus.seed=44.alpha=0.5_r10avjkg/step=9000.ckpt"
+seed: 42
+
+dataset_name: chord_melody_dataset
+dataset_split: test
+save_dir: logs/custom_eval/dataset_loo_new/chord_melody_dataset
+batch_size: 64
+num_batches: -1
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true

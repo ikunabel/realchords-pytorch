@@ -9,13 +9,23 @@ octave defect invalidated every model trained on a mixture containing either cor
 variants are retrained -- except the `hooktheory_only` decoders, which contain neither corpus, are
 already trained at seeds 42/43/44 on the 2,969-chord vocabulary, and are reused.
 
-    72 reward   = 9 variants x (2 contrastive, 2 discriminative, 2 rhythm-contrastive, 2 rhythm-disc)
     27 enc-dec  = 9 variants x seeds 42/43/44
     24 decoder  = 8 variants x seeds 42/43/44   (hooktheory_only reused)
+    -- 51 jobs by default.
+
+Per-variant reward models are NOT submitted unless --with_rewards is passed. The transfer
+probe (journal/DATASET_MIX_LOO.md, "Do the LOO variants need their own reward models?") found
+the 7-set reward models separate genuine from corrupted accompaniment at 0.87-0.98 AUC on
+corpora they never saw, so a per-variant set buys nothing and the 7-set ensemble is used for
+every variant. That is 72 of the 123 jobs this script used to plan.
+
+They are also not needed for the MLE-stage grid at all: rewards only enter at the RL stage,
+and that stage uses the 7-set ensemble regardless.
 
 Usage:
     python scripts/jobscripts/submit_loo_grid.py --dry_run
-    python scripts/jobscripts/submit_loo_grid.py --only reward
+    python scripts/jobscripts/submit_loo_grid.py --only decoder
+    python scripts/jobscripts/submit_loo_grid.py --with_rewards   # only if that changes
     python scripts/jobscripts/submit_loo_grid.py
 """
 
@@ -38,9 +48,12 @@ SUBMIT = {
     "enc_dec": JOBS / "enc_dec/submit_enc_dec.sh",
     "decoder": JOBS / "decoder_only/submit_decoder_only.sh",
 }
-# enc-dec trains to early stopping (patience 15 at val_interval 1000); its runner defaults to 5h,
-# which the 7sets run came close to, so ask for more rather than lose a run to the wall clock
-EXTRA_SBATCH = {"enc_dec": ["--time=08:00:00"]}
+# enc-dec trains to early stopping (patience 15 at val_interval 1000). Measured from sacct over
+# every completed run since 2026-08: enc-dec n=13, mean 83 min, **max 1:54:02**; decoder n=41,
+# mean 56 min, max 1:03:59; zero timeouts. The previous 8h here rested on a note that "the 7sets
+# run came close to 5h", which the accounting data contradicts. 3h leaves ~1.6x headroom over
+# the worst case ever seen and queues faster on a busy partition.
+EXTRA_SBATCH = {"enc_dec": ["--time=03:00:00"]}
 RUNS_ROOT = Path("/hpcwork/thes2192/realchords/logs/my_logs")
 RUN_FAMILY = {"contrastive": "contrastive_reward", "contrastive_rhythm": "contrastive_reward",
               "discriminative": "discriminative_reward", "discriminative_rhythm": "discriminative_reward",
@@ -56,12 +69,13 @@ def kind_of(folder: str, stem: str) -> str:
     return "discriminative_rhythm" if rhythm else "discriminative"
 
 
-def plan() -> list:
+def plan(with_rewards: bool = False) -> list:
     out = []
     for variant in VARIANTS:
-        for folder, _template, out_stem in REWARD_TEMPLATES:
-            stem = out_stem.format(v=variant)
-            out.append((kind_of(folder, stem), Path("configs") / folder / f"{stem}.yml", variant))
+        if with_rewards:
+            for folder, _template, out_stem in REWARD_TEMPLATES:
+                stem = out_stem.format(v=variant)
+                out.append((kind_of(folder, stem), Path("configs") / folder / f"{stem}.yml", variant))
         for seed in ENC_DEC_SEEDS:
             out.append(("enc_dec",
                         Path(f"configs/enc_dec/enc_dec.chord.{variant}.seed={seed}.alpha=0.5.yml"),
@@ -78,9 +92,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry_run", action="store_true")
     ap.add_argument("--only", choices=["reward", "enc_dec", "decoder"], default=None)
+    ap.add_argument("--with_rewards", action="store_true",
+                    help="also submit per-variant reward models (72 jobs). Off by default: the "
+                         "7-set reward models were shown to transfer, so these buy nothing.")
     args = ap.parse_args()
 
-    jobs = plan()
+    jobs = plan(with_rewards=args.with_rewards or args.only == "reward")
     if args.only == "reward":
         jobs = [j for j in jobs if j[0] not in ("enc_dec", "decoder")]
     elif args.only:

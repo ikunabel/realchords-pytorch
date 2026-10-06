@@ -5,7 +5,11 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-gpu=24
 #SBATCH --gres=gpu:1
-#SBATCH --time=03:00:00
+#SBATCH --time=02:00:00
+# 2h from sacct over every completed decoder run since 2026-08 (n=41): mean 56 min, max
+# 1:03:59, zero timeouts. Runtime barely depends on mixture size -- 7sets_no_X max 1:00
+# (n=21), full 7sets max 1:03 (n=15), hooktheory_only max 1:03 -- because training is
+# step-bounded (fixed train_steps / early stopping on steps), not epoch-bounded.
 #SBATCH --output=scripts/jobscripts/slurm_logs/%x/%x_%j.out
 #SBATCH --error=scripts/jobscripts/slurm_logs/%x/%x_%j.err
 #SBATCH --account=thes2192

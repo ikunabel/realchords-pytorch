@@ -1,5 +1,9 @@
 # Jazz / walking-bass datasets (WJD, FiloBass): encoder-decoder trained on WJD+FiloBass only
-# (seed 42, alpha 0.5, constant LR; best val/loss step 3000 of 5 kept) vs the 7sets
+# (seed 42, alpha 0.5, constant LR; best val/loss step 3000 of 5 kept). The 7sets
+# comparison row was REMOVED: in these corpora the "melody" lane is a walking bass
+# line, so a model trained on right-hand melodies is doing a different task here and
+# the numbers are incommensurable, not merely noisy. These datasets are a
+# self-contained side study; see journal/DATASET_MIX_LOO.md. Formerly vs the 7sets
 # encoder-decoder (seed 1, alpha 0.5; step 13000 as in four_way_hooktheory_vs_7sets), which never
 # saw either dataset. Both offline (see the full melody), same 6198-token vocab -> one run.
 # No reward model for this vocab -> no Vendi. CLaMP 2 on all test sequences (FMD only
@@ -8,7 +12,6 @@
 base_model: "/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.wjd_filobass.seed=42.alpha=0.5_643oteil/step=3000.ckpt"
 model:
   - "EncDec_WJD_FiloBass=base"
-  - "EncDec_7sets=/hpcwork/thes2192/realchords/logs/my_logs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5/step=13000.ckpt"
 seed: 42
 
 dataset_name: filobass

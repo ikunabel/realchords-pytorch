@@ -1,0 +1,74 @@
+# Encoder-decoder WALKING BASS model on WJD + FiloBass: given the chord chart, predict the
+# bass line. `model_part: melody` makes the loader set inputs = chord, targets = melody, and in
+# these two corpora the "melody" lane holds a walking bass line -- so this is chord chart ->
+# walking bass, the reverse of the accompaniment task the rest of the project studies.
+#
+# Why it is worth trying: walking bass is far more systematic than a right-hand melody -- chord
+# root on the downbeat, chromatic approach into the next root, scalar motion between chord tones.
+# That makes it a more learnable target and makes failure easier to characterise than "the
+# melody sounded wrong".
+#
+# Scope: WJD and FiloBass are kept entirely separate from the 7-set mixture and are never
+# compared against it (a 7-set model scored here would be doing a different task; see
+# journal/DATASET_MIX_LOO.md). This is a self-contained side study.
+#
+# alpha = 1 (proportional sampling): with only two corpora in this side study the
+# natural size ratio is what is wanted, rather than up-weighting the smaller one.
+#
+# Small-data settings inherited from the chord counterpart: validation/checkpoints every 100
+# steps, early stopping after 20 non-improving checks, 5 best kept, dropout 0.2.
+seed: 42
+train_steps: 10000 # upper bound; early stopping ends it much earlier
+val_interval: 100
+sample_interval: 500
+max_log_examples: 8
+overfit_batches: 0
+wandb_project: "realchords"
+log_every_n_steps: 1
+checkpoint_interval: 100
+checkpoint_metric: "val/loss"
+checkpoint_mode: "min"
+checkpoint_top_k: 5 # keep the 5 best by val/loss (every-100-step ckpts would be ~100 GB)
+accelerator: "auto"
+devices: "auto"
+num_nodes: 1
+precision: "bf16-mixed"
+strategy: "auto"
+compile: True
+early_stopping_patience: 20 # validation checks, i.e. 2k steps
+
+# Data hyperparameters, for get_weighted_dataloader
+batch_size: 64
+num_workers: 8
+cache_dir: "data/cache"
+chord_names_path: "data/cache/chord_names_augmented.json"
+model_part: "melody"
+model_type: "encoder_decoder"
+max_len: 512
+datasets: ["wjd", "filobass"]
+alpha: 1
+data_augmentation: true
+
+# Optimizer hyperparameters
+AdamW.lr: 0.0001
+AdamW.weight_decay: 0.0
+
+# LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
+# train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
+lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+warmup_steps: 1000
+
+# Model hyperparameters
+EncoderDecoderTransformer.enc_dim: 512
+EncoderDecoderTransformer.dec_dim: 512
+EncoderDecoderTransformer.enc_depth: 8
+EncoderDecoderTransformer.dec_depth: 8
+EncoderDecoderTransformer.enc_heads: 8
+EncoderDecoderTransformer.dec_heads: 8
+EncoderDecoderTransformer.enc_max_seq_len: 258 # bos, eos
+EncoderDecoderTransformer.dec_max_seq_len: 258 # bos, eos
+EncoderDecoderTransformer.dropout: 0.2 # 0.1 elsewhere; extra regularization for small data
+EncoderDecoderTransformer.attention_layer_configs:
+  "rel_pos_bias": True
+  "rotary_pos_emb": False
+  "attn_flash": False
