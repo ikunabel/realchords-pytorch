@@ -803,17 +803,20 @@ class Agent:
           onset and hold token ids, renormalised probability, pitch classes
           and root pitch class.
         """
-        if self.onnx or self.mlx:
+        if self.onnx:
             raise NotImplementedError(
-                "chord_candidates needs the PyTorch backend (it reads logits "
-                "from a single forward pass)")
+                "chord_candidates needs the PyTorch or MLX backend (it reads "
+                "logits from a single forward pass)")
         model = self.models[model_name]
         note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
         prompt, _, _ = self._build_interleaved_prompt(
             note_token_hist, chord_tokens, frame, self.max_frames - 1
         )
-        with torch.no_grad():
-            logits, _ = model.net(prompt, return_intermediates=True)
+        if self.mlx:
+            logits = model(prompt)  # MLX model: full-sequence logits as torch
+        else:
+            with torch.no_grad():
+                logits, _ = model.net(prompt, return_intermediates=True)
         lo, hi = self.tokenizer.chord_on_token_range
         probs = torch.softmax(logits[0, -1, lo:hi + 1].float(), dim=-1)
 

@@ -731,6 +731,10 @@ async function advanceChordNow() {
     if (!curSession || !curSession.pendingChord) {
       return;
     }
+    // Space was let go while waiting: don't start a chord nobody holds
+    if (curSession.spaceHeld === false) {
+      return;
+    }
   }
 
   const chord = { ...curSession.pendingChord };
@@ -947,11 +951,17 @@ async function fetchCandidates() {
         frame: getSessionCurrentFrame() + 1,
       })
     });
+    if (!result.ok) throw new Error(`server answered ${result.status}`);
     const candidates = await result.json();
-    if (curSession) curSession.candidates = candidates;
+    if (curSession) {
+      curSession.candidates = candidates;
+      curSession.candidateError = null;
+    }
   } catch (e) {
     console.warn('Could not fetch chord candidates', e);
+    if (curSession) curSession.candidateError = String(e.message || e);
   }
+  updateChordTimingInfo();
 }
 
 /** Keep the candidates fresh, once per beat, while waiting for gestures */
@@ -1103,12 +1113,40 @@ function releaseTriggeredChord() {
   updateChordTimingInfo();
 }
 
+/**
+ * Space let go in manual mode: the chord stops. Its hold is written into the
+ * chord history up to now, and from here on the model hears silence until
+ * the next press.
+ */
+function releaseManualChord() {
+  const held = curSession.manualChord;
+  if (!held) return;
+  fillManualChordTokens();          // the chord held up to now
+  curSession.manualChord = null;    // later frames stay -1, i.e. SILENCE
+  held.pitches.forEach(pitch => {
+    if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
+    visual.noteOff(pitch);
+  });
+  midiStrikeToken++;  // drop a re-press an earlier strike may have pending
+  midiApplyChord([], Tone.context.currentTime);
+  curSession.chordHistory.push(
+    { scheduleFrame: getSessionCurrentFrame(), pitches: [], symbol: '', eventIDs: [] });
+  updateChordTimingInfo();
+  fetchPendingChord();              // the history changed
+}
+
 /** Show what is sounding and what space will play next */
 function updateChordTimingInfo() {
   if (chordTimingSelect.value === 'complete') {
     if (!curSession) {
       chordTimingInfo.textContent =
         'Start a session, then play a few notes: the model completes the chord';
+      return;
+    }
+    if (curSession.candidateError && !curSession.candidates) {
+      chordTimingInfo.textContent =
+        `No chord candidates from the server (${curSession.candidateError}); ` +
+        'check the server log';
       return;
     }
     const last = curSession.completionHistory[curSession.completionHistory.length - 1];
@@ -1137,7 +1175,7 @@ function updateChordTimingInfo() {
   }
   if (!curSession) {
     chordTimingInfo.textContent =
-      'Start a session, then press space to play each chord';
+      'Start a session, then hold space to play each chord';
     return;
   }
   const playing = curSession.manualChord
@@ -2350,6 +2388,7 @@ function enableKeyboardInputs() {
     if (event.code === 'Space' && curSession && isManualChordMode()) {
       event.preventDefault();
       if (!event.repeat) {
+        curSession.spaceHeld = true;
         advanceChordNow();
       }
       return;
@@ -2371,7 +2410,13 @@ function enableKeyboardInputs() {
     if (isTypingTarget(event)) {
       return;
     }
-    // In triggered mode the chord lasts while space is held
+    // In manual and triggered mode the chord lasts while space is held
+    if (event.code === 'Space' && curSession && isManualChordMode()) {
+      event.preventDefault();
+      curSession.spaceHeld = false;
+      releaseManualChord();
+      return;
+    }
     if (event.code === 'Space' && curSession && isTriggeredChordMode()) {
       event.preventDefault();
       releaseTriggeredChord();
