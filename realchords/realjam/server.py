@@ -6,6 +6,8 @@
 import json
 import os
 import flask
+
+from realchords.constants import FRAME_PER_BEAT
 import argparse
 
 from realchords.realjam import agent_interface
@@ -38,6 +40,55 @@ def get_models() -> str:
     """Get available model names."""
     assert agent is not None
     return json.dumps(agent.get_models())
+
+
+@app.get("/bass_models")
+def get_bass_models() -> str:
+    """Bass (melody-lane) models, for playing against a song's ground-truth
+    chords."""
+    assert agent is not None
+    return json.dumps(agent.get_bass_models())
+
+
+_song_chord_frames_cache: dict = {}
+
+
+@app.post("/bass")
+def generate_bass() -> str:
+    """Next bass frames for a song played with its ground-truth chords.
+
+    Payload: model, dataset, split, id (the song), loopFrames (the song's
+    loop length in frames, as the page plays it), frame (first frame to
+    generate, counted from the song's start, looping), frames (how many),
+    temperature, bassTokens (generated so far). Returns the new tokens and,
+    per frame, {pitch, on}: the sounding bass pitch (null for a rest) and
+    whether it starts there.
+    """
+    assert agent is not None
+    payload = flask.request.get_json()
+    key = (payload["dataset"], payload["split"], str(payload["id"]))
+    record = song_record_index.get(key)
+    if record is None:
+        flask.abort(404, description="Song not found")
+    # The page's loop length, so the chords the model hears loop exactly like
+    # the ones that sound
+    num_frames = int(payload["loopFrames"])
+    cache_key = key + (num_frames,)
+    if cache_key not in _song_chord_frames_cache:
+        _song_chord_frames_cache[cache_key] = agent.song_chord_frames(
+            record["annotations"].get("harmony", []), num_frames)
+    tokens = agent.generate_bass(
+        payload["model"],
+        _song_chord_frames_cache[cache_key],
+        payload.get("bassTokens", []),
+        int(payload["frame"]),
+        int(payload["frames"]),
+        float(payload.get("temperature", 1.0)),
+    )
+    return json.dumps({
+        "tokens": tokens,
+        "frames": [agent.bass_token_info(t) for t in tokens],
+    })
 
 
 @app.get("/songs")
@@ -110,7 +161,9 @@ def get_song_reference(dataset: str, split: str, song_id: str) -> str:
                 chord["symbol"],
                 prev_voicing=prev_voicing,
                 update_state=False,
-                melody_pitch=melody_ceiling(chord["onset"], chord["offset"]),
+                # A bass line isn't a ceiling: the chords belong above it
+                melody_pitch=(None if dataset in song_catalogue.BASS_DATASETS
+                              else melody_ceiling(chord["onset"], chord["offset"])),
                 melody_role="top",
             )
         if pitches is None:
@@ -143,9 +196,9 @@ def get_voicings() -> str:
 
     Takes the chord name as a query param (`?chord=...`), not a path
     segment, since many chord symbols contain '/' (slash chords like "C/E")
-    which would otherwise be misparsed as extra path segments. Falls back to
-    a single legacy fixed-octave voicing (tagged "legacy": true) for chords
-    the custom lookup doesn't cover.
+    which would otherwise be misparsed as extra path segments. The original
+    ReaLchords fixed-octave voicing (tagged "legacy": true) always comes
+    first, followed by the custom lookup's voicings, if any.
     """
     assert agent is not None
     chord_name = flask.request.args.get("chord", "")

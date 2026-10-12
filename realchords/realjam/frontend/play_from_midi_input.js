@@ -16,8 +16,9 @@ let playBtn, metronomeBtn, bpmInput, timeSigInput, metronomeFreqBtn,
   melodyInstSelect, showChordsCheck, downloadSessionCheck, metronomeCheck,
   customVoicingsCheck, voiceAroundMelodyCheck, voiceBassCheck, melodyGapInput, songSearchInput,
   songSearchResults, voicingBrowserChordSelect, voicingBrowserInfo,
-  chordTimingSelect, chordTimingInfo, referenceModeCheck;
-let songCatalogue = [];   // [{dataset, split, id, title, artist}, ...]
+  chordTimingSelect, chordTimingInfo;
+let songCatalogue = [];   // [{dataset, split, id, title, artist, kind}, ...]
+let bassSongsOnlyCheck;
 let songSearchMatches = [];  // Current fuzzy hits, best first (capped)
 let songSearchIndex = 0;     // Keyboard-highlighted row in songSearchMatches
 let songSearchLastQuery = '';  // Query songSearchPool was narrowed down to
@@ -320,6 +321,125 @@ function playSongReference(melody, chords, numBeats) {
   getSessionCurrentFrame();  // Anchor frame 0 before scheduling against it
   scheduleReferenceLoop(melody, chords, curSession.startFrame,
     loopLengthFrames([...melody, ...chords], numBeats));
+}
+
+/**
+ * Play a song's ground-truth chords while a bass model plays the melody lane
+ * (Song Playback: "Ground-truth chords"). The chords loop as in ground-truth
+ * playback; the bass line is requested from the server in chunks ahead of
+ * the playhead (/bass), generated against the same looping chords, and
+ * played -- piano or laptop -- and drawn as it arrives. The first chunk is
+ * fetched before playback starts so the opening notes are on time.
+ * @param {Object} song - Catalogue entry
+ * @param {Array<Object>} melody - The song's melody, only for its length
+ * @param {Array<Object>} chords - The song's chords, with pitches
+ * @param {?number} numBeats
+ */
+async function playSongWithBass(song, melody, chords, numBeats) {
+  if (!chords.length) {
+    console.warn('Selected song has no chords to play a bass line against.');
+    return;
+  }
+  const model = modelSelect.value;
+  if (!bassModelNames.includes(model)) {
+    console.warn('No bass model selected.');
+    return;
+  }
+  const loopFrames = loopLengthFrames([...melody, ...chords], numBeats);
+  const bass = { song, model, loopFrames, tokens: [], open: null, last: null, busy: false };
+  const chunk = Math.max(getLookaheadFrames(), BASS_MIN_CHUNK);
+  const first = await fetchBassChunk(bass, 0, chunk);
+  if (!first) return;
+
+  if (curSession) {
+    toggleLiveSession();
+  }
+  startSession({ referenceOnly: true });
+  getSessionCurrentFrame();  // Anchor frame 0 before scheduling against it
+  curSession.songKind = song.kind || 'melody';
+  curSession.bass = bass;
+  bass.base = curSession.startFrame;
+  scheduleReferenceLoop([], chords, bass.base, loopFrames);
+  addBassFrames(bass, first);
+  bassLoop(curSession);
+}
+const BASS_MIN_CHUNK = 8;     // frames per request, at least
+const BASS_AHEAD_FRAMES = 16;  // keep this much generated beyond the lookahead
+
+/** Ask the server for `frames` bass frames from `frame` on; null on failure */
+async function fetchBassChunk(bass, frame, frames) {
+  try {
+    const result = await fetch(`${window.location.origin}/bass`, {
+      'method': 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: bass.model,
+        dataset: bass.song.dataset,
+        split: bass.song.split,
+        id: bass.song.id,
+        loopFrames: bass.loopFrames,
+        frame,
+        frames,
+        temperature: temperatureInput.valueAsNumber,
+        bassTokens: bass.tokens,
+      })
+    });
+    if (!result.ok) throw new Error(`server answered ${result.status}`);
+    return await result.json();
+  } catch (e) {
+    console.warn('Could not get bass frames', e);
+    return null;
+  }
+}
+
+/** Keep the bass line generated ahead of the playhead, until the session ends */
+async function bassLoop(session) {
+  if (curSession !== session || !session.bass) return;
+  const bass = session.bass;
+  const ahead = bass.tokens.length - getSessionCurrentFrame();
+  if (!bass.busy && ahead < getLookaheadFrames() + BASS_AHEAD_FRAMES) {
+    bass.busy = true;
+    const chunk = Math.max(getLookaheadFrames(), BASS_MIN_CHUNK);
+    const result = await fetchBassChunk(bass, bass.tokens.length, chunk);
+    bass.busy = false;
+    if (curSession !== session) return;
+    if (result) addBassFrames(bass, result);
+  }
+  setTimeout(() => bassLoop(session), 100);
+}
+
+/**
+ * Turn newly generated bass frames into notes. A note opens at an onset (or
+ * a new pitch) and stays open while the frames hold it; it is scheduled once
+ * it closes, when the next note is known, so a repeat of the same key gets
+ * its release.
+ */
+function addBassFrames(bass, result) {
+  result.frames.forEach(({ pitch, on }, k) => {
+    const frame = bass.tokens.length;
+    bass.tokens.push(result.tokens[k]);
+    const continues = bass.open && pitch === bass.open.pitch && !on;
+    if (continues) return;
+    const next = pitch === null ? null : { pitch, start: frame };
+    if (bass.open) scheduleBassNote(bass, bass.open, frame, next);
+    bass.open = next;
+    if (next) {
+      // Show it falling in as soon as it's known; its release is set on close
+      visual.scheduleNoteOn(pitch, bass.base + frame, 'orange', 1.0);
+    }
+  });
+}
+
+/** Schedule a closed bass note [start, end) on the piano or laptop */
+function scheduleBassNote(bass, note, end, next) {
+  const absOn = bass.base + note.start, absOff = bass.base + end;
+  scheduleRobotNote(note.pitch, true, absOn);   // laptop sound, key highlight
+  scheduleRobotNote(note.pitch, false, absOff);
+  visual.scheduleNoteOff(note.pitch, absOff, true);
+  scheduleMidiMelody(
+    [{ pitch: note.pitch, onset: note.start / fpb, offset: end / fpb }],
+    bass.base, undefined, false,
+    next ? [{ pitch: next.pitch, onset: next.start / fpb, offset: next.start / fpb + 1 }] : []);
 }
 
 /**
@@ -811,9 +931,10 @@ function voiceAroundMelody(pitches, prevPitches) {
   if (!voiceAroundMelodyCheck.checked || !pitches || !pitches.length) return pitches;
   const gapValue = melodyGapInput.valueAsNumber;
   const gap = Number.isNaN(gapValue) ? 3 : Math.max(0, gapValue);
-  const ceiling = currentMelodyPitch() - gap;
   const mod = (x, m) => ((x % m) + m) % m;
   const bassPc = Math.min(...pitches) % 12;
+  if (inputIsBassLine()) return voiceAboveBass(pitches, prevPitches, gap);
+  const ceiling = currentMelodyPitch() - gap;
 
   // Upper pitch classes: the most characteristic intervals above the bass,
   // topped up with the bass pitch class itself for a triad
@@ -851,6 +972,40 @@ function voiceAroundMelody(pitches, prevPitches) {
   while (Math.min(...out) < LOWEST_PIANO_PITCH) out = out.map(p => p + 12);
   return out.sort((x, y) => x - y);
 }
+/**
+ * voiceAroundMelody for a bass-line input (walking bass songs, bass-input
+ * model): the same three-note upper chord in its best inversion, but placed
+ * as low as possible *above* the bass note -- at least `gap` semitones over
+ * it -- and with no extra bass note, since the input already is the bass.
+ * @return {Array<number>}
+ */
+function voiceAboveBass(pitches, prevPitches, gap) {
+  const mod = (x, m) => ((x % m) + m) % m;
+  const floor = currentMelodyPitch() + Math.max(gap, VOICE_ABOVE_BASS_MIN_GAP);
+  const bassPc = Math.min(...pitches) % 12;
+  const intervals = [...new Set(pitches.map(p => mod(p - bassPc, 12)))]
+    .filter(i => i !== 0)
+    .sort((x, y) => VOICE_AROUND_PRIORITY.indexOf(x) - VOICE_AROUND_PRIORITY.indexOf(y))
+    .slice(0, VOICE_AROUND_UPPER_NOTES);
+  const upperPcs = intervals.map(i => (bassPc + i) % 12);
+  if (upperPcs.length < VOICE_AROUND_UPPER_NOTES) upperPcs.push(bassPc);
+  let best = null;
+  upperPcs.forEach(lowestPc => {
+    const others = upperPcs.filter(pc => pc !== lowestPc)
+      .map(pc => mod(pc - lowestPc, 12)).sort((x, y) => x - y);
+    const low = floor + mod(lowestPc - floor, 12);  // lowest key >= floor
+    const voicing = [low, ...others.map(i => low + i)];
+    const movement = prevPitches && prevPitches.length
+      ? voicing.reduce((sum, p) => sum + Math.min(...prevPitches.map(q => Math.abs(p - q))), 0)
+      : 0;
+    const score = (low - floor) + VOICE_AROUND_MOVEMENT_WEIGHT * movement;
+    if (!best || score < best.score) best = { voicing, score };
+  });
+  return best.voicing;
+}
+// A bass line moves a lot; keep the chord clear of it by at least a fifth
+const VOICE_ABOVE_BASS_MIN_GAP = 7;
+
 const VOICE_AROUND_UPPER_NOTES = 3;
 // Intervals above the root, most characteristic first: thirds, sevenths,
 // sixth, ninths, fourth / tritone, the fifth last (it adds the least colour)
@@ -1382,21 +1537,56 @@ function processAgentAction(
  * Get necessary info from server (model names) and then enable live sessions
  */
 function establishServerConnection() {
-  fetch(`${window.location.origin}/models`)
-    .then(response => response.json())
-    .then(json => {
-      json.forEach(model => {
-        const name = document.createTextNode(model);
-        const option = document.createElement('option');
-        option.append(name);
-        option.value = model;
-        modelSelect.appendChild(option);
-      });
-      console.log('Interactive agent is ready!');
-      liveSessionBtn.disabled = false;
-    });
+  Promise.all([
+    fetch(`${window.location.origin}/models`).then(response => response.json()),
+    fetch(`${window.location.origin}/bass_models`)
+      .then(response => response.json()).catch(() => []),
+  ]).then(([chordModels, bassModels]) => {
+    chordModelNames = chordModels;
+    bassModelNames = bassModels;
+    refreshModelOptions();
+    console.log('Interactive agent is ready!');
+    liveSessionBtn.disabled = false;
+  });
   loadSongCatalogue();
   loadVoicingBrowserChords();
+}
+
+let chordModelNames = [];  // models that generate chords (all modes)
+let bassModelNames = [];   // models that generate the melody lane from chords
+
+/**
+ * What the song itself plays in Song Playback: 'melody' (the model plays
+ * chords), 'chords' (a bass model plays the melody lane) or 'both'.
+ * @return {string}
+ */
+function getGtMode() {
+  const checked = document.querySelector('input[name="gt-mode"]:checked');
+  return checked ? checked.value : 'melody';
+}
+
+/**
+ * Fill the model menu with the models that fit: bass models when the song
+ * supplies the chords, chord models otherwise. Keeps the selection if it
+ * still applies.
+ */
+function refreshModelOptions() {
+  const names = getGtMode() === 'chords' ? bassModelNames : chordModelNames;
+  const previous = modelSelect.value;
+  modelSelect.innerHTML = '';
+  names.forEach(model => {
+    const option = document.createElement('option');
+    option.append(document.createTextNode(model));
+    option.value = model;
+    modelSelect.appendChild(option);
+  });
+  if (!names.length) {
+    const option = document.createElement('option');
+    option.append(document.createTextNode('(no bass model available)'));
+    option.value = '';
+    modelSelect.appendChild(option);
+  }
+  if (names.includes(previous)) modelSelect.value = previous;
 }
 
 /** Fetch the robot-melody song catalogue for fuzzy searching */
@@ -1520,6 +1710,15 @@ function songMatchScore(queryChars, song) {
 function onSongSearchInput() {
   const query = songSearchInput.value.trim().toLowerCase();
   songSearchIndex = 0;
+  const bassOnly = bassSongsOnlyCheck && bassSongsOnlyCheck.checked;
+  // Walking bass lines only, nothing typed: list all of them to browse
+  if (bassOnly && !query) {
+    songSearchMatches = songCatalogue.filter(song => song.kind === 'bass');
+    songSearchPool = [];
+    songSearchLastQuery = '';
+    renderSongSearchResults();
+    return;
+  }
   // A single character matches most of the catalogue, so the results wouldn't
   // mean anything and it's the most expensive scan there is
   if (query.length < songSearchMinChars) {
@@ -1537,7 +1736,8 @@ function onSongSearchInput() {
   // (first character, a backspace, or a paste) keeps every keystroke cheap,
   // since the full scan then only happens for short, fast-to-reject queries.
   const pool = (songSearchLastQuery && query.startsWith(songSearchLastQuery))
-    ? songSearchPool : songCatalogue;
+    ? songSearchPool
+    : (bassOnly ? songCatalogue.filter(song => song.kind === 'bass') : songCatalogue);
 
   // Collect every match, but only ever rank the handful actually shown. A
   // short query matches most of the catalogue, and sorting tens of thousands
@@ -1573,6 +1773,20 @@ function onSongSearchInput() {
   renderSongSearchResults();
 }
 
+const SONG_KIND_LABELS = { bass: 'bass line', demo: 'demo' };
+/**
+ * If the line the chords accompany is a bass line rather than a melody,
+ * judged from the line itself (not from the model: a bass-input model may
+ * still be played a tune): a walking-bass song is playing; a melody song is
+ * not; when the performer plays, a note below BASS_LINE_BELOW is a bass line.
+ * @return {boolean}
+ */
+function inputIsBassLine() {
+  if (curSession && curSession.songKind) return curSession.songKind === 'bass';
+  return !!curSession && currentMelodyPitch() < BASS_LINE_BELOW;
+}
+const BASS_LINE_BELOW = 55;  // G3
+
 /** Draw the current match list, marking the keyboard-highlighted row */
 function renderSongSearchResults() {
   songSearchResults.innerHTML = '';
@@ -1584,8 +1798,21 @@ function renderSongSearchResults() {
     artist.className = 'artist';
     artist.textContent = `  ${song.artist}`;
     row.appendChild(artist);
+    if (song.kind && song.kind !== 'melody') {
+      // A walking bass line (WJD, FiloBass) or a calibration demo, not a tune
+      const badge = document.createElement('span');
+      badge.className = `kind-badge ${song.kind}`;
+      badge.textContent = SONG_KIND_LABELS[song.kind] || song.kind;
+      badge.title = song.kind === 'bass'
+        ? 'Its "melody" is a walking bass line (jazz bass, low register), not a tune'
+        : 'Synthetic calibration song for the Disklavier';
+      row.appendChild(badge);
+    }
     row.addEventListener('click', () => playSongFromSearch(i));
     songSearchResults.appendChild(row);
+    if (i === songSearchIndex && row.scrollIntoView) {
+      row.scrollIntoView({ block: 'nearest' });  // keep the arrow-key pick in view
+    }
   });
 }
 
@@ -1629,18 +1856,30 @@ async function playSongFromSearch(index) {
   const base = `${window.location.origin}/songs/` +
     `${song.dataset}/${song.split}/${encodeURIComponent(song.id)}`;
 
-  if (referenceModeCheck.checked) {
+  const gtMode = getGtMode();
+  if (gtMode === 'chords') {
+    // The song's chords; a bass model plays the melody lane
+    const custom = customVoicingsCheck.checked ? '?custom=1' : '';
+    const result = await fetch(`${base}/reference${custom}`);
+    const { melody, chords, num_beats } = await result.json();
+    await playSongWithBass(song, melody, chords, num_beats);
+    return;
+  }
+  if (gtMode === 'both') {
     // The song's own accompaniment, no model involved
     const custom = customVoicingsCheck.checked ? '?custom=1' : '';
     const result = await fetch(`${base}/reference${custom}`);
     const { melody, chords, num_beats } = await result.json();
     playSongReference(melody, chords, num_beats);
+    if (curSession) curSession.songKind = song.kind || 'melody';
     return;
   }
 
   const result = await fetch(`${base}/melody`);
   const { melody, num_beats } = await result.json();
   playSongMelody(melody, num_beats);
+  // On the session it started, so it ends with it
+  if (curSession) curSession.songKind = song.kind || 'melody';
 }
 
 /**
@@ -1743,7 +1982,7 @@ function playBrowsedVoicing() {
   }, barSeconds * 1000);
 
   const detail = entry.legacy
-    ? '(legacy fixed-octave voicing -- not covered by the custom voicing lookup)'
+    ? '(ReaLchords default fixed-octave voicing)'
     : `(seen ${entry.count} times across ${entry.num_songs} songs)`;
   voicingBrowserInfo.textContent =
     `Voicing ${voicingBrowserIndex + 1} / ${voicingBrowserList.length} -- ` +
@@ -1985,10 +2224,13 @@ function midiNoteOff(pitch, audioTime) {
  * @param {number=} loopFrames - Loop period, if the notes repeat
  * @param {boolean=} redraw - Move a note's drawn release if the settings
  *   changed after it was drawn (ground-truth playback draws the melody)
+ * @param {Array<Object>=} following - Notes known to come next but not
+ *   scheduled by this call (same format, same baseFrame), so a repeat of the
+ *   same key across calls still gets its release
  * @return {?Array<{pitch: number, offFrame: number}>} each note's release
  *   with the current settings, for drawing (null without a MIDI output)
  */
-function scheduleMidiMelody(notes, baseFrame, loopFrames, redraw = false) {
+function scheduleMidiMelody(notes, baseFrame, loopFrames, redraw = false, following = []) {
   if (!midiChordOut) return null;
   const lead = (midiLeadInput.valueAsNumber || 0) / 1000;
   const now = Tone.Transport.seconds;
@@ -1999,9 +2241,11 @@ function scheduleMidiMelody(notes, baseFrame, loopFrames, redraw = false) {
   const timed = notes
     .map(({ pitch, onset, offset }) => ({ pitch, on: toSec(onset), off: toSec(offset) }))
     .sort((a, b) => a.on - b.on);
+  const later = following.map(({ pitch, onset, offset }) =>
+    ({ pitch, on: toSec(onset), off: toSec(offset) }));
   const upcoming = loopFrames
-    ? [...timed, ...timed.map(n => ({ ...n, on: n.on + loopFrames * spf }))]
-    : timed;
+    ? [...timed, ...timed.map(n => ({ ...n, on: n.on + loopFrames * spf })), ...later]
+    : [...timed, ...later];
 
   /** When `note` is released under the current settings, in seconds */
   const releaseOf = note => {
@@ -2701,8 +2945,18 @@ async function initializeMIDIReader(visual_arg) {
   songSearchInput = document.getElementById('song-search-input');
   songSearchInput.addEventListener('input', onSongSearchInput);
   songSearchInput.addEventListener('keydown', onSongSearchKeydown);
+  bassSongsOnlyCheck = document.getElementById('bass-songs-only-check');
+  bassSongsOnlyCheck.addEventListener('change', () => {
+    songSearchLastQuery = '';  // the narrowed pool no longer applies
+    onSongSearchInput();
+    bassSongsOnlyCheck.blur();
+  });
   songSearchResults = document.getElementById('song-search-results');
-  referenceModeCheck = document.getElementById('reference-mode-check');
+  document.querySelectorAll('input[name="gt-mode"]').forEach(radio =>
+    radio.addEventListener('change', () => {
+      refreshModelOptions();
+      radio.blur();
+    }));
   chordTimingSelect = document.getElementById('chord-timing-select');
   chordTimingInfo = document.getElementById('chord-timing-info');
   chordTimingSelect.addEventListener('change', () => {
