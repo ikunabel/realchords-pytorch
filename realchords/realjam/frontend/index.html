@@ -132,8 +132,21 @@
           <div class="ctl"><input id="song-search-input" type="text" autocomplete="off" placeholder="song or artist..." /></div>
         </div>
         <div class="row">
-          <label for="reference-mode-check">Play ground truth (no model)</label>
-          <div class="ctl"><input id="reference-mode-check" type="checkbox" /></div>
+          <label for="bass-songs-only-check" title="Search only the walking bass lines (WJD, FiloBass); with the search box empty, lists all of them.">Walking bass lines only</label>
+          <div class="ctl"><input id="bass-songs-only-check" type="checkbox" /></div>
+        </div>
+        <div class="row wide"><span title="What the song itself plays; the model plays the rest.">Play from the song</span></div>
+        <div class="row">
+          <label for="gt-mode-melody" title="The song's melody (or walking bass line); the selected chord model plays the chords.">Ground-truth melody</label>
+          <div class="ctl"><input id="gt-mode-melody" type="radio" name="gt-mode" value="melody" checked="checked" /></div>
+        </div>
+        <div class="row">
+          <label for="gt-mode-chords" title="The song's chords; the selected bass model plays the melody lane (a walking bass line). The model menu then lists bass models.">Ground-truth chords</label>
+          <div class="ctl"><input id="gt-mode-chords" type="radio" name="gt-mode" value="chords" /></div>
+        </div>
+        <div class="row">
+          <label for="gt-mode-both" title="The song's melody and chords, no model.">Both (no model)</label>
+          <div class="ctl"><input id="gt-mode-both" type="radio" name="gt-mode" value="both" /></div>
         </div>
         <div id="song-search-results" class="search-results"></div>
       </fieldset>

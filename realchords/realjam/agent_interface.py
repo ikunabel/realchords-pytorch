@@ -36,6 +36,7 @@ from realchords.constants import (
 )
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.voicing_selector import VoicingSelector
+from realchords.utils.data_utils import to_chord_name
 from realchords.model.sampling import (
     filter_invalid_tokens_generate_unconditional,
     filter_invalid_tokens_generate_online,
@@ -114,11 +115,41 @@ MODEL_PATHS = {
     ),
 }
 
+# Extra models, listed only where their checkpoint exists (they aren't part of
+# the downloaded bundle). Trained in this repo on the grown chord vocabulary
+# and converted to ReaLJam's with scripts/convert_checkpoint_for_realjam.py.
+OPTIONAL_MODEL_PATHS = {
+    # Online MLE trained on WJD + FiloBass only: its "melody" lane is a walking
+    # bass line, so it expects a bass line where the other models expect a tune
+    "WJD+FiloBass MLE (bass input)": os.path.join(
+        REALJAM_CHECKPOINT_DIR,
+        "wjd_filobass_online_chord",
+        "step=2700.ckpt",
+    ),
+}
+
+# Bass (melody-lane) models, trained interleaved [bass_t, chord_t, ...] to
+# predict the next bass note from the chords so far. They can't serve the
+# chord-generating modes; generate_bass plays them against a song's
+# ground-truth chords. Listed only where the checkpoint exists.
+OPTIONAL_BASS_MODEL_PATHS = {
+    "WJD+FiloBass bass (chord input)": os.path.join(
+        REALJAM_CHECKPOINT_DIR,
+        "wjd_filobass_online_bass",
+        "step=2000.ckpt",
+    ),
+}
+
 ONLINE_MODEL_CANDIDATES = [ONLINE_MODEL_PATH]
 OFFLINE_MODEL_CANDIDATES = [OFFLINE_MODEL_PATH]
 MODEL_PATH_CANDIDATES = {
     model_name: [model_path] for model_name, model_path in MODEL_PATHS.items()
 }
+MODEL_PATH_CANDIDATES.update({
+    model_name: [model_path]
+    for model_name, model_path in OPTIONAL_MODEL_PATHS.items()
+    if os.path.exists(model_path)
+})
 
 
 def _resolve_existing_path(candidates: List[str]) -> str:
@@ -370,6 +401,12 @@ class Agent:
                 model = self._prepare_onnx_model(provider, model_path)
             self.models[model_name] = model
 
+        self.bass_models = {}
+        for model_name, model_path in OPTIONAL_BASS_MODEL_PATHS.items():
+            if os.path.exists(model_path):
+                self.bass_models[model_name] = self._prepare_model(
+                    self._load_online_model(model_path))
+
         # Prepare MLE model after all models are loaded because
         # loading RL model needs un-compiled MLE model
         self.mle_model = self._prepare_model(self.mle_model)
@@ -414,6 +451,107 @@ class Agent:
 
     def get_models(self) -> List[str]:
         return list(self.models.keys())
+
+    def get_bass_models(self) -> List[str]:
+        return list(self.bass_models.keys())
+
+    def song_chord_frames(self, harmony: List[Dict], num_frames: int) -> List[int]:
+        """A song's chord annotation as one chord token per frame, in ReaLJam's
+        vocabulary. Like HooktheoryTokenizer.chord_to_frames, but a chord the
+        vocabulary lacks becomes silence instead of an error."""
+        silence = self.tokenizer.name_to_id["SILENCE"]
+        frames = [silence] * num_frames
+        for c in harmony:
+            try:
+                name = to_chord_name(c["root_pitch_class"], c["root_position_intervals"])
+                hold = self.tokenizer.name_to_id[f"CHORD_{name}"]
+                onset = self.tokenizer.name_to_id[f"CHORD_ON_{name}"]
+            except Exception:  # unparsable, or not in this vocabulary
+                continue
+            start = int(c["onset"] * FRAME_PER_BEAT)
+            end = max(int(c["offset"] * FRAME_PER_BEAT), start + 1)
+            for f in range(max(start, 0), min(end, num_frames)):
+                frames[f] = hold
+            if 0 <= start < num_frames:
+                frames[start] = onset
+        return frames
+
+    def generate_bass(
+        self,
+        model_name: str,
+        song_chords: List[int],
+        bass_tokens: List[int],
+        frame: int,
+        num_frames: int,
+        temperature: float,
+    ) -> List[int]:
+        """Generate the bass (melody) lane for frames [frame, frame+num_frames)
+        against a song's ground-truth chords.
+
+        The model reads [BOS, bass_0, chord_0, bass_1, chord_1, ...]: each bass
+        token is sampled -- restricted to valid melody tokens given the previous
+        one -- and the song's chord for that frame is then appended as given.
+        The chords are known for every frame, so nothing is ever re-planned.
+        The song loops: frame f has chord song_chords[f % len(song_chords)].
+
+        Args:
+          model_name: one of get_bass_models()
+          song_chords: one chord token per frame of the song (song_chord_frames)
+          bass_tokens: the bass tokens generated so far, frames 0..frame-1
+          frame: first frame to generate
+          num_frames: how many frames to generate
+          temperature: sampling temperature
+
+        Returns:
+          the new bass tokens, one per frame
+        """
+        model = self.bass_models[model_name]
+        tk = self.tokenizer
+        chord_at = lambda f: song_chords[f % len(song_chords)]
+        bass_hist = list(bass_tokens[:frame])
+        bass_hist += [tk.silence_token] * (frame - len(bass_hist))
+
+        # History that fits next to the frames to generate
+        start = max(0, frame - (self.max_frames - num_frames))
+        seq = [tk.bos_token]
+        for f in range(start, frame):
+            bass, chord = bass_hist[f], chord_at(f)
+            if f == start:  # can't hold what the model can't see
+                if tk.is_note_hold(bass):
+                    bass = tk.note_hold_id_to_note_id(bass)
+                if tk.is_chord_hold(chord):
+                    chord = tk.chord_hold_id_to_chord_id(chord)
+            seq += [bass, chord]
+        seq = torch.tensor([seq], dtype=torch.long, device=self.device)
+
+        new_tokens = []
+        with torch.no_grad():
+            for k in range(num_frames):
+                if self.mlx:
+                    logits = model(seq)[:, -1].float()
+                else:
+                    logits = model.net(seq, return_intermediates=True)[0][:, -1].float()
+                logits = filter_invalid_tokens_generate_online(
+                    logits, seq, k, model_part="melody", tokenizer=tk)
+                probs = torch.softmax(logits / max(temperature, 1e-4), dim=-1)
+                bass = int(torch.multinomial(probs, 1)[0, 0])
+                new_tokens.append(bass)
+                chord = chord_at(frame + k)
+                if frame + k == start and tk.is_chord_hold(chord):
+                    chord = tk.chord_hold_id_to_chord_id(chord)
+                seq = torch.cat([seq, torch.tensor(
+                    [[bass, chord]], dtype=torch.long, device=self.device)], dim=1)
+        return new_tokens
+
+    def bass_token_info(self, token: int) -> Dict:
+        """{pitch, on} for a bass token: pitch None for silence, `on` true for
+        a note onset (as opposed to holding the previous note)."""
+        name = self.tokenizer.id_to_name[token]
+        if name.startswith("NOTE_ON_"):
+            return {"pitch": int(name[len("NOTE_ON_"):]), "on": True}
+        if name.startswith("NOTE_"):
+            return {"pitch": int(name[len("NOTE_"):]), "on": False}
+        return {"pitch": None, "on": False}
 
     def melody_to_frame_tokens(
         self, melody_data: List[NoteInfo], end_frame: int = 0
@@ -532,22 +670,27 @@ class Agent:
         return sorted(self.chord_names)
 
     def get_voicings_for_browser(self, chord_name: str) -> List[Dict]:
-        """Stored voicings for one chord, for the standalone voicing
-        browser. Falls back to a single legacy fixed-octave voicing when the
-        custom lookup doesn't cover this chord (e.g. most slash chords are
-        outcompeted by their root-position equivalent under the lookup's
-        exact pitch-class-set matching -- see journal/VOICING_EXTRACTION.md)
-        rather than the browser showing nothing for them.
+        """Voicings for one chord, for the standalone voicing browser: the
+        original ReaLchords fixed-octave voicing always comes first (for
+        comparison), followed by the stored custom voicings, if the lookup
+        covers this chord (e.g. most slash chords are outcompeted by their
+        root-position equivalent under the lookup's exact pitch-class-set
+        matching -- see journal/VOICING_EXTRACTION.md). A custom voicing
+        identical to the fixed-octave one is not listed twice.
         """
-        if self.voicing_selector is not None:
-            voicings = self.voicing_selector.get_voicings(chord_name)
-            if voicings:
-                return voicings
-
+        voicings = []
         legacy_pitches = self.legacy_chord_pitches(chord_name)
-        if legacy_pitches is None:
-            return []
-        return [{"pitches": legacy_pitches, "count": None, "num_songs": None, "legacy": True}]
+        if legacy_pitches is not None:
+            voicings.append(
+                {"pitches": legacy_pitches, "count": None, "num_songs": None, "legacy": True}
+            )
+
+        if self.voicing_selector is not None:
+            for voicing in self.voicing_selector.get_voicings(chord_name) or []:
+                if legacy_pitches is not None and sorted(voicing["pitches"]) == sorted(legacy_pitches):
+                    continue
+                voicings.append(voicing)
+        return voicings
 
     def decode_chord_token_custom_voicing(
         self,

@@ -5,14 +5,17 @@ ground-truth melody through the live generation pipeline, so
 chord-generation/voicing settings can be A/B'd hands-free instead of
 needing live MIDI input for every test.
 
-Only includes datasets where the cache's "melody" track is a genuine melody
-line and usable title/artist metadata exists:
+Includes datasets with usable title/artist metadata, each entry tagged with
+the *kind* of line its "melody" track holds:
 
-- Included: Hooktheory, POP909, Nottingham, Wikifonia, Chord Melody Dataset,
-  JAZZMUS.
-- Excluded: FiloBass and WJD (their "melody" is actually a walking bass
-  line, not a melody -- see journal/DATASET_SUMMARY.md). EMOPIA+ (no usable
-  title/artist metadata -- only an emotion-quadrant label and a YouTube ID).
+- kind "melody": Hooktheory, POP909, Nottingham, Wikifonia, Chord Melody
+  Dataset, JAZZMUS -- a genuine melody.
+- kind "bass": WJD and FiloBass -- their "melody" track is a walking bass line
+  (see journal/DATASET_SUMMARY.md). Listed for models trained on bass input
+  (and to hear how the others react to one); the UI marks them clearly.
+- kind "demo": the synthetic Disklavier calibration songs (demo_songs.py).
+- Excluded: EMOPIA+ (no usable title/artist metadata -- only an
+  emotion-quadrant label and a YouTube ID).
 
 Reads only the plain (non-augmented) train/valid/test.jsonl splits -- the
 augmented files are ±6-semitone transpositions of the same songs and would
@@ -44,23 +47,31 @@ class SongEntry(TypedDict):
     id: str
     title: str
     artist: str
+    kind: str  # "melody", "bass" (walking bass line) or "demo"
 
 
-# (cache_dir_name, dataset_key_in_json, artist_field_or_None, title_field)
+# (cache_dir_name, dataset_key_in_json, artist_field_or_None, title_field,
+#  id_field, kind)
 # artist_field=None means this dataset has no usable per-song artist/composer
 # field -- all its songs are grouped under one synthetic artist bucket below.
-_DATASET_CONFIGS: List[Tuple[str, str, Optional[str], str]] = [
-    ("hooktheory", "hooktheory", "artist", "song"),
-    ("pop909", "pop909", "artist", "title"),
-    ("nottingham", "nottingham", "source", "title"),
-    ("wikifonia", "wikifonia", "composer", "title"),
-    ("chord_melody_dataset", "chord_melody_dataset", None, "title"),
-    ("jazzmus", "jazzmus", "composer", "title"),
+_DATASET_CONFIGS: List[Tuple[str, str, Optional[str], str, str, str]] = [
+    ("hooktheory", "hooktheory", "artist", "song", "id", "melody"),
+    ("pop909", "pop909", "artist", "title", "id", "melody"),
+    ("nottingham", "nottingham", "source", "title", "id", "melody"),
+    ("wikifonia", "wikifonia", "composer", "title", "id", "melody"),
+    ("chord_melody_dataset", "chord_melody_dataset", None, "title", "id", "melody"),
+    ("jazzmus", "jazzmus", "composer", "title", "id", "melody"),
+    # Walking bass lines in the "melody" track: the soloist the bass accompanies
+    ("wjd", "wjazzd", "performer", "title", "melid", "bass"),
+    ("filobass", "filobass", "reference_soloist", "title", "id", "bass"),
 ]
 
 _SYNTHETIC_ARTIST = {
     "chord_melody_dataset": "Chord Melody Dataset (Jazz Standards)",
+    "filobass": "FiloBass",
 }
+
+BASS_DATASETS = {cfg[0] for cfg in _DATASET_CONFIGS if cfg[5] == "bass"}
 
 
 def _prettify(text: str) -> str:
@@ -122,13 +133,14 @@ def build_catalogue(
     catalogue: List[SongEntry] = []
     song_index: Dict[Tuple[str, str, str], dict] = {}
 
-    for dataset_dir, dataset_key, artist_field, title_field in _DATASET_CONFIGS:
+    for dataset_dir, dataset_key, artist_field, title_field, id_field, kind in _DATASET_CONFIGS:
         for split in ("train", "valid", "test"):
             for record in _load_split(cache_root, dataset_dir, split):
                 meta = record.get(dataset_key, {})
-                song_id = meta.get("id")
+                song_id = meta.get(id_field)
                 if song_id is None:
                     continue
+                song_id = str(song_id)
 
                 title = _prettify(str(meta.get(title_field) or song_id))
                 if artist_field is not None and meta.get(artist_field):
@@ -142,6 +154,7 @@ def build_catalogue(
                     "id": song_id,
                     "title": title,
                     "artist": artist,
+                    "kind": kind,
                 })
                 song_index[(dataset_dir, split, song_id)] = record
 

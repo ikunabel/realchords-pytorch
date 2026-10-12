@@ -381,6 +381,23 @@ button.splash-button.small {
   font-size: 13px;
 }
 
+/* Marks songs whose "melody" isn't a tune: walking bass lines, demos */
+.kind-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: white;
+}
+
+.kind-badge.bass {
+  background: #651fff;
+}
+
+.kind-badge.demo {
+  background: #888;
+}
+
 @keyframes pulsing-fade {
   50% { opacity: 0.3; }
 }

@@ -117,6 +117,7 @@ def demo_songs() -> List[Tuple[dict, dict]]:
             "id": meta["id"],
             "title": meta["title"],
             "artist": DEMO_ARTIST,
+            "kind": "demo",
         }
         out.append((entry, record))
     return out
