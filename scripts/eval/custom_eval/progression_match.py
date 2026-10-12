@@ -95,7 +95,7 @@ def main() -> None:
     runs = [(i.split("=", 1)[0], Path(i.split("=", 1)[1])) for i in args.eval_dirs]
     results = {}
     cols = "".join(f"{str(n) + ' chords':>12}" for n in args.spans)
-    print(f"\nverbatim match against training  (quality={args.quality})")
+    print(f"\nprogression matching against training  (quality={args.quality})")
     print(f"{'corpus':<13}{'run':<6}{cols}{'ref patterns':>26}")
     for c in CORPORA:
         vocab = runs[0][1] / c / "chord_names_augmented.json"
