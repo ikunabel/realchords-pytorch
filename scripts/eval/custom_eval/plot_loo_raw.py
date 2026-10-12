@@ -76,7 +76,7 @@ def main() -> None:
                          "order k spans k+1 chords)")
     ap.add_argument("--eval_dir", type=Path, default=Path("logs/custom_eval/dataset_loo_new"))
     ap.add_argument("--prog", type=Path,
-                    default=Path("logs/custom_eval/progression_scores_loo_new.json"))
+                    default=Path("logs/custom_eval/dataset_loo_new/progression_scores.json"))
     ap.add_argument("--out_dir", type=Path, default=Path("logs/custom_eval/loo_raw"))
     args = ap.parse_args()
 

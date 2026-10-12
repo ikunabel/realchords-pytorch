@@ -1,0 +1,42 @@
+# GAPT leave-one-out eval, 16-bar all-windows protocol, labels matching
+# configs/custom_eval/dataset_loo_new/ so each GAPT cell pairs with its MLE
+# counterpart on byte-identical windows.
+#
+# base_model is only the architecture/vocab donor -- '.pth' entries load RL actor
+# weights on top of it. All actors descend from 7sets-vocab decoders.
+base_model: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt
+model:
+- 7sets_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=42/actor.pth
+- 7sets_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=43/actor.pth
+- 7sets_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=44/actor.pth
+- hooktheory_only_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=42/actor.pth
+- hooktheory_only_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=43/actor.pth
+- hooktheory_only_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=44/actor.pth
+- 7sets_no_pop909_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=42/actor.pth
+- 7sets_no_pop909_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=43/actor.pth
+- 7sets_no_pop909_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=44/actor.pth
+- 7sets_no_emopia_plus_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=42/actor.pth
+- 7sets_no_emopia_plus_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=43/actor.pth
+- 7sets_no_emopia_plus_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=44/actor.pth
+- 7sets_no_nottingham_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=42/actor.pth
+- 7sets_no_nottingham_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=43/actor.pth
+- 7sets_no_nottingham_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=44/actor.pth
+- 7sets_no_wikifonia_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=42/actor.pth
+- 7sets_no_wikifonia_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=43/actor.pth
+- 7sets_no_wikifonia_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=44/actor.pth
+- 7sets_no_chord_melody_dataset_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=42/actor.pth
+- 7sets_no_chord_melody_dataset_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=43/actor.pth
+- 7sets_no_chord_melody_dataset_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=44/actor.pth
+- 7sets_no_jazzmus_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=42/actor.pth
+- 7sets_no_jazzmus_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=43/actor.pth
+- 7sets_no_jazzmus_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=44/actor.pth
+seed: 42
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/gapt_loo/hooktheory
+batch_size: 64
+num_batches: -1
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true

@@ -77,8 +77,12 @@ def main() -> None:
                          "spans k+1 chords. The training pass is shared across orders, "
                          "which is the expensive part.")
     ap.add_argument("--alpha", type=float, default=1.0)
-    ap.add_argument("--out_dir", type=Path, default=Path("logs/custom_eval"),
-                    help="one file per order: progression_ngram_order<k>.json")
+    ap.add_argument("--out_dir", type=Path, required=True,
+                    help="one file per order: <out_dir>/progression_ngram_order<k>.json. "
+                         "Required rather than defaulted: this script compares SEVERAL eval "
+                         "dirs in one file, so the output belongs in a study-named sibling "
+                         "(e.g. logs/custom_eval/ngram_alpha_sweep, .../ngram_loo) and not "
+                         "inside any single run or loose in the custom_eval root.")
     args = ap.parse_args()
 
     runs = []

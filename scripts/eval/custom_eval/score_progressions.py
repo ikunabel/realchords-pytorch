@@ -99,7 +99,6 @@ def score_corpus(corpus_dir: Path, dataset_name: str, tokenizer_names) -> dict |
                     else js[k] - floor[k])
                 for k in js
             },
-            "conditionals": pm.conditionals(tr),
         }
     return out
 
@@ -108,7 +107,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--eval_dir", required=True, type=Path)
     ap.add_argument("--label", default=None, help="name for this run in the output")
-    ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--out", type=Path, default=None,
+                    help="defaults to <eval_dir>/progression_scores.json, i.e. beside the run "
+                         "it describes, so the scores never drift away from their eval")
     args = ap.parse_args()
 
     results = {}
@@ -127,20 +128,18 @@ def main() -> None:
         f = scored["floor"]
         print(f"\n=== {sub.name} === (match_n={scored['match_n']:,})")
         print(f"  floor  droot={f['droot']:.4f}" if f.get("droot") is not None else "  floor  --")
-        print(f"  {'model':<14}{'n':>8}{'droot':>9}{'quality':>9}{'droot_qto':>11}"
-              f"{'fifth%':>9}{'tritone%':>10}")
+        print(f"  {'model':<14}{'n':>8}{'droot':>9}{'quality':>9}")
         for label, m in scored["models"].items():
-            e, c = m["excess"], m["conditionals"]
+            e = m["excess"]
             def fmt(x, w=9, p=4):
                 return f"{x:>{w}.{p}f}" if x is not None else f"{'--':>{w}}"
-            print(f"  {label:<14}{m['num_transitions']:>8,}{fmt(e.get('droot'))}"
-                  f"{fmt(e.get('quality'))}{fmt(e.get('droot_qto'),11)}"
-                  f"{fmt(c.get('fifth_motion_rate'),9,3)}{fmt(c.get('tritone_rate'),10,4)}")
+            print(f"  {label:<14}{m['num_transitions']:>8,}"
+                  f"{fmt(e.get('droot'))}{fmt(e.get('quality'))}")
 
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(results, indent=2), encoding="utf-8")
-        print(f"\nwrote {args.out}")
+    out = args.out or (args.eval_dir / "progression_scores.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print(f"\nwrote {out}")
 
 
 if __name__ == "__main__":

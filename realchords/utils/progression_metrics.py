@@ -31,12 +31,9 @@ qualities in total; JAZZMUS is 39% dominant sevenths against Hooktheory's 6%), s
 class list is derived per corpus from its own training reference rather than
 hard-coded.
 
-Histograms, in increasing resolution (K = 12 roots, Q = len(classes)):
-  droot        K       root motion only            -- enough data on every corpus
-  quality      Q       chord vocabulary
-  droot_qto    K*Q     *the headline*: where it moved and what it landed on
-  qual_trans   Q*Q     quality grammar
-  joint        K*Q*Q   adds which quality it came *from* (preparation)
+Histograms (K = 12 roots, Q = len(classes)):
+  droot        K       root motion -- order-aware, catches scattered harmony
+  quality      Q       chord vocabulary -- order-blind, catches a collapsed palette
 
 Comparison
 ----------
@@ -100,21 +97,44 @@ def quality_class(intervals: frozenset) -> str:
     return f"{third}{fifth}{seventh}"
 
 
-def chord_symbol_to_event(symbol: str) -> ChordEvent | None:
-    """(root, raw function class) for a chord symbol, or None if unparseable."""
+def chord_symbol_to_event(symbol: str, quality: str = "function") -> ChordEvent | None:
+    """(root, quality token) for a chord symbol, or None if unparseable.
+
+    quality="function"  -> (third, fifth, seventh) class; extensions dropped, so C7,
+                           C9, C11 and C13 are one token. 24 tokens on Hooktheory.
+    quality="full"      -> the root-relative interval set verbatim, as a sorted tuple,
+                           so extensions are kept distinct. 106 tokens on Hooktheory.
+
+    The cache stores "full" and collapses on load, so the finer view never has to be
+    re-extracted from the dataloader.
+    """
     try:
         root = chord_symbols_lib.chord_symbol_root(symbol)
         pitches = chord_symbols_lib.chord_symbol_pitches(symbol)
     except Exception:
         return None
     intervals = frozenset((p - root) % 12 for p in pitches)
-    return root % 12, quality_class(intervals)
+    token = quality_class(intervals) if quality == "function" else _set_token(intervals)
+    return root % 12, token
+
+
+def _set_token(intervals: frozenset) -> str:
+    """An interval set as a stable string token, e.g. '0,4,7,10'."""
+    return ",".join(str(i) for i in sorted(intervals))
+
+
+def collapse_to_function(token: str) -> str:
+    """Map a 'full' interval-set token back to its function class."""
+    if not token or not token[0].isdigit():
+        return token          # already a function class
+    return quality_class(frozenset(int(x) for x in token.split(",")))
 
 
 def chord_events(
     chord_tokens: Sequence[int],
     id_to_name: Dict[int, str],
     classes: Sequence[str] | None = None,
+    quality: str = "function",
 ) -> List[ChordEvent]:
     """Chord-change events from one sequence's chord lane.
 
@@ -128,7 +148,7 @@ def chord_events(
         symbol = _parse_chord_symbol(id_to_name.get(int(token), ""))
         if symbol is None:
             continue
-        event = chord_symbol_to_event(symbol)
+        event = chord_symbol_to_event(symbol, quality=quality)
         if event is None:
             continue
         if allowed is not None and event[1] not in allowed:
@@ -160,33 +180,32 @@ def histograms(
     sequences: Iterable[Sequence[ChordEvent]],
     classes: Sequence[str],
 ) -> Dict[str, Counter]:
-    """The five histograms over all transitions in a collection of sequences."""
+    """Root motion and chord vocabulary over all transitions.
+
+    Only these two are kept. The higher-resolution views that used to live here
+    (droot x q_to, quality transitions, and the full joint) were dropped: the joint
+    self-suppressed on five of seven corpora for lack of data, and what the other two
+    added over these -- plus the named conditionals derived from them -- was either
+    redundant or unaffordable. Phrase-level structure is covered by the n-gram instead,
+    which sees 3 to 8 chords rather than adjacent pairs.
+
+    The two retained measures are complementary and each is blind to the other's
+    failure: droot is order-aware and catches scattered harmony, quality is an
+    order-blind marginal and catches a collapsed chord vocabulary.
+    """
     index = {q: i for i, q in enumerate(classes)}
-    out = {k: Counter() for k in ("droot", "quality", "droot_qto", "qual_trans", "joint")}
+    out = {k: Counter() for k in ("droot", "quality")}
     for events in sequences:
         for i, (root, qual) in enumerate(events):
             out["quality"][index.get(qual, index[OTHER])] += 1
             if i == 0:
                 continue
-            prev_root, prev_qual = events[i - 1]
-            d = (root - prev_root) % 12
-            qf = index.get(prev_qual, index[OTHER])
-            qt = index.get(qual, index[OTHER])
-            out["droot"][d] += 1
-            out["droot_qto"][(d, qt)] += 1
-            out["qual_trans"][(qf, qt)] += 1
-            out["joint"][(d, qf, qt)] += 1
+            out["droot"][(root - events[i - 1][0]) % 12] += 1
     return out
 
 
 def num_bins(name: str, num_classes: int) -> int:
-    return {
-        "droot": NUM_ROOTS,
-        "quality": num_classes,
-        "droot_qto": NUM_ROOTS * num_classes,
-        "qual_trans": num_classes * num_classes,
-        "joint": NUM_ROOTS * num_classes * num_classes,
-    }[name]
+    return {"droot": NUM_ROOTS, "quality": num_classes}[name]
 
 
 def transitions(sequences: Iterable[Sequence[ChordEvent]]) -> List[Tuple]:
@@ -222,16 +241,10 @@ def _histograms_from_transitions(
     trans: Sequence[Tuple], classes: Sequence[str]
 ) -> Dict[str, Counter]:
     index = {q: i for i, q in enumerate(classes)}
-    out = {k: Counter() for k in ("droot", "quality", "droot_qto", "qual_trans", "joint")}
-    for prev_root, prev_qual, root, qual in trans:
-        d = (root - prev_root) % 12
-        qf = index.get(prev_qual, index[OTHER])
-        qt = index.get(qual, index[OTHER])
-        out["droot"][d] += 1
-        out["quality"][qt] += 1
-        out["droot_qto"][(d, qt)] += 1
-        out["qual_trans"][(qf, qt)] += 1
-        out["joint"][(d, qf, qt)] += 1
+    out = {k: Counter() for k in ("droot", "quality")}
+    for prev_root, _prev_qual, root, qual in trans:
+        out["droot"][(root - prev_root) % 12] += 1
+        out["quality"][index.get(qual, index[OTHER])] += 1
     return out
 
 
@@ -269,67 +282,11 @@ def compare(
     return out
 
 
-# --------------------------------------------------------------------------- #
-# named conditionals
-# --------------------------------------------------------------------------- #
-# Single interpretable numbers pulled out of the joint. Each conditions on a slice
-# with thousands of samples behind it, which the full 1200-bin divergence does not
-# have, and each says *what* went wrong rather than only how far off it is.
-
-def dominant_preparation_rate(trans: Sequence[Tuple]) -> float | None:
-    """P(came from a dominant 7th | root rose a fourth, landed on a major chord).
-
-    The textbook V7 -> I cadence. On Hooktheory ground truth this is 11.6%; the
-    pre-trained decoder over-prepares at 18.8% and the RL policy under-prepares at
-    8.1%, a difference invisible to any resolution that ignores the source quality.
-    """
-    hits = total = 0
-    for prev_root, prev_qual, root, qual in trans:
-        if (root - prev_root) % 12 == 5 and qual in ("MP", "MPM7"):
-            total += 1
-            hits += prev_qual == "MP7"
-    return hits / total if total else None
-
-
-def two_five_rate(trans: Sequence[Tuple]) -> float | None:
-    """Share of all transitions that are a ii-V: m7 up a fourth to a dominant 7th."""
-    if not trans:
-        return None
-    hits = sum(
-        1 for pr, pq, r, q in trans
-        if (r - pr) % 12 == 5 and pq == "mP7" and q == "MP7"
-    )
-    return hits / len(trans)
-
-
-def fifth_motion_rate(trans: Sequence[Tuple]) -> float | None:
-    """Share of root moves by a fifth in either direction -- the backbone of tonal
-    harmony, and the single number the degenerate 'any chord containing the melody
-    note' strategy cannot fake (it lands near uniform, ~1/6 across the two bins)."""
-    if not trans:
-        return None
-    hits = sum(1 for pr, _, r, _ in trans if (r - pr) % 12 in (5, 7))
-    return hits / len(trans)
-
-
-def tritone_rate(trans: Sequence[Tuple]) -> float | None:
-    """Share of root moves by a tritone. Rare in real music (Hooktheory GT 1.3%);
-    an elevated value indicates scattered, non-functional progressions."""
-    if not trans:
-        return None
-    return sum(1 for pr, _, r, _ in trans if (r - pr) % 12 == 6) / len(trans)
-
-
-CONDITIONALS = {
-    "dominant_preparation_rate": dominant_preparation_rate,
-    "two_five_rate": two_five_rate,
-    "fifth_motion_rate": fifth_motion_rate,
-    "tritone_rate": tritone_rate,
-}
-
-
-def conditionals(trans: Sequence[Tuple]) -> Dict[str, float | None]:
-    return {name: fn(trans) for name, fn in CONDITIONALS.items()}
+# The named conditionals (dominant-preparation, ii-V, fifth-motion and tritone rate)
+# were removed with the high-resolution histograms they were sliced from. Note that
+# fifth-motion rate was a 7/7 leave-one-out detector at p=0.016 -- but it is bins 5 and 7
+# of the droot distribution, so droot still carries that signal; it was never independent
+# evidence alongside it.
 
 
 def derive_classes(quality_counts: Counter, coverage: float = 0.99) -> List[str]:
@@ -366,9 +323,11 @@ def derive_classes(quality_counts: Counter, coverage: float = 0.99) -> List[str]
 EVENTS_CACHE_DIR = "data/cache/progression_events"
 
 
-def events_cache_path(dataset_name: str, split: str, root: str = EVENTS_CACHE_DIR) -> "Path":
+def events_cache_path(dataset_name: str, split: str, root: str = EVENTS_CACHE_DIR,
+                      quality: str = "function") -> "Path":
     from pathlib import Path
-    return Path(root) / f"{dataset_name}.{split}.json"
+    suffix = "" if quality == "function" else f".{quality}"
+    return Path(root) / f"{dataset_name}.{split}{suffix}.json"
 
 
 def save_events(path, sequences, meta: Dict) -> None:

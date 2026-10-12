@@ -117,9 +117,7 @@ def build(dataset_name: str, max_len: int, coverage: float) -> dict:
             "num_sequences": len(test),
             "num_transitions": len(test_trans),
             "js_vs_train": floor,
-            "conditionals": pm.conditionals(test_trans),
         },
-        "train_conditionals": pm.conditionals(ref_trans),
         "max_len": max_len,
         "build_seconds": round(time.time() - started, 1),
     }
