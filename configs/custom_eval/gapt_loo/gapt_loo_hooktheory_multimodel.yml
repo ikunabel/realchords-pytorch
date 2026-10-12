@@ -1,0 +1,76 @@
+# Hooktheory GAPT-LOO eval via run_multi_model_eval.py.
+#
+# 2,785 windows x 26 models in one process is well past the 30-min login-node GPU
+# limit. This runs each model as its own short subprocess and merges by seq_idx.
+# Window enumeration is deterministic (all_windows, seed 42), which is what makes
+# the merge valid.
+#
+# The config stem is unique on purpose: run_multi_model_eval derives its staging dir
+# from the stem, and 'hooktheory_multimodel' is already used by the alpha sweep and
+# the MLE LOO grid. Sharing it leaves stale sibling dirs and risks merging the wrong
+# run if labels ever overlap.
+#
+# 7sets_no_hooktheory has seeds 42/43 only; seed 44 was still training.
+dataset_name: hooktheory
+dataset_split: test
+batch_size: 64
+num_batches: -1
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true
+save_dir: logs/custom_eval/gapt_loo/hooktheory
+seed: 42
+models:
+- label: 7sets_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=42/actor.pth
+- label: 7sets_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=43/actor.pth
+- label: 7sets_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=44/actor.pth
+- label: hooktheory_only_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=42/actor.pth
+- label: hooktheory_only_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=43/actor.pth
+- label: hooktheory_only_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_hooktheory_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_hooktheory_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_pop909_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_pop909_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_pop909_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_emopia_plus_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_emopia_plus_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_emopia_plus_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_emopia_plus.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_nottingham_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_nottingham_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_nottingham_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_nottingham.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_wikifonia_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_wikifonia_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_wikifonia_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_wikifonia.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_chord_melody_dataset_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_chord_melody_dataset_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_chord_melody_dataset_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_chord_melody_dataset.alpha=0.5.seed=44/actor.pth
+- label: 7sets_no_jazzmus_s42
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=42/actor.pth
+- label: 7sets_no_jazzmus_s43
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_jazzmus_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_jazzmus.alpha=0.5.seed=44/actor.pth

@@ -25,6 +25,7 @@ Paper:
   - [RL Training](#rl-training)
   - [RL Training for Melody Model](#rl-training-for-melody-model)
 - [Sequence Generation and Evaluation](#sequence-generation-and-evaluation)
+  - **Running evaluations day to day: [EVAL.md](EVAL.md)**
   - [Generate Sequences](#generate-sequences)
   - [Evaluate Harmony and Diversity](#evaluate-harmony-and-diversity)
   - [Plot Chord Embedding t-SNE](#plot-chord-embedding-t-sne)

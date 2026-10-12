@@ -1,9 +1,14 @@
-# GAPT leave-one-out eval, 16-bar all-windows protocol, labels matching
+# GAPT leave-one-out eval, 16-bar all-windows protocol. Labels match
 # configs/custom_eval/dataset_loo_new/ so each GAPT cell pairs with its MLE
 # counterpart on byte-identical windows.
 #
+# NOTE: 7sets_no_hooktheory has only seeds 42 and 43 here; seed 44 was still
+# training when this was generated. Its mean is over 2 seeds, so its seed sd rests
+# on 1 degree of freedom -- read that cell's spread with care, and regenerate when
+# the third seed lands. Every other variant has all three.
+#
 # base_model is only the architecture/vocab donor -- '.pth' entries load RL actor
-# weights on top of it. All actors descend from 7sets-vocab decoders.
+# weights on top of it.
 base_model: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt
 model:
 - 7sets_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=42/actor.pth
@@ -12,6 +17,8 @@ model:
 - hooktheory_only_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=42/actor.pth
 - hooktheory_only_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=43/actor.pth
 - hooktheory_only_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_hooktheory_only.alpha=0.5.seed=44/actor.pth
+- 7sets_no_hooktheory_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=42/actor.pth
+- 7sets_no_hooktheory_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=43/actor.pth
 - 7sets_no_pop909_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=42/actor.pth
 - 7sets_no_pop909_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=43/actor.pth
 - 7sets_no_pop909_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=44/actor.pth
