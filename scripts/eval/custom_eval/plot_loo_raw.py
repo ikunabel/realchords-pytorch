@@ -42,25 +42,14 @@ NICE = {"chord_complexity_mean": "chord complexity (pitch classes per chord)",
         "sd_ratio": "n-gram log-prob spread, model / real"}
 
 
-def series(corpus: str, metric: str, source: str, eval_dir: Path, prog: dict):
-    """-> (gt value or None, {'7sets': [per-seed], 'no_X': [per-seed]})"""
-    if source == "means":
-        m = json.loads((eval_dir / corpus / "means.json").read_text(encoding="utf-8"))
-        gt, models = m["gt"].get(metric), m["models"]
-        get = lambda pre: [models[f"{pre}_{s}"].get(metric) for s in SEEDS
-                           if f"{pre}_{s}" in models]
-    elif source == "ngram":
-        models = prog[corpus]["models"]["LOO"]
-        # KS and mean_shift are already differences from held-out real progressions, so
-        # a perfect model sits at 0; sd_ratio sits at 1.
-        gt = 1.0 if metric == "sd_ratio" else 0.0
-        get = lambda pre: [models[f"{pre}_{s}"]["vs_gt"].get(metric) for s in SEEDS
-                           if f"{pre}_{s}" in models]
-    else:
-        models = prog[corpus]["models"]
-        gt = 0.0  # progression scores are excess over the floor, so GT sits at 0
-        get = lambda pre: [models[f"{pre}_{s}"]["excess"].get(metric) for s in SEEDS
-                           if f"{pre}_{s}" in models]
+def series(corpus: str, metric: str, eval_dir: Path):
+    """-> (gt value or None, {'7sets': [per-seed], 'no_X': [per-seed]}) from means.json."""
+    m = json.loads((eval_dir / corpus / "means.json").read_text(encoding="utf-8"))
+    gt, models = m["gt"].get(metric), m["models"]
+
+    def get(pre):
+        return [models[f"{pre}_{s}"].get(metric) for s in SEEDS if f"{pre}_{s}" in models]
+
     out = {}
     for label, pre in (("7sets", "7sets"), ("no_X", f"7sets_no_{corpus}")):
         out[label] = [v for v in get(pre) if v is not None]
@@ -70,7 +59,9 @@ def series(corpus: str, metric: str, source: str, eval_dir: Path, prog: dict):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--metric", required=True)
-    ap.add_argument("--source", choices=["means", "progression", "ngram"], default="means")
+    ap.add_argument("--source", choices=["means"], default="means",
+                    help="only means.json now; the progression-divergence and n-gram "
+                         "sources were removed with those metrics on 2026-10-13")
     ap.add_argument("--order", type=int, default=3,
                     help="n-gram order when --source ngram (a symbol is a chord move, so "
                          "order k spans k+1 chords)")
@@ -86,7 +77,7 @@ def main() -> None:
     fig, axes = plt.subplots(1, 7, figsize=(16.5, 3.9), squeeze=False)
     for i, c in enumerate(CORPORA):
         ax = axes[0][i]
-        gt, s = series(c, args.metric, args.source, args.eval_dir, prog)
+        gt, s = series(c, args.metric, args.eval_dir)
         xs = [0, 1]
         for x, label in zip(xs, ("7sets", "no_X")):
             vals = s[label]

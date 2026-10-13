@@ -83,20 +83,26 @@ forces a regeneration.
 
 ---
 
-## Progression metrics: build the reference first
+## Progression matching
+
+The only progression metric kept (2026-10-13). Reads the `preds.pt` dumps an eval wrote.
 
 ```bash
-# once per corpus; cached in data/cache/progression_reference/ and progression_events/
-python scripts/eval/custom_eval/build_progression_reference.py --datasets all
+python scripts/eval/custom_eval/progression_match.py \
+    --eval_dirs MLE=logs/custom_eval/<a> GAPT=logs/custom_eval/<b> \
+    --quality full --spans 3 4 5 6 --out logs/custom_eval/progression_match_<study>.json
 ```
 
-**Rebuild the references whenever the histogram set changes.** They store which histograms
-exist, and a stale reference raises `KeyError` on a removed name.
+Needs `data/cache/progression_events/<corpus>.train.full.json`, built automatically on
+first use (one dataloader pass per corpus, ~4 min for hooktheory).
 
-`progression_match.py --quality full` keeps extensions distinct (C7 != C13); `--quality
-function` collapses them. Both need the matching event cache, built on first use.
+Read every row against the GT row, which is held-out real music through the same lookup
+and is far from 100% -- on hooktheory, real six-chord progressions occur in training only
+40% of the time. The measure needs a corpus with recurring formulas; where ground truth
+itself matches rarely it does not apply.
 
----
+The root-motion and chord-vocabulary divergences, the n-gram KS, and the
+repetition/closure statistics were removed along with their scripts and caches.
 
 ## Cluster practicalities
 
