@@ -110,8 +110,28 @@ def main() -> None:
             for n in args.spans:
                 ref[n].update(patterns(seq, n))
 
+        # Arms can differ in window count (e.g. hooktheory GAPT ran num_batches 16
+        # = 1,024 of 2,785 windows). The eval loader is shuffle=False and every arm
+        # uses the same dataset/split/cropped_max_len/all_windows, so row i is the
+        # same window in every arm. Averaging over different row counts would mix a
+        # model effect with a song-subset effect, so truncate every arm AND GT to the
+        # shortest. No-op when the counts already match.
+        def _nrows(path):
+            return torch.load(path, map_location="cpu", weights_only=False).shape[0]
+
+        counts = [_nrows(runs[0][1] / c / "gt" / "gt.pt")]
+        for _, _d in runs:
+            _first = next((s / "preds.pt" for s in sorted((_d / c / "models").iterdir())
+                           if (s / "preds.pt").exists()), None)
+            if _first is not None:
+                counts.append(_nrows(_first))
+        limit = min(counts)
+        if len(set(counts)) > 1:
+            print(f"  [{SHORT[c]}] window counts differ {sorted(set(counts))} "
+                  f"-> truncating every arm and GT to {limit:,}")
+
         def decode(path):
-            seqs = torch.load(path, map_location="cpu", weights_only=False)
+            seqs = torch.load(path, map_location="cpu", weights_only=False)[:limit]
             return [pm.chord_events(pm.chord_lane(r), i2n, quality=args.quality)
                     for r in seqs.tolist()]
 

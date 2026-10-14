@@ -1,16 +1,6 @@
-# Hooktheory GAPT-LOO eval via run_multi_model_eval.py.
-#
-# 2,785 windows x 26 models in one process is well past the 30-min login-node GPU
-# limit. This runs each model as its own short subprocess and merges by seq_idx.
-# Window enumeration is deterministic (all_windows, seed 42), which is what makes
-# the merge valid.
-#
-# The config stem is unique on purpose: run_multi_model_eval derives its staging dir
-# from the stem, and 'hooktheory_multimodel' is already used by the alpha sweep and
-# the MLE LOO grid. Sharing it leaves stale sibling dirs and risks merging the wrong
-# run if labels ever overlap.
-#
-# 7sets_no_hooktheory has seeds 42/43 only; seed 44 was still training.
+# Hooktheory GAPT-LOO via run_multi_model_eval.py: 2,785 windows x 27 models in one
+# process exceeds the 30-min login GPU limit. One short subprocess per model, merged
+# by seq_idx. Unique config stem so the staging dir does not collide with other studies.
 dataset_name: hooktheory
 dataset_split: test
 batch_size: 64
@@ -21,6 +11,10 @@ cropped_max_len: 512
 all_windows: true
 save_dir: logs/custom_eval/gapt_loo/hooktheory
 seed: 42
+# MLE anchor the GAPT actors were fine-tuned from. The actors are raw .pth state
+# dicts, so they are loaded into a copy of this; same anchor as the six per-corpus
+# gapt_loo configs, so Hooktheory is scored identically.
+base_model: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt
 models:
 - label: 7sets_s42
   checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets.alpha=0.5.seed=42/actor.pth
@@ -38,6 +32,8 @@ models:
   checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=42/actor.pth
 - label: 7sets_no_hooktheory_s43
   checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=43/actor.pth
+- label: 7sets_no_hooktheory_s44
+  checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=44/actor.pth
 - label: 7sets_no_pop909_s42
   checkpoint: /hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_pop909.alpha=0.5.seed=42/actor.pth
 - label: 7sets_no_pop909_s43

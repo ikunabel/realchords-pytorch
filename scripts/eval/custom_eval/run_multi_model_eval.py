@@ -83,10 +83,25 @@ def _slugify(label: str) -> str:
 def _run_one_model(
     label: str, checkpoint: str, contrastive_checkpoint: str, shared: dict, staging_dir: Path
 ) -> None:
+    # An RL actor (.pth) is a raw state dict, not a Lightning checkpoint:
+    # custom_evaluation.py loads it via load_rl_model into a deep copy of
+    # --base_model, so it needs an MLE .ckpt anchor to supply the architecture
+    # (the actor's weights then overwrite it). Only a .ckpt can itself be the
+    # --base_model -- passing an actor there dies in load_lit_model with
+    # KeyError: 'state_dict'.
+    if str(checkpoint).endswith(".pth"):
+        anchor = shared.get("base_model", "")
+        if not anchor:
+            raise SystemExit(
+                f"{label}: checkpoint is an RL actor ({checkpoint}) but the config has no "
+                "'base_model:' -- add the MLE anchor .ckpt the actors were fine-tuned from."
+            )
+        model_args = ["--base_model", str(anchor), "--model", f"{label}={checkpoint}"]
+    else:
+        model_args = ["--base_model", str(checkpoint), "--model", f"{label}=base"]
     cmd = [
         sys.executable, str(_EVAL_SCRIPT),
-        "--base_model", checkpoint,
-        "--model", f"{label}=base",
+        *model_args,
         "--dataset_name", str(shared["dataset_name"]),
         "--dataset_split", str(shared["dataset_split"]),
         "--save_dir", str(staging_dir),
@@ -225,6 +240,8 @@ def run_experiment(experiment_yml: Path) -> Path:
         "cropped_max_len": spec.get("cropped_max_len", 512),
         "all_windows": bool(spec.get("all_windows", False)),
         "clamp2_samples": spec.get("clamp2_samples", 0),
+        # Optional: the MLE anchor .ckpt, required only when the models are RL actors.
+        "base_model": spec.get("base_model", ""),
     }
 
     experiment_dir = Path(spec.get("save_dir", f"logs/custom_eval/{experiment_yml.stem}"))
