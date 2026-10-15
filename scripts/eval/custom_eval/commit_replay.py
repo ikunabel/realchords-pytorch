@@ -114,12 +114,16 @@ def _filters(tok):
 
 @torch.no_grad()
 def replay(model, tok, gt: torch.Tensor, k: int, temperature: float,
-           keep_imagined: bool = False):
+           keep_imagined: bool = False, imag_model=None):
     """gt: [B, 513] = BOS + interleaved (chord, melody). Returns preds of the same shape.
 
     With keep_imagined, also returns imagined [B, F, k-1]: for the call that decides the chord
     at frame u, the melody the model imagined for frames u-k+1 .. u-1 under the committed
     chords (-1 where the call imagined fewer frames, i.e. the first k-1 frames of a window).
+
+    imag_model: if given, it imagines the melody in the commit step while `model` still picks
+    every chord -- e.g. the MLE checkpoint GAPT was initialised from, whose melody predictions RL
+    has not drifted (melody_probe.py). Must share `tok`'s vocabulary.
     """
     chord_f, melody_f, _ = _filters(tok)
     melody = gt[:, 2::2].clone()                 # real melody lane, [B, F]
@@ -138,7 +142,7 @@ def replay(model, tok, gt: torch.Tensor, k: int, temperature: float,
         prompt = torch.cat([bos, hist], dim=1)
         n_commit = u - f
         if n_commit > 0:
-            committed = model.generate_online(
+            committed = (imag_model if imag_model is not None else model).generate_online(
                 prompts=prompt, conditions=played[:, f:u], seq_len=2 * n_commit,
                 temperature=temperature, cache_kv=True, filter_logits_fn=melody_f,
                 filter_kwargs=dict(), reverse_condition_order=True)
@@ -244,6 +248,9 @@ def main() -> None:
     ap.add_argument("--out_root", type=Path, default=Path("logs/custom_eval/commit_replay"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--seeds", nargs="+", default=SEEDS)
+    ap.add_argument("--imagine_with", choices=["self", "mle"], default="self",
+                    help="mle: the MLE checkpoint of the same seed imagines the melody, the "
+                         "--stage model still picks the chords")
     ap.add_argument("--keep_imagined", action="store_true",
                     help="also save the melody each call imagined, as imagined.pt")
     ap.add_argument("--analyze_imagined", action="store_true",
@@ -280,6 +287,11 @@ def main() -> None:
         return
 
     models = {s: v for s, v in load_models(args.stage, device).items() if s in args.seeds}
+    imag = {}
+    if args.imagine_with == "mle":
+        imag = {s: v for s, v in load_models("mle", device).items() if s in args.seeds}
+        for s_, (_, itok) in imag.items():
+            assert itok.name_to_id == models[s_][1].name_to_id, f"{s_}: vocabularies differ"
     if args.check:
         gt = torch.load(args.gt_root / args.corpora[0] / "gt" / "gt.pt",
                         map_location="cpu", weights_only=False)[:16].to(device)
@@ -299,7 +311,8 @@ def main() -> None:
                 torch.manual_seed(args.seed)
                 t0 = time.time()
                 res = replay(m, tok, gt, k=k, temperature=args.temperature,
-                             keep_imagined=args.keep_imagined)
+                             keep_imagined=args.keep_imagined,
+                             imag_model=imag[seed][0] if seed in imag else None)
                 preds, imagined = res if args.keep_imagined else (res, None)
                 preds = preds.cpu()
                 d = out / "models" / f"{args.stage}_{seed}"
