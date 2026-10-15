@@ -5,13 +5,17 @@ One panel per test corpus. Each panel shows, on that corpus's own test set, the
 full-mixture model and the model trained without that corpus, as the three individual
 training seeds plus their mean. Ground truth is a dashed line where the metric has one.
 
-This is deliberately the unprocessed view: it is what the damage-per-seed-sd summary is
-computed from, and it lets the reader see the seed spread, the distance to ground truth
-and the size of the 7sets-vs-no_X gap directly, rather than taking a ratio on trust.
+This is deliberately the unprocessed view: it lets the reader see the seed spread, the
+distance to ground truth and the size of the 7sets-vs-no_X gap directly, rather than
+taking a ratio on trust.
+
+Reads means.json only, so --metric is one of its keys: chord_complexity_mean,
+note_in_chord_ratio_mean, chord_duration_entropy, sync_emd_vs_gt. Progression matching,
+root motion, chord placement and the n-gram are scored by their own scripts into their own
+JSON and are not plotted here.
 
 Usage:
     python scripts/eval/custom_eval/plot_loo_raw.py --metric chord_complexity_mean
-    python scripts/eval/custom_eval/plot_loo_raw.py --metric droot --source progression
 """
 from __future__ import annotations
 
@@ -34,12 +38,7 @@ SHORT = {"hooktheory": "Hooktheory", "pop909": "POP909", "emopia_plus": "EMOPIA+
 NICE = {"chord_complexity_mean": "chord complexity (pitch classes per chord)",
         "note_in_chord_ratio_mean": "note-in-chord ratio",
         "chord_duration_entropy": "chord duration entropy",
-        "sync_emd_vs_gt": "sync EMD vs GT (lower = better)",
-        "droot": "root-motion divergence from real music (lower = better)",
-        "quality": "chord-vocabulary divergence from real music (lower = better)",
-        "ks": "n-gram KS vs real progressions (lower = better)",
-        "mean_shift": "n-gram log-prob shift vs real progressions",
-        "sd_ratio": "n-gram log-prob spread, model / real"}
+        "sync_emd_vs_gt": "sync EMD vs GT (lower = better)"}
 
 
 def series(corpus: str, metric: str, eval_dir: Path):
@@ -58,22 +57,11 @@ def series(corpus: str, metric: str, eval_dir: Path):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--metric", required=True)
-    ap.add_argument("--source", choices=["means"], default="means",
-                    help="only means.json now; the progression-divergence and n-gram "
-                         "sources were removed with those metrics on 2026-10-13")
-    ap.add_argument("--order", type=int, default=3,
-                    help="n-gram order when --source ngram (a symbol is a chord move, so "
-                         "order k spans k+1 chords)")
+    ap.add_argument("--metric", required=True, help="a key of means.json")
     ap.add_argument("--eval_dir", type=Path, default=Path("logs/custom_eval/dataset_loo_new"))
-    ap.add_argument("--prog", type=Path,
-                    default=Path("logs/custom_eval/dataset_loo_new/progression_scores.json"))
     ap.add_argument("--out_dir", type=Path, default=Path("logs/custom_eval/loo_raw"))
     args = ap.parse_args()
 
-    if args.source == "ngram":
-        args.prog = Path(f"logs/custom_eval/ngram_loo/progression_ngram_order{args.order}.json")
-    prog = json.loads(args.prog.read_text(encoding="utf-8")) if args.source != "means" else {}
     fig, axes = plt.subplots(1, 7, figsize=(16.5, 3.9), squeeze=False)
     for i, c in enumerate(CORPORA):
         ax = axes[0][i]
@@ -92,9 +80,7 @@ def main() -> None:
                     color="#1f77b4", alpha=0.6, zorder=2)
         if gt is not None:
             ax.axhline(gt, ls="--", lw=1.2, color="#d62728", zorder=1)
-            ax.annotate("GT" if args.source == "means" else
-                        ("real" if args.source == "ngram" else "floor"),
-                        xy=(1.38, gt), xycoords=("axes fraction", "data"),
+            ax.annotate("GT", xy=(1.38, gt), xycoords=("axes fraction", "data"),
                         fontsize=7.5, color="#d62728", va="center")
         ax.set_xlim(-0.5, 1.5)
         ax.set_xticks(xs)
@@ -107,8 +93,7 @@ def main() -> None:
                  f"   (3 seeds per cell, bar = mean)", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.9))
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    suffix = f"_order{args.order}" if args.source == "ngram" else ""
-    stem = args.out_dir / f"loo_raw_{args.metric}{suffix}"
+    stem = args.out_dir / f"loo_raw_{args.metric}"
     for ext in ("pdf", "png"):
         fig.savefig(f"{stem}.{ext}", dpi=160, bbox_inches="tight")
     print(f"wrote {stem}.pdf / .png")
