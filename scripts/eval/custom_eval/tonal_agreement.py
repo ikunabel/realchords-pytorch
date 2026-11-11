@@ -25,6 +25,9 @@ Modes:
                        melody and chord profiles, and whether this label-free metric ranks models
                        like a label-based measure (the chord profile's correlation with the
                        annotated key) across every model in --eval_dirs
+  --by_segment       agreement per 4-bar segment (bars 1-4 .. 13-16), full windows only, for GT
+                       and the --cells models of each run (mean over them): does the model
+                       recover from a cold start within the window?
 
 Usage:
     python scripts/eval/custom_eval/tonal_agreement.py --validate \\
@@ -34,6 +37,10 @@ Usage:
     python scripts/eval/custom_eval/tonal_agreement.py \\
         --eval_dirs MLE=logs/custom_eval/dataset_loo_new GAPT=logs/custom_eval/gapt_loo \\
         --out logs/custom_eval/tonal_agreement_loo.json
+    python scripts/eval/custom_eval/tonal_agreement.py --by_segment --cells 7sets_s \\
+        --corpora hooktheory pop909 nottingham wikifonia \\
+        --eval_dirs MLE=logs/custom_eval/dataset_loo_new GAPT=logs/custom_eval/gapt_loo \\
+        --out logs/custom_eval/tonal_agreement_by_segment.json
 """
 from __future__ import annotations
 
@@ -272,17 +279,43 @@ def run_validate_labels(runs, out_path, labels_path: Path):
         print(f"wrote {out_path}")
 
 
+def run_by_segment(runs, cells, corpora, out_path):
+    out = {}
+    print(f"{'corpus':<12}{'source':<8}{'bars 1-4':>10}{'5-8':>8}{'9-12':>8}{'13-16':>8}")
+    for corpus in corpora:
+        i2n = _tok(runs[0][1] / corpus)
+        srcs = [("GT", [runs[0][1] / corpus / "gt" / "gt.pt"])]
+        srcs += [(label, [m / "preds.pt" for m in _model_dirs(d, corpus, cells)]) for label, d in runs]
+        for label, paths in srcs:
+            assert paths, f"{corpus}/{label}: no models match --cells {cells}"
+            per_model = []
+            for p in paths:
+                P = profiles(_load(p), i2n, local=True)
+                full = [pairs for pairs in P if len(pairs) == 4]
+                per_model.append([np.nanmean([v for v in (tonal_agreement(*pairs[s]) for pairs in full)
+                                              if v is not None]) for s in range(4)])
+            out[f"{corpus}/{label}"] = np.mean(per_model, axis=0).tolist()
+            print(f"{SHORT[corpus]:<12}{label:<8}" + "".join(f"{v:>8.3f}" for v in out[f"{corpus}/{label}"]))
+    if out_path:
+        out_path.write_text(json.dumps(out, indent=2))
+        print(f"wrote {out_path}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--eval_dirs", nargs="+", required=True, metavar="LABEL=DIR")
     ap.add_argument("--cells", nargs="+", default=None)
     ap.add_argument("--validate", action="store_true")
     ap.add_argument("--validate_labels", action="store_true")
+    ap.add_argument("--by_segment", action="store_true")
+    ap.add_argument("--corpora", nargs="+", default=CORPORA, help="--by_segment only")
     ap.add_argument("--labels", type=Path, default=Path("data/cache/hooktheory/test.jsonl"))
     ap.add_argument("--out", type=Path, default=None)
     args = ap.parse_args()
     runs = [(i.split("=", 1)[0], Path(i.split("=", 1)[1])) for i in args.eval_dirs]
-    if args.validate:
+    if args.by_segment:
+        run_by_segment(runs, args.cells, args.corpora, args.out)
+    elif args.validate:
         run_validate(runs, args.out)
     elif args.validate_labels:
         run_validate_labels(runs, args.out, args.labels)
