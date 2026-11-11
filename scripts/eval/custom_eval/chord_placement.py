@@ -208,7 +208,7 @@ def main() -> None:
         events, pads = _vocab_maps(HooktheoryTokenizer(chord_names=names).id_to_name)
         bar_ok = corpus not in BAR_EXCLUDED
 
-        # same truncation rule as progression_match.py / fifths_motion.py
+        # same truncation rule as fifths_motion.py
         def _rows(p):
             return torch.load(p, map_location="cpu", weights_only=False).shape[0]
         counts = [_rows(base / "gt" / "gt.pt")]

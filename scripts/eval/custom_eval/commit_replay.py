@@ -29,14 +29,15 @@ melody only (cold start, as in the evaluation; ReaLJam's offline-model intro is 
 replayed). Rows shorter than the window are masked to PAD exactly as the evaluation masks
 them. Response delay (and so splicing between plans) is not modelled.
 
-Output mirrors the evaluation layout, one directory per k, so progression_match.py,
-fifths_motion.py and chord_placement.py run on it unchanged:
+Output mirrors the evaluation layout, one directory per k, so fifths_motion.py and
+chord_placement.py run on it unchanged:
 
     <out_root>/k<k>/<corpus>/{gt/gt.pt, metadata.jsonl, chord_names_augmented.json,
                               models/<stage>_<seed>/{preds.pt, nicr_per_frame.pt}}
 
-Windows are the first --n_windows rows of the existing evaluation's gt.pt, so they are the
-same windows the evaluation scored.
+Windows are --n_windows rows of the existing evaluation's gt.pt from --window_start (default:
+the first rows), so they are windows the evaluation scored. The study used rows 0-127; the
+confirmatory run uses rows 128-255.
 
 Usage:
     python scripts/eval/custom_eval/commit_replay.py --stage mle --k 1 4 8 16
@@ -225,12 +226,14 @@ def single_pass(model, tok, gt: torch.Tensor, temperature: float) -> torch.Tenso
     return preds
 
 
-def _prepare_corpus_dir(out: Path, gt_root: Path, corpus: str, n: int) -> torch.Tensor:
+def _prepare_corpus_dir(out: Path, gt_root: Path, corpus: str, n: int,
+                        start: int = 0) -> torch.Tensor:
     src = gt_root / corpus
-    gt = torch.load(src / "gt" / "gt.pt", map_location="cpu", weights_only=False)[:n]
+    gt = torch.load(src / "gt" / "gt.pt", map_location="cpu", weights_only=False)[start:start + n]
+    assert len(gt) == n, f"{corpus}: only {len(gt)} windows from row {start}"
     (out / "gt").mkdir(parents=True, exist_ok=True)
     torch.save(gt, out / "gt" / "gt.pt")
-    lines = [l for l in (src / "metadata.jsonl").read_text().splitlines() if l.strip()][:n]
+    lines = [l for l in (src / "metadata.jsonl").read_text().splitlines() if l.strip()][start:start + n]
     (out / "metadata.jsonl").write_text("\n".join(lines) + "\n")
     shutil.copy(src / "chord_names_augmented.json", out / "chord_names_augmented.json")
     return gt
@@ -243,6 +246,8 @@ def main() -> None:
                     help="commit-ahead in FRAMES (16th notes): 1 = commit 0, 16 = 4 beats")
     ap.add_argument("--corpora", nargs="+", default=["hooktheory", "pop909"])
     ap.add_argument("--n_windows", type=int, default=128)
+    ap.add_argument("--window_start", type=int, default=0,
+                    help="first row of gt.pt to use; 128 gives windows the study did not see")
     ap.add_argument("--temperature", type=float, default=0.8, help="ReaLJam's default")
     ap.add_argument("--gt_root", type=Path, default=Path("logs/custom_eval/dataset_loo_new"))
     ap.add_argument("--out_root", type=Path, default=Path("logs/custom_eval/commit_replay"))
@@ -306,7 +311,8 @@ def main() -> None:
     for k in args.k:
         for corpus in args.corpora:
             out = args.out_root / f"k{k}" / corpus
-            gt = _prepare_corpus_dir(out, args.gt_root, corpus, args.n_windows).to(device)
+            gt = _prepare_corpus_dir(out, args.gt_root, corpus, args.n_windows,
+                                     args.window_start).to(device)
             for seed, (m, tok) in models.items():
                 torch.manual_seed(args.seed)
                 t0 = time.time()

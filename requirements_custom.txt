@@ -39,7 +39,8 @@ wandb
 pretty_midi
 note_seq
 librosa
-music21   # Nottingham conversion
+music21   # Nottingham conversion; key estimation (realchords/utils/key_estimation.py)
+mir_eval  # MIREX key scoring (key_estimator_validation.py)
 openpyxl  # POP909 conversion (reads the dataset's .xlsx metadata)
 
 # --- Evaluation and plotting ----------------------------------------------------

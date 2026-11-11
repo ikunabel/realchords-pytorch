@@ -30,7 +30,7 @@ and librosa's Harte tonal centroid was measured and does not separate the models
 because weighting the circles of fifths, major thirds and minor thirds equally makes a
 two-step motion and a five-step motion almost equidistant.
 
-Duration is invisible here, as in progression_match.py: a repeated chord is not an
+Duration is invisible here: a repeated chord is not an
 event, so only changes in (root, quality) are counted. Quality is invisible too -- a
 C-to-Cm change is zero steps -- so report the zero-step column, which is where quality
 change without root motion appears.

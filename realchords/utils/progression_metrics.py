@@ -1,25 +1,22 @@
-"""Chord events for progression matching.
+"""Chord events for the progression metrics (root motion, progression n-gram).
 
-Turns a model's or ground truth's token lane into the sequence of chords it played,
-which `scripts/eval/custom_eval/progression_match.py` then slices into progressions and
-looks up against a corpus's training material.
+Turns a model's or ground truth's token lane into the sequence of chords it played.
 
 A chord is (root pitch class, quality token). Quality is either the *function* class --
 (third, fifth, seventh), extensions dropped, so C7/C9/C13 are one token -- or, with
 quality="full", the root-relative interval set verbatim, keeping them distinct.
-Progression matching uses "full".
 
 Only chord *changes* are events: a chord held four bars and the same chord for one beat
 are identical, a re-articulation of the same symbol is not a new event, and a rest does
 not break the progression. Duration is therefore absent from the representation. That is
 deliberate -- harmonic rhythm is measured separately -- but it means a passage played at
-half speed matches one played at full speed, and the number of chord changes per window
-should be reported alongside any match rate.
+half speed looks like one played at full speed, and the number of chord changes per window
+should be reported alongside.
 
 The divergence metrics that used to live here (root-motion and chord-vocabulary
 Jensen-Shannon against a reference histogram, plus the higher-resolution joint views and
-the named conditionals) were removed on 2026-10-13: progression matching is the only
-progression metric kept.
+the named conditionals) were removed on 2026-10-13, and progression matching on 2026-11-01
+in favour of the n-gram (journal/METRICS.md).
 """
 from __future__ import annotations
 
