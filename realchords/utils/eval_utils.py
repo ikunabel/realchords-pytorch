@@ -625,7 +625,7 @@ def pitch_class_set_wasserstein(
     Used by ``per_song_chord_distribution_wasserstein`` and
     ``key_relative_chord_distribution_wasserstein``. (A pooled comparison of
     absolute chord symbols was dropped: it can't tell which song a chord was
-    played in -- see journal/METRICS.md.)
+    played in -- see journal/reference/METRICS.md.)
 
     Returns:
         Distance in ``[0, 1]``: 0 = identical usage, 1 = no chord of one side

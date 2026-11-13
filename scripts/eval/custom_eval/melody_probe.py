@@ -3,7 +3,7 @@
 
 Under commit-ahead (commit_replay.py) the chord is chosen against a melody the model imagines
 itself, and GAPT's imagined melody has 24-40% fewer note onsets than the real one
-(journal/REALJAM_CHORD_TIMING.md, Part 5). Candidate cause: RL never trains the melody
+(journal/experiments/COMMIT_AHEAD.md). Candidate cause: RL never trains the melody
 predictions -- advantages and the KL reward are read at chord positions only -- yet they share
 every weight with the chord predictions, so they can drift.
 
@@ -25,7 +25,7 @@ The second pair separates the two possible causes: if its melody predictions als
 plain drift is enough; if only GAPT's did, the entropy bonus -- the one RL term that reaches
 melody positions -- is implicated. The realchords pair uses the OLD chord vocabulary (5,902
 tokens), so its test windows are remapped from the current one by name and windows using a chord
-it does not know are dropped (journal/TOKENIZERS.md, section 0). Every model's tokenizer is
+it does not know are dropped (journal/reference/TOKENIZERS.md, section 0). Every model's tokenizer is
 checked against its data before anything runs.
 
 Usage:

@@ -7,7 +7,7 @@ pitch class and the scale as step intervals, e.g. [2, 2, 1, 2, 2, 2] = major
 This counts, per split, how many sections are in each mode, how many change
 key, and how the tonics are distributed -- used to decide which mode groups
 are large enough to report key-aware metrics for separately (see
-journal/DATASET_SUMMARY.md, "Hooktheory keys and modes").
+journal/reference/DATASET_SUMMARY.md, "Hooktheory keys and modes").
 
 Reads the non-augmented cache files data/cache/hooktheory/{split}.jsonl (the
 augmented ones contain key-transposed copies of the same sections). Mode

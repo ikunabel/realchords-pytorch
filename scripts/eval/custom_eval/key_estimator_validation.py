@@ -16,7 +16,7 @@ For every analyser x input (melody, chords, both), reports the share of windows 
 exact, a fifth above, a fifth below, the relative key, the parallel key, or other -- and the MIREX
 score from mir_eval.key.weighted_score, which credits only the fifth ABOVE (0.5). Only
 Hooktheory's key labels are usable; every other corpus's are placeholders
-(journal/DATASET_SUMMARY.md).
+(journal/reference/DATASET_SUMMARY.md).
 
 Usage:
     python scripts/eval/custom_eval/key_estimator_validation.py

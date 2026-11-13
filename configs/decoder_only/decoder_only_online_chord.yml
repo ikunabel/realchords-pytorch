@@ -38,5 +38,5 @@ DecoderTransformer.heads: 8
 DecoderTransformer.max_seq_len: 514 # bos, eos
 DecoderTransformer.dropout: 0.1
 
-# LR schedule: constant (reference implementation / GAPT paper), see journal/CONFIGS.md
+# LR schedule: constant (reference implementation / GAPT paper), see journal/reference/CONFIGS.md
 lr_schedule: "none"

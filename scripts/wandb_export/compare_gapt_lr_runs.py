@@ -1,6 +1,6 @@
 """Compare LR schedule + train/eval curves of the GAPT-family RL runs from their
 wandb exports (gapt 5e-6, gapt_paper_authentic 5e-7, gapt_multiscale 5e-7).
-See journal/RL_LEARNING_RATE.md, "What the 5e-6 vs 5e-7 GAPT curves show"."""
+See journal/experiments/RL_LEARNING_RATE.md, "What the 5e-6 vs 5e-7 GAPT curves show"."""
 import csv
 import math
 

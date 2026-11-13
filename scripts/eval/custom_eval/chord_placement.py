@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Where in the bar do generated chord changes land, compared with real music?
 
-GAPT plays far more chords per window than real music (19.6 vs 12.8, journal/METRICS.md),
+GAPT plays far more chords per window than real music (19.6 vs 12.8, journal/reference/METRICS.md),
 with more uniform durations. Two readings predict different placements:
 
     H1  off-grid       -- the excess changes land on 8th/16th offbeats

@@ -6,7 +6,7 @@ the full-mixture models (7sets_s42/43/44) are compared with the models trained w
 (7sets_no_C_s42/43/44), both scored on C's test windows, within one stage (MLE or GAPT).
 
 Every metric is turned into a distance from ground truth, so "worse" means the same thing
-everywhere -- GT is the target, not the maximum (journal/METRICS.md):
+everywhere -- GT is the target, not the maximum (journal/reference/METRICS.md):
 
     note-in-chord, chord complexity, chord duration entropy   |model - GT|
     sync EMD, root-motion EMD, chord-placement TV    already distances to GT

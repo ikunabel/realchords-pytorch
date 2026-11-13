@@ -16,7 +16,7 @@ source scripts/jobscripts/_common_env.sh
 # changed: chord_melody_dataset (octave fix + one representative key per song, 4,252 rows -> 473)
 # and jazzmus (duplicate removal, 292 -> 163). The previous outputs are kept alongside as
 # *__stale_* directories; they contain MIDI for songs that no longer exist, which would otherwise be
-# picked up by the CLaMP 2 probe. See journal/DATASET_SUMMARY.md.
+# picked up by the CLaMP 2 probe. See journal/reference/DATASET_SUMMARY.md.
 
 srun python scripts/eval/custom_eval/run_custom_eval.py \
   gt_chord_melody_dataset gt_jazzmus \

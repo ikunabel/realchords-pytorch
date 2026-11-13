@@ -4,7 +4,7 @@
 Reads the per-window records in <eval_dir>/<corpus>/metadata.jsonl, which carry one
 entry per (window, model) with model labels "a{alpha}_s{seed}". Points are the mean
 over windows then over seeds; error bars are +/- 1 sd over the three training seeds,
-which is the dominant noise term (see journal/DATASET_MIX_LOO.md). The ground-truth
+which is the dominant noise term (see journal/experiments/ALPHA_SWEEP.md). The ground-truth
 level for each corpus is drawn as a dashed line, because every model cell sits far
 below it and the alpha differences are small next to that gap.
 

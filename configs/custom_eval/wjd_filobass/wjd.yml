@@ -3,7 +3,7 @@
 # comparison row was REMOVED: in these corpora the "melody" lane is a walking bass
 # line, so a model trained on right-hand melodies is doing a different task here and
 # the numbers are incommensurable, not merely noisy. These datasets are a
-# self-contained side study; see journal/DATASET_MIX_LOO.md. Formerly vs the 7sets
+# self-contained side study; see journal/experiments/WALKING_BASS.md. Formerly vs the 7sets
 # encoder-decoder (seed 1, alpha 0.5; step 13000 as in four_way_hooktheory_vs_7sets), which never
 # saw either dataset. Both offline (see the full melody), same 6198-token vocab -> one run.
 # No reward model for this vocab -> no Vendi. CLaMP 2 on all test sequences (FMD only

@@ -10,7 +10,7 @@
 #
 # Scope: WJD and FiloBass are kept entirely separate from the 7-set mixture and are never
 # compared against it (a 7-set model scored here would be doing a different task; see
-# journal/DATASET_MIX_LOO.md). This is a self-contained side study.
+# journal/experiments/WALKING_BASS.md). This is a self-contained side study.
 #
 # alpha = 1 (proportional sampling): with only two corpora in this side study the
 # natural size ratio is what is wanted, rather than up-weighting the smaller one.
@@ -56,7 +56,7 @@ AdamW.weight_decay: 0.0
 
 # LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
 # train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
-lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+lr_schedule: "none"  # constant LR = reference implementation, see journal/reference/CONFIGS.md
 warmup_steps: 1000
 
 # Model hyperparameters

@@ -2,7 +2,7 @@
 """Which note's velocity sets the release a re-strike needs after a long hold?
 
 On the ENSPIRE U1, after a long held note, a release that re-strikes reliably
-at velocity 40 sometimes fails at 55 (see journal/DISKLAVIER.md). Two
+at velocity 40 sometimes fails at 55 (see journal/reference/DISKLAVIER.md). Two
 explanations predict different things once the held note and its repeat
 have *different* velocities:
 

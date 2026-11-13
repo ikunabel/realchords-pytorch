@@ -4,7 +4,7 @@ is about *which* chord when forced to change at a moment it didn't choose.
 
 Motivation
 ----------
-ReaLJam's manual chord-timing mode (see journal/REALJAM_CUSTOM_VOICINGS.md)
+ReaLJam's manual chord-timing mode (see journal/reference/REALJAM_CUSTOM_VOICINGS.md)
 lets the performer decide when each chord lands: sampling is restricted to
 chord *onset* tokens, so the model picks which chord but never when. That
 restriction is not free. At any frame the model's probability mass is split

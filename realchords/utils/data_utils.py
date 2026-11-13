@@ -138,14 +138,14 @@ def update_global_chord_names(
 
     GUARDED (2026-10-15). Token ids are positions in this sorted list, so adding even one name
     re-sorts it and renumbers every chord token, silently breaking every checkpoint trained on
-    the file -- this happened on 2026-07-26 (5902 -> 6198 tokens, journal/REWARD_MODELS.md).
+    the file -- this happened on 2026-07-26 (5902 -> 6198 tokens, journal/reference/REWARD_MODELS.md).
     So once the file exists it is never overwritten:
       - names already present: nothing to do, the file is left untouched;
       - new names: RuntimeError, unless allow_vocab_change=True, in which case the merged
         vocabulary is written to a NEW dated file (e.g. chord_names_augmented.2026-10-15.json)
         and new configs must point their chord_names_path at it explicitly.
     An unreadable existing file also raises instead of being replaced.
-    See journal/TOKENIZERS.md, "Two chord vocabularies".
+    See journal/reference/TOKENIZERS.md, "Two chord vocabularies".
 
     Args:
         new_chord_names (List[str]): List of chord names to add
@@ -186,7 +186,7 @@ def update_global_chord_names(
                 "breaking every checkpoint trained on it (as on 2026-07-26: 5902 -> 6198 "
                 "tokens). If a new vocabulary is really intended, call with "
                 "allow_vocab_change=True: the merged list is written to a new dated file and "
-                "this one is left untouched. See journal/TOKENIZERS.md.")
+                "this one is left untouched. See journal/reference/TOKENIZERS.md.")
         global_path = global_path.with_name(
             f"{global_path.stem}.{date.today().isoformat()}{global_path.suffix}")
         if global_path.exists():

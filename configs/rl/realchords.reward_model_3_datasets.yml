@@ -2,7 +2,7 @@
 # from the hooktheory-only checkpoints to the 3-dataset-trained ones (same
 # checkpoints gapt.yml uses), so it can serve as the baseline for
 # the multiscale ReaLchords config (the old x10-penalty realchords_multiscale.yml
-# was deleted, see journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md; to be recreated
+# was deleted, see journal/experiments/MULTISCALE_RL.md; to be recreated
 # with penalty weights 1.0): both configs then use the same reward-model
 # training data, isolating single-scale vs. multi-scale as the only variable
 # between them (rather than also varying which data trained the reward model).

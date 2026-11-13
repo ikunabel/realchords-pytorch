@@ -7,7 +7,7 @@ Three legato quarter notes on one key (80 BPM by default), each released
 --gap_ms before the next, repeated in --groups groups with a rest between.
 Listen for whether notes 2 and 3 of each group sound. Bypasses the browser,
 so it separates the piano's behaviour from ReaLJam's MIDI timing; used for
-the velocity / key sweep in journal/DISKLAVIER.md.
+the velocity / key sweep in journal/reference/DISKLAVIER.md.
 
 Requires MIDI IN Delay OFF on the piano, and python-rtmidi (mido's backend).
 

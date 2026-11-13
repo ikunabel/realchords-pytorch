@@ -4,7 +4,7 @@
 # monitoring (validation/checkpoints every 100 steps, early stopping after 20 non-improving checks,
 # 5 best checkpoints kept, dropout 0.2). Otherwise identical to the 7sets decoder (seed 42,
 # constant LR 1e-4, alpha 0.5, architecture of decoder_only_online_chord). See
-# journal/DATASET_MIX_LOO.md.
+# journal/experiments/WALKING_BASS.md.
 # Trainer hyperparameters, for Trainer and lit_module
 seed: 42
 train_steps: 10000 # upper bound; early stopping ends it much earlier
@@ -45,7 +45,7 @@ AdamW.weight_decay: 0.0
 
 # LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
 # train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
-lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+lr_schedule: "none"  # constant LR = reference implementation, see journal/reference/CONFIGS.md
 warmup_steps: 1000
 
 # Model hyperparameters

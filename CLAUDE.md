@@ -2,8 +2,11 @@
 
 ## `journal/` — the research log
 
-This repo keeps a research journal in `journal/`. Every substantive finding gets written up in
-`journal/<TOPIC>.md`: the technical log — bugs and their root cause, exact
+This repo keeps a research journal in `journal/`. Since 2026-11-13, every A/B experiment (a change,
+tested and measured) has its own file in `journal/experiments/<NAME>.md` with a fixed template; see
+`journal/experiments/README.md` and the approved example `journal/experiments/COMMIT_AHEAD.md`.
+Reference material (data, tokenisation, metric definitions, configs, runbooks, ReaLJam) lives in
+`journal/reference/<TOPIC>.md`. Every substantive finding gets written up in one of the two: the technical log — bugs and their root cause, exact
 configs/checkpoints/job IDs, results tables, the reasoning trail including false starts and
 corrections, and what is still open.
 
@@ -20,5 +23,5 @@ Full formatting rules and the rationale: **read `journal/README.md` before writi
 Checkpoints use one of two incompatible chord vocabularies (5,902 vs 6,198 tokens; every chord
 token id differs, melody ids are shared). Before feeding any token tensor to a model, or
 comparing outputs across checkpoints, confirm both use the same one, and remap by name if not.
-Which checkpoints use which, how to tell, and the remap helper: `journal/TOKENIZERS.md`,
+Which checkpoints use which, how to tell, and the remap helper: `journal/reference/TOKENIZERS.md`,
 section 0.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Numbers in journal/REALJAM_CHORD_TIMING.md, Part 5, that no other script saves.
+"""Numbers in journal/experiments/COMMIT_AHEAD.md, that no other script saves.
 
 No generation; reads the saved replay outputs of commit_replay.py and writes one JSON.
 
@@ -15,7 +15,7 @@ No generation; reads the saved replay outputs of commit_replay.py and writes one
                        with self- vs MLE-imagined melody, and the note-in-chord difference.
 
 Tail windows are dropped as in chord_placement.py. Rate and offbeat share are pooled over
-windows (changes / bars, offbeat changes / changes), as in the Part 5 tables.
+windows (changes / bars, offbeat changes / changes), as in the tables of journal/experiments/COMMIT_AHEAD.md.
 
 Usage:
     python scripts/eval/custom_eval/commit_replay_supplement.py

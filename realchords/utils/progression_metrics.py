@@ -16,7 +16,7 @@ should be reported alongside.
 The divergence metrics that used to live here (root-motion and chord-vocabulary
 Jensen-Shannon against a reference histogram, plus the higher-resolution joint views and
 the named conditionals) were removed on 2026-10-13, and progression matching on 2026-11-01
-in favour of the n-gram (journal/METRICS.md).
+in favour of the n-gram (journal/reference/METRICS.md).
 """
 from __future__ import annotations
 

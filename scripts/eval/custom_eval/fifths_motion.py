@@ -23,7 +23,7 @@ step size while having both more chromatic motion and more static-root motion th
 the two errors cancelling. The mean step size was measured and separates nothing.
 
 Why the line of fifths rather than a published pitch-space model: see
-journal/METRICS.md. Chew's Spiral Array and Lerdahl's Tonal Pitch Space have no Python
+journal/reference/METRICS.md. Chew's Spiral Array and Lerdahl's Tonal Pitch Space have no Python
 implementation; music21's neo-Riemannian operations are defined only for consonant
 triads, whose share differs between GT and the models by enough to bias the comparison;
 and librosa's Harte tonal centroid was measured and does not separate the models,

@@ -6,16 +6,20 @@ scores differ between models. Then per window:
 
     d = mean |z_a - z_b| over model pairs across families - mean |z_a - z_b| over same-family seed pairs
 
-Null: the families disagree no more than seeds do, so d is equally likely to have either sign. Per
-corpus mean(d) / rms(d), summed; 200,000 sign flips within corpus; two-sided; Holm over all tests.
+7sets (checkpoints the GAPT LOO runs used) is compared with every family trained without some corpus,
+in the current vocabulary, on the corpora that family has not seen but 7sets has: 7sets_no_<C> on C (one
+per LOO variant), hooktheory_only on the other six. Per reward type: contrastive and discriminative,
+harmony and rhythm.
 
-7sets (checkpoints the GAPT LOO runs used) is compared with two families, in the current vocabulary, on
-corpora that family has not seen but 7sets has: hooktheory_only on the other six, no_hooktheory on
-Hooktheory. Tested per reward type: contrastive and discriminative, harmony and rhythm.
+Standardising removes each model's scale, and a reward's scale relative to the others matters in RL
+(advantages are normalised over the summed reward, not per term). So the score spread (sd of raw scores
+over a corpus's sequences) is reported too: family over 7sets.
 
-Windows are the replicates, so this is about these trained models on new windows, not about retraining
-in general. With this many windows small differences become significant, so read the ratio of
-across-family to same-family disagreement as well as p. Raw scores: reward_judgement_scores.npz.
+No significance tests. Each quantity comes with a 95% confidence interval from a bootstrap over windows
+(resampled within each corpus): mean d, the ratio of across-family to same-family disagreement, and the
+spread ratio. For scale, the largest seed-to-seed spread ratio within a family is reported next to it.
+Windows are the replicates, so the intervals are about these trained models on new windows, not about
+retraining in general (2 seeds per reward type). Raw scores: reward_judgement_scores.npz.
 
 Usage (GPU): sbatch scripts/jobscripts/eval/run_reward_judgement.sh
 """
@@ -111,7 +115,7 @@ def trained_family(suffix: str) -> dict:
 def families() -> dict:
     cfg = yaml.safe_load(open(CONFIG))
     return {"hooktheory_only": trained_family("hooktheory_only"),
-            "no_hooktheory": trained_family("7sets_no_hooktheory"),
+            **{f"no_{c}": trained_family(f"7sets_no_{c}") for c in CORPORA},
             "7sets": {"contrastive": cfg["contrastive_reward_model_path"],
                       "discriminative": cfg["discriminative_reward_model_path"],
                       "contrastive_rhythm": cfg["contrastive_reward_rhythm_model_path"],
@@ -139,29 +143,12 @@ def prepare(n: int, rng) -> tuple:
     return out, tok
 
 
-def holm(ps):
-    """Holm-adjusted p-values, as in scripts/eval/custom_eval/loo_significance.py."""
-    order = sorted(range(len(ps)), key=lambda i: ps[i])
-    adj, running = [0.0] * len(ps), 0.0
-    for rank, i in enumerate(order):
-        running = max(running, min(1.0, (len(ps) - rank) * ps[i]))
-        adj[i] = running
-    return adj
-
-
-def sign_flip(blocks, draws: int, rng, chunk: int = 20_000) -> tuple:
-    """blocks: per corpus, one d per window. Returns (T, two-sided p)."""
-    scales = [np.sqrt(np.mean(b ** 2)) or 1.0 for b in blocks]
-    T = float(sum(b.mean() / s for b, s in zip(blocks, scales)))
-    hits = 0
-    for start in range(0, draws, chunk):
-        k = min(chunk, draws - start)
-        null = np.zeros(k)
-        for b, s in zip(blocks, scales):
-            signs = rng.integers(0, 2, size=(k, len(b)), dtype=np.int8) * 2 - 1
-            null += (signs @ b) / len(b) / s
-        hits += int((np.abs(null) >= abs(T) - 1e-12).sum())
-    return T, hits / draws
+def bootstrap(sizes: list, stat, reps: int, rng) -> list:
+    """stat(per-corpus window-index arrays) -> float. [estimate, 2.5%, 97.5%], windows resampled
+    within each corpus."""
+    est = stat([np.arange(n) for n in sizes])
+    draws = [stat([rng.integers(0, n, n) for n in sizes]) for _ in range(reps)]
+    return [est, float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))]
 
 
 def main() -> None:
@@ -169,7 +156,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=256)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("logs/custom_eval/reward_judgement.json"))
-    ap.add_argument("--draws", type=int, default=200_000)
+    ap.add_argument("--boot", type=int, default=2000)
     args = ap.parse_args()
     rng = np.random.default_rng(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -201,32 +188,54 @@ def main() -> None:
     def disagreement(pairs):
         return np.mean([np.abs(a - b).mean(axis=0) for a, b in pairs], axis=0)      # per window
 
-    unseen = {"hooktheory_only": [c for c in CORPORA if c != "hooktheory"], "no_hooktheory": ["hooktheory"]}
-    results = {"rows": {c: int(len(data[c]["real"])) for c in CORPORA}, "checkpoints": fams, "tests": {}}
+    unseen = {"hooktheory_only": [c for c in CORPORA if c != "hooktheory"], **{f"no_{c}": [c] for c in CORPORA}}
+
+    def raw(f, kind, i, c):
+        """[sequences per window, windows], raw scores."""
+        n = len(data[c]["real"])
+        return np.concatenate([scores[(f, kind, i, c, s)] for s in SOURCES]).reshape(-1, n)
+
+    results = {"rows": {c: int(len(data[c]["real"])) for c in CORPORA}, "checkpoints": fams, "comparisons": {}}
     for kind in KINDS:
         for f, corp in unseen.items():
-            blocks, per_corpus = [], {}
+            across, same, raw_f, raw_7 = [], [], [], []
             for c in corp:
                 za, zb = [z_scores(f, kind, i, c) for i in (0, 1)], [z_scores("7sets", kind, i, c) for i in (0, 1)]
-                across = disagreement(list(itertools.product(za, zb)))
-                same = disagreement([tuple(za), tuple(zb)])
-                blocks.append(across - same)
-                per_corpus[c] = {"across": float(across.mean()), "same": float(same.mean())}
-            T, p = sign_flip(blocks, args.draws, rng)
-            results["tests"][f"{f}/{kind}"] = {"T": T, "p": p, "per_corpus": per_corpus,
-                                               "across": float(np.mean([v["across"] for v in per_corpus.values()])),
-                                               "same": float(np.mean([v["same"] for v in per_corpus.values()]))}
-    keys = list(results["tests"])
-    for k, a in zip(keys, holm([results["tests"][k]["p"] for k in keys])):
-        results["tests"][k]["p_holm"] = a
+                across.append(disagreement(list(itertools.product(za, zb))))
+                same.append(disagreement([tuple(za), tuple(zb)]))
+                raw_f.append([raw(f, kind, i, c) for i in (0, 1)])
+                raw_7.append([raw("7sets", kind, i, c) for i in (0, 1)])
+
+            def diff(ix):
+                return float(np.mean([(a[j] - b[j]).mean() for a, b, j in zip(across, same, ix)]))
+
+            def ratio(ix):
+                return float(np.mean([a[j].mean() for a, j in zip(across, ix)])
+                             / np.mean([b[j].mean() for b, j in zip(same, ix)]))
+
+            def spread(ix):
+                return float(np.mean([np.mean([m[:, j].std() for m in fm]) / np.mean([m[:, j].std() for m in sm])
+                                      for fm, sm, j in zip(raw_f, raw_7, ix)]))
+
+            sizes = [len(a) for a in across]
+            results["comparisons"][f"{f}/{kind}"] = {
+                "corpora": corp,
+                "across_minus_same": bootstrap(sizes, diff, args.boot, rng),
+                "across_over_same": bootstrap(sizes, ratio, args.boot, rng),
+                "spread_family_over_7sets": bootstrap(sizes, spread, args.boot, rng),
+                "spread_seed_over_seed_max": float(max(max(m.std() for m in ms) / min(m.std() for m in ms)
+                                                       for ms in raw_f + raw_7)),
+            }
     args.out.write_text(json.dumps(results, indent=2))
 
     print(f"rows per corpus: {results['rows']}\n")
-    print(f"{'family vs 7sets':<18}{'reward':<24}{'same':>7}{'across':>8}{'ratio':>7}{'p':>10}{'Holm':>9}")
-    for k in keys:
-        r = results["tests"][k]
+    fmt = lambda t: f"{t[0]:.2f} [{t[1]:.2f}, {t[2]:.2f}]"
+    print(f"{'family vs 7sets':<26}{'reward':<23}{'across - same':>22}{'across / same':>22}"
+          f"{'spread family/7sets':>22}{'seed spread max':>17}")
+    for k, r in results["comparisons"].items():
         f, kind = k.split("/")
-        print(f"{f:<18}{kind:<24}{r['same']:>7.3f}{r['across']:>8.3f}{r['across'] / r['same']:>7.2f}{r['p']:>10.5f}{r['p_holm']:>9.5f}")
+        print(f"{f:<26}{kind:<23}{fmt(r['across_minus_same']):>22}{fmt(r['across_over_same']):>22}"
+              f"{fmt(r['spread_family_over_7sets']):>22}{r['spread_seed_over_seed_max']:>17.2f}")
     print(f"\nwrote {args.out}")
 
 

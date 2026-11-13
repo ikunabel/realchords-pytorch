@@ -13,7 +13,7 @@ Scoring against a reference key uses ``mir_eval.key.weighted_score`` (MIREX: exa
 "fifth below", for reporting.
 
 Keys are indexed 0-23: tonic pitch class + 12 * (minor). Validated against Hooktheory's key labels
-in scripts/eval/custom_eval/key_estimator_validation.py (journal/METRICS.md).
+in scripts/eval/custom_eval/key_estimator_validation.py (journal/reference/METRICS.md).
 """
 from __future__ import annotations
 

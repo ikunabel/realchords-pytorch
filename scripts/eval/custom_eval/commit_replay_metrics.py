@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Descriptive metrics of commit-ahead replays (journal/REALJAM_CHORD_TIMING.md, Part 5).
+"""Descriptive metrics of commit-ahead replays (journal/experiments/COMMIT_AHEAD.md).
 
 Per corpus and condition, the mean over seeds of: chord changes per bar and offbeat share (as in
 commit_ahead_significance.py, tail windows dropped), note-in-chord (pooled over frames), chord duration

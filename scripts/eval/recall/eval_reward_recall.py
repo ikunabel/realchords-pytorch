@@ -111,7 +111,7 @@ PAPER_DISCRIMINATIVE_REFERENCE = {
 
 # This repo's own HuggingFace-downloaded reference checkpoints (hooktheory-only,
 # full 256-frame context; no chord_names_path override so unaffected by the
-# shared-vocab drift documented in journal/CONFIGS.md).
+# shared-vocab drift documented in journal/reference/CONFIGS.md).
 DEFAULT_HF_REFERENCE = {
     "contrastive": [
         ("HF: contrastive_reward", "logs/huggingface/contrastive_reward/step=8000.ckpt"),

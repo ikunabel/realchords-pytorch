@@ -1,5 +1,5 @@
 # A/B variant of realchords.yml -- option 1 from the reward-coefficient
-# discussion in journal/CONFIGS.md: sets each of the four reward-model weight
+# discussion in journal/reference/CONFIGS.md: sets each of the four reward-model weight
 # fields (contrastive/discriminative, and their rhythm-only variants) to 50,
 # the literal per-field reading of the ReaLchords paper's "coefficient of 50
 # to the reward produced by reward models" (Appendix H). Since

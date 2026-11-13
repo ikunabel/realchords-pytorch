@@ -7,7 +7,7 @@ Why this isn't just one custom_evaluation.py --model list: checkpoints
 being compared can use different chord vocabularies (confirmed, e.g.
 decoder.chord.hooktheory.seed=1 uses a 5902-token vocab,
 decoder.chord.7sets.seed=1.alpha=0.5 uses 6198 -- see
-journal/SEQUENCE_EVALUATION.md) and/or different architectures
+journal/reference/SEQUENCE_EVALUATION.md) and/or different architectures
 (decoder-only vs encoder-decoder). custom_evaluation.py's generation step
 needs one correct tokenizer per run, so mixing differently-vocabbed
 checkpoints in one --model list would silently misdecode whichever doesn't

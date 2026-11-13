@@ -3,7 +3,7 @@
 # 6 pieces). Caveat: valid was used for checkpoint selection of the two WJD+FiloBass models.
 # Decoder-only (online) and encoder-decoder (offline) models, each trained on WJD+FiloBass only
 # vs on the 7-dataset mix (never saw either set); compare within architecture. All share the
-# 6198-token vocab -> one run. See journal/DATASET_MIX_LOO.md.
+# 6198-token vocab -> one run. See journal/experiments/WALKING_BASS.md.
 # Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/wjd_filobass_validtest/wjd.yml
 base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.wjd_filobass.seed=42.alpha=0.5_3i5b8adr/step=2700.ckpt"
 model:

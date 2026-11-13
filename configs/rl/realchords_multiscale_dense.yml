@@ -4,7 +4,7 @@
 # own last chord frame, scaled so each sequence's summed reward is unchanged -- i.e. the temporal
 # credit assignment the ReaLchords paper motivates multi-scale rewards with. Question: does this
 # fix ReaLchords-M's rhythm collapse (chord_duration_entropy 0.12) and/or improve harmony?
-# See journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md. Test: tests/test_multiscale_dense_placement.py.
+# See journal/experiments/MULTISCALE_RL.md. Test: tests/test_multiscale_dense_placement.py.
 # Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
 
 $include:

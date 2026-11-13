@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Significance tests for the commit-ahead study (journal/REALJAM_CHORD_TIMING.md, Part 5).
+"""Significance tests for the commit-ahead study (journal/experiments/COMMIT_AHEAD.md).
 
 Commit-ahead is an inference setting applied to a fixed trained model, so the replicates are test
 windows: each window is replayed under both conditions by the same model, and the test is paired

@@ -92,7 +92,7 @@ def build_token_remap(
     in which case those ids map to -1 and the caller must drop or reject every sequence that
     contains one (``(table[x] < 0).any(dim=-1)``). That is what remapping from the current
     vocabulary to the old one needs: the old is a subset, so the full table can never exist, but
-    a sequence that only uses old chords maps losslessly. See journal/TOKENIZERS.md, section 0.
+    a sequence that only uses old chords maps losslessly. See journal/reference/TOKENIZERS.md, section 0.
     """
     if src.name_to_id == dst.name_to_id:
         return None

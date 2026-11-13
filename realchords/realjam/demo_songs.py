@@ -32,7 +32,7 @@ an octave of keys, since it was found to differ between keys.
 
 Earlier demos (disklavier_send_early, disklavier_re-strike-gap,
 disklavier_hold-time) were removed after the calibration they served; see
-journal/DISKLAVIER.md.
+journal/reference/DISKLAVIER.md.
 """
 
 from __future__ import annotations

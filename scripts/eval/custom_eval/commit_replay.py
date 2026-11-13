@@ -3,7 +3,7 @@
 
 ReaLJam (realchords/realjam/agent_interface.py, generate_live) freezes chords a fixed number
 of frames before they sound -- the commit-ahead. In steady state commit_frames settles at
-k - 1 (journal/REALJAM_CHORD_TIMING.md), so the chord that SOUNDS at frame u is decided once,
+k - 1 (journal/reference/REALJAM_CHORD_TIMING.md), so the chord that SOUNDS at frame u is decided once,
 at frame f = u - k + 1, from:
 
     real melody      frames  < f

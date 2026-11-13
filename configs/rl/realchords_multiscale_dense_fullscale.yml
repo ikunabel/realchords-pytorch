@@ -4,7 +4,7 @@
 # single reward term while the four rhythm rewards and the full-context term land at full size on
 # the last token. With multiscale_dense_keep_window_scale the per-window score keeps its full size;
 # the per-sequence sum then grows with the number of windows, i.e. the short scales dominate.
-# See journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md; test: tests/test_multiscale_dense_placement.py.
+# See journal/experiments/MULTISCALE_RL.md; test: tests/test_multiscale_dense_placement.py.
 # Run with scripts/jobscripts/train_variants/rl/submit_rl_multiscale.sh.
 
 $include:

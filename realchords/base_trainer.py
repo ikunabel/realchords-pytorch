@@ -284,7 +284,7 @@ class BaseLightningModel(L.LightningModule):
                          no scheduler at all). The default: matches the
                          reference implementation and the GAPT paper; cosine
                          annealed to the best step only gained 0.0033 val/loss
-                         (see journal/CONFIGS.md). The optimizer never slows down
+                         (see journal/reference/CONFIGS.md). The optimizer never slows down
                          as training approaches overfitting, so it keeps
                          taking full-sized steps into sharper minima that fit
                          noise right up to the last step.

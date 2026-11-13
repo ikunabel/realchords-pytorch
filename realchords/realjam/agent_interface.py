@@ -675,7 +675,7 @@ class Agent:
         comparison), followed by the stored custom voicings, if the lookup
         covers this chord (e.g. most slash chords are outcompeted by their
         root-position equivalent under the lookup's exact pitch-class-set
-        matching -- see journal/VOICING_EXTRACTION.md). A custom voicing
+        matching -- see journal/reference/VOICING_EXTRACTION.md). A custom voicing
         identical to the fixed-octave one is not listed twice.
         """
         voicings = []
