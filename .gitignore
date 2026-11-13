@@ -79,11 +79,12 @@ dmypy.json
 
 # Project specific
 notebooks/
-data/
+/data/
 logs/
 wandb/
 soundfonts/
 checkpoints/
+/checkpoints
 
 # External repos cloned for experimentation (not vendored)
 third_party/MIDI-GPT/

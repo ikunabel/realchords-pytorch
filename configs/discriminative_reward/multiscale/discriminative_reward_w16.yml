@@ -7,7 +7,7 @@
 # permutation, not an implicit all-pairs similarity matrix, so a permuted
 # pair is only ever a true positive at the exact matching segment; any other
 # pairing (same song or not, overlapping or not) is a genuine temporal
-# mismatch and a valid negative. See journal/CONFIGS.md for the full
+# mismatch and a valid negative. See journal/reference/CONFIGS.md for the full
 # reasoning.
 #
 # checkpoint_top_k=5 (not -1) to bound disk usage; early_stopping_patience=10

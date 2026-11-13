@@ -2,7 +2,7 @@
 
 Motivation: multi-scale rewards do not improve note-in-chord ratio in this implementation, whether
 the window scores are aggregated onto the last token or placed at each window's own position
-(journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md). Before tuning how the reward is placed or discounted,
+(journal/experiments/MULTISCALE_RL.md). Before tuning how the reward is placed or discounted,
 check the premise: within one sliding window, does a window model's score move with how well the
 chords there fit the melody?
 

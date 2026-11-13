@@ -16,7 +16,7 @@
 # (contrastive/discriminative x full/rhythm) would over-weight coherence by
 # ~4x relative to the paper's intent. Using 50/4=12.5 per term reproduces
 # "average the ensemble, then scale by 50" given the sum-based code, without
-# a code change -- see journal/CONFIGS.md for the full reasoning (this is
+# a code change -- see journal/reference/CONFIGS.md for the full reasoning (this is
 # the same open question flagged when auditing realchords.yml, now resolved
 # with an actual run rather than left as a config-only exercise).
 #

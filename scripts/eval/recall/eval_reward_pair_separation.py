@@ -31,7 +31,7 @@ mismatch. Songs with key changes or without a key partner are left out of the
 same-key numbers.
 
 Each --model path is resolved to its run's lowest-val-loss checkpoint by
-default (same as eval_reward_recall.py). See journal/REWARD_MODELS.md.
+default (same as eval_reward_recall.py). See journal/reference/REWARD_MODELS.md.
 
 Usage (from the repo root):
     python scripts/eval/recall/eval_reward_pair_separation.py --eval_augmentation off \\

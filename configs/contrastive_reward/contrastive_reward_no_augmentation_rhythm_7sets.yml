@@ -2,7 +2,7 @@
 # chord_melody_dataset/jazzmus/emopia_plus), i.e. the same data and sampling (alpha 0.5) as the
 # 7sets policy and its offline anchor -- needed for GAPT on the 7sets mix (the existing reward
 # models are hooktheory- or 3-dataset-only and use a different chord vocab). Otherwise identical
-# to the 3-dataset version of the same reward model. See journal/DATASET_MIX_LOO.md.
+# to the 3-dataset version of the same reward model. See journal/experiments/LEAVE_ONE_OUT.md.
 # Trainer hyperparameters, for Trainer and lit_module
 seed: 42
 train_steps: 8000
@@ -15,7 +15,7 @@ log_every_n_steps: 1
 checkpoint_interval: 500
 checkpoint_metric: "val/loss"
 checkpoint_mode: "min"
-checkpoint_top_k: 3 # 3 best by val/loss (was -1 = keep all; see journal/DATASET_MIX_LOO.md)
+checkpoint_top_k: 3 # 3 best by val/loss (was -1 = keep all; see journal/experiments/LEAVE_ONE_OUT.md)
 accelerator: "auto"
 devices: "auto"
 num_nodes: 1

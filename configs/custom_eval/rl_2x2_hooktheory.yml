@@ -1,4 +1,4 @@
-# Benchmark of the hooktheory 2x2 RL runs (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md, "Rerun
+# Benchmark of the hooktheory 2x2 RL runs (journal/experiments/MULTISCALE_RL.md, "Rerun
 # design"): ReaLchords / ReaLchords-M / GAPT / GAPT-M, all trained with the same code from the
 # same MLE model, plus that MLE model as reference. All share the hooktheory 5902-token vocab,
 # so one custom_evaluation.py run (identical test melodies) and Vendi with the hooktheory

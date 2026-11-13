@@ -1,7 +1,7 @@
 """Bar-lock probe: do the frozen RL reward models prefer one-chord-per-bar accompaniment?
 
 Question: ReaLchords-M (multiscale reward) collapses to exactly one chord per bar, while
-full-context ReaLchords does not (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md). Is that because the
+full-context ReaLchords does not (journal/experiments/MULTISCALE_RL.md). Is that because the
 reward models themselves score bar-locked chords higher than real ones (reward hacking), or did
 the policy just stop exploring there?
 

@@ -3,7 +3,7 @@
 # (hooktheory/pop909/nottingham/wikifonia/chord_melody_dataset/jazzmus/
 # emopia_plus). Checkpoints are each architecture's best checkpoint by
 # validation loss on hooktheory specifically (not aggregate -- see
-# journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md-adjacent 7sets ablation notes on
+# journal/experiments/MULTISCALE_RL.md-adjacent 7sets ablation notes on
 # why aggregate val/loss isn't comparable across different dataset mixes).
 # enc_dec.7sets's checkpoint is best by *aggregate* val/loss instead -- that
 # run's wandb history has no per-dataset val/loss_by_dataset/* columns at

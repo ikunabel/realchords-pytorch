@@ -35,7 +35,7 @@ def parse_meter(meter: str) -> Dict:
 
     Note for consumers: this is the notated metre, so the *pulse* of a compound metre is three of
     its beat units (a 6/8 bar is two dotted-quarter pulses = 12 frames), not one beat_unit -- see
-    journal/DATASET_SUMMARY.md, "Rhythmic characterisation of the corpora".
+    journal/reference/DATASET_SUMMARY.md, "Rhythmic characterisation of the corpora".
     """
     text = (meter or "").strip()
     if text in ("C", "c"):

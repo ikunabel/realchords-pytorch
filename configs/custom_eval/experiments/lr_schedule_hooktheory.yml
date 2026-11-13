@@ -1,4 +1,4 @@
-# Test-set check of the MLE LR-schedule decision (journal/CONFIGS.md, "MLE LR schedule vs.
+# Test-set check of the MLE LR-schedule decision (journal/reference/CONFIGS.md, "MLE LR schedule vs.
 # reference"). Each hooktheory-only decoder at its best-by-val/loss checkpoint:
 # - Constant: reference config, constant LR 1e-4, seed 42 (best val/loss 0.4396 @ 12k)
 # - Cosine15k: same, warmup + cosine to 0 over 15k steps (best 0.4363 @ 15k)

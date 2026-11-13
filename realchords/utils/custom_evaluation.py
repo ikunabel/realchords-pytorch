@@ -1276,12 +1276,12 @@ def main(
             as the effects being compared. **The window is the unit**: metrics average over windows,
             not over songs, which matches how Hooktheory is already treated (its rows are verse /
             chorus / bridge sections of a song, not songs) and makes the unit "16 bars of music" in
-            every corpus. See journal/DATALOADER.md.
+            every corpus. See journal/reference/DATALOADER.md.
         cropped_max_len: Window for the cropped_songs view, in *tokens*; the two lanes interleave,
             so frames per lane is half this (512 -> 256 frames = 64 beats = 16 bars). Matches
             `max_len` in the training configs. Was hardcoded at 256 (8 bars), i.e. models were
             trained on 16-bar windows and scored on 8-bar ones, and the value was not recorded in
-            the run's args.yml. See journal/DATASET_SUMMARY.md.
+            the run's args.yml. See journal/reference/DATASET_SUMMARY.md.
         clamp2_samples: Model-comparison mode only. Number of randomly chosen
             sequences (same ones for GT and every model, seeded by seed) to
             render with the plain export voicing and score with CLaMP 2:
@@ -1319,7 +1319,7 @@ def main(
         # create_dataset_dataloaders' default auto-resolution, which picks
         # whatever the *current* global vocab is -- silently wrong once
         # that's grown past what these checkpoints were actually trained
-        # on. See journal/SEQUENCE_EVALUATION.md.
+        # on. See journal/reference/SEQUENCE_EVALUATION.md.
         save_dir_path.mkdir(parents=True, exist_ok=True)
         dataset_chord_names_path = str(save_dir_path / "_model_chord_vocab.json")
         with open(dataset_chord_names_path, "w", encoding="utf-8") as fh:

@@ -2,7 +2,7 @@
 # jazzmus/emopia_plus, alpha 0.5): same objective and hyperparameters as gapt_hooktheory.yml, but
 # every component is the 7sets one -- policy initialization, distillation anchor, reward models and
 # training melodies. Counterpart of gapt_hooktheory.yml for "does the larger pre-training mixture
-# still help after RL?" (journal/DATASET_MIX_LOO.md).
+# still help after RL?" (journal/experiments/ALPHA_SWEEP.md).
 #
 # Note: the anchor (offline enc-dec) is the existing 7sets run, which used seed 1 rather than the
 # seed 42 of the policy and reward models.

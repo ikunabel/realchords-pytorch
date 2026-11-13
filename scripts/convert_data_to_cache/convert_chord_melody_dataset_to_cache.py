@@ -112,7 +112,7 @@ def needs_guitar_octave_correction(xml_file: Path) -> bool:
     That the omission is a metadata defect rather than a genuinely higher register is visible in the
     distributions: shifting the undeclared files down an octave aligns them with the declared ones
     almost exactly (peak bucket MIDI 64-67, 81 songs against 79; next bucket 21 against 21). It is
-    also audible; the A/B renders used to confirm it are described in journal/DATASET_SUMMARY.md
+    also audible; the A/B renders used to confirm it are described in journal/reference/DATASET_SUMMARY.md
     and can be regenerated with scripts/data/render_cmd_octave_ab.py.
 
     Only the melody is affected; chord symbols are pitch classes and carry no octave.

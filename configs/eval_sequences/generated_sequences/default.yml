@@ -25,5 +25,5 @@ config: configs/rl/realchords.yml
 # table is too small for (CUDA device-side assert on embedding lookup, seen
 # when this was first actually run end-to-end). Pinned to the same
 # reconstructed historical vocab used to fix this exact drift issue
-# elsewhere (see journal/REWARD_MODELS.md, "Chord vocabulary drift").
+# elsewhere (see journal/reference/REWARD_MODELS.md, "Chord vocabulary drift").
 chord_names_path: data/cache/old_chord_names_augmented.json

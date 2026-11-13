@@ -4,7 +4,7 @@ One job per config, through the existing per-family `submit_*.sh` wrappers, whic
 job name from the config stem and therefore the run directory under $RUNS_ROOT. Configs come from
 scripts/data/generate_loo_configs.py.
 
-Scope (see journal/DATASET_MIX_LOO.md): the JAZZMUS duplicate cache and the Chord Melody Dataset
+Scope (see journal/experiments/LEAVE_ONE_OUT.md): the JAZZMUS duplicate cache and the Chord Melody Dataset
 octave defect invalidated every model trained on a mixture containing either corpus, so all nine
 variants are retrained -- except the `hooktheory_only` decoders, which contain neither corpus, are
 already trained at seeds 42/43/44 on the 2,969-chord vocabulary, and are reused.
@@ -14,7 +14,7 @@ already trained at seeds 42/43/44 on the 2,969-chord vocabulary, and are reused.
     -- 51 jobs by default.
 
 Per-variant reward models are NOT submitted unless --with_rewards is passed. The transfer
-probe (journal/DATASET_MIX_LOO.md, "Do the LOO variants need their own reward models?") found
+probe (journal/experiments/SHARED_REWARD_MODELS.md, "Do the LOO variants need their own reward models?") found
 the 7-set reward models separate genuine from corrupted accompaniment at 0.87-0.98 AUC on
 corpora they never saw, so a per-variant set buys nothing and the 7-set ensemble is used for
 every variant. That is 72 of the 123 jobs this script used to plan.

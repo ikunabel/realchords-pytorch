@@ -1,5 +1,5 @@
 # A/B variant of realchords.yml -- option 2 from the reward-coefficient
-# discussion in journal/CONFIGS.md: sets each of the four reward-model weight
+# discussion in journal/reference/CONFIGS.md: sets each of the four reward-model weight
 # fields (contrastive/discriminative, and their rhythm-only variants) to
 # 50/4=12.5, so the combined (summed) coherence signal numerically matches
 # "average the four reward-model variants, then scale by 50" -- reproducing

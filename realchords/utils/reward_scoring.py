@@ -82,23 +82,30 @@ def load_reward_model(checkpoint: str, kind: str, device: torch.device,
     return model, tokenizer
 
 
-def build_token_remap(src: HooktheoryTokenizer, dst: HooktheoryTokenizer) -> Optional[torch.Tensor]:
+def build_token_remap(
+    src: HooktheoryTokenizer, dst: HooktheoryTokenizer, allow_missing: bool = False
+) -> Optional[torch.Tensor]:
     """Lookup table mapping every ``src`` token id to the id of the same name in ``dst``.
 
     None when the vocabularies are identical (no remapping needed). Raises if a name is missing
-    on the ``dst`` side, i.e. the reward model never saw that chord.
+    on the ``dst`` side, i.e. the reward model never saw that chord -- unless ``allow_missing``,
+    in which case those ids map to -1 and the caller must drop or reject every sequence that
+    contains one (``(table[x] < 0).any(dim=-1)``). That is what remapping from the current
+    vocabulary to the old one needs: the old is a subset, so the full table can never exist, but
+    a sequence that only uses old chords maps losslessly. See journal/reference/TOKENIZERS.md, section 0.
     """
     if src.name_to_id == dst.name_to_id:
         return None
     missing = [name for name in src.name_to_id if name not in dst.name_to_id]
-    if missing:
+    if missing and not allow_missing:
         raise ValueError(
             f"{len(missing)} token(s) of the evaluated vocabulary are absent from the reward "
             f"model's vocabulary (e.g. {missing[:3]}), so its scores would not be comparable."
         )
-    table = torch.zeros(src.num_tokens, dtype=torch.long)
+    table = torch.full((src.num_tokens,), -1, dtype=torch.long)
     for name, src_id in src.name_to_id.items():
-        table[src_id] = dst.name_to_id[name]
+        if name in dst.name_to_id:
+            table[src_id] = dst.name_to_id[name]
     return table
 
 

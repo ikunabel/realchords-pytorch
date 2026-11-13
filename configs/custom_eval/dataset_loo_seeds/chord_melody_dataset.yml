@@ -1,10 +1,10 @@
 # Dataset-mix leave-one-out with 3 training seeds per mix (42/43/44): 7sets baseline, the 7
 # leave-one-out mixes and the hooktheory-only model (all other corpora held out), all on the chord_melody_dataset test set. The seed replicates give the training-seed noise
-# band the single-seed comparison lacked (journal/DATASET_MIX_LOO.md). Checkpoints: best val/loss
+# band the single-seed comparison lacked (journal/experiments/LEAVE_ONE_OUT.md). Checkpoints: best val/loss
 # over each run's own training datasets. All share the 6198-token vocab -> one run. No reward
 # model for this vocab at the time of writing -> no Vendi. CLaMP 2 off: its FMD varies by up
 # to 2.8 between training seeds, so it cannot separate the mixtures, and embedding
-# 28 sources x 2441 sequences x 2 views dominates the runtime (see journal/DATASET_MIX_LOO.md).
+# 28 sources x 2441 sequences x 2 views dominates the runtime (see journal/experiments/LEAVE_ONE_OUT.md).
 # Submit: sbatch scripts/jobscripts/eval/run_custom_eval.sh configs/custom_eval/dataset_loo_seeds/chord_melody_dataset.yml
 base_model: "/hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_7mhnk76x/step=10000.ckpt"
 model:

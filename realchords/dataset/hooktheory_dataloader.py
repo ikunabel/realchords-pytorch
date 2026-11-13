@@ -238,7 +238,7 @@ class HooktheoryDataset(Dataset):
         scored 21% of an average POP909 song. Non-overlapping windows (`stride == window_len`, with
         a tail-aligned final window) cover 100% of every corpus, and metrics are averaged **within a
         song first**, so each song still contributes one number and the song stays the unit of
-        inference. See journal/DATALOADER.md.
+        inference. See journal/reference/DATALOADER.md.
         """
         if self._window_index is None:
             index = []

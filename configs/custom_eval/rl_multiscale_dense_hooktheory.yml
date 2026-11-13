@@ -1,4 +1,4 @@
-# Dense vs last-token placement of the multi-scale reward (journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md):
+# Dense vs last-token placement of the multi-scale reward (journal/experiments/MULTISCALE_RL.md):
 # ReaLchords-M (window scores averaged, placed on the last token) vs ReaLchords-M-dense (each
 # window's score placed at its last action, same sequence sum), with MLE and full-context
 # ReaLchords as references. Same test melodies/seed as rl_2x2_hooktheory.yml.

@@ -11,7 +11,7 @@ the *kind* of line its "melody" track holds:
 - kind "melody": Hooktheory, POP909, Nottingham, Wikifonia, Chord Melody
   Dataset, JAZZMUS -- a genuine melody.
 - kind "bass": WJD and FiloBass -- their "melody" track is a walking bass line
-  (see journal/DATASET_SUMMARY.md). Listed for models trained on bass input
+  (see journal/reference/DATASET_SUMMARY.md). Listed for models trained on bass input
   (and to hear how the others react to one); the UI marks them clearly.
 - kind "demo": the synthetic Disklavier calibration songs (demo_songs.py).
 - Excluded: EMOPIA+ (no usable title/artist metadata -- only an

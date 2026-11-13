@@ -115,7 +115,7 @@ def load_contrastive_reward_direct(
     cryptic CUDA crash deep inside get_chord_embed later. If your
     checkpoints don't match, the fix is a reward model actually trained on
     the same data, not a workaround here -- see
-    journal/RL_MULTISCALE_RHYTHM_COLLAPSE.md-adjacent notes on this class
+    journal/experiments/MULTISCALE_RL.md-adjacent notes on this class
     of bug for the full story.
     """
     model = load_lit_model(

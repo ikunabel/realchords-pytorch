@@ -5,7 +5,7 @@
 # early_stopping_patience=15 so training stops on convergence rather than
 # being cut off by the job time limit (the earlier _3_datasets sliding/fixed
 # runs hit their SLURM time limit while val/loss was still ~flat, not
-# clearly converged -- see journal/CONFIGS.md).
+# clearly converged -- see journal/reference/CONFIGS.md).
 
 seed: 42
 train_steps: 30000

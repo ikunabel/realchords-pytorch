@@ -1,5 +1,5 @@
 """Sweep binning / EMD conventions for the chord-to-note onset interval
-metric against ReaLchords paper Table 1 (x1000). See journal/METRICS.md,
+metric against ReaLchords paper Table 1 (x1000). See journal/reference/METRICS.md,
 "Resolution: histograms passed as values". Run from repo root."""
 import numpy as np
 import torch

@@ -1,7 +1,7 @@
-# alpha sweep cell (journal/DATASET_MIX_LOO.md): the 7-set mixture at alpha=0,
+# alpha sweep cell (journal/experiments/ALPHA_SWEEP.md): the 7-set mixture at alpha=0,
 # everything else identical to the alpha=0.5 config it was copied from. alpha=0 is
 # uniform over corpora, alpha=1 proportional to frame count.
-# ablation (journal/DATASET_MIX_LOO.md). Variant: 7sets
+# ablation (journal/experiments/LEAVE_ONE_OUT.md). Variant: 7sets
 # (7 dataset(s): hooktheory, pop909, nottingham, wikifonia, chord_melody_dataset, jazzmus, emopia_plus).
 # Template: configs/enc_dec/enc_dec.chord.7sets.seed=1.alpha=0.5.yml -- every other hyperparameter is unchanged so this
 # variant stays comparable with the 7sets runs.
@@ -43,7 +43,7 @@ AdamW.weight_decay: 0.0
 
 # LR schedule: "none" (flat), "cosine" (warmup + cosine decay to 0 over
 # train_steps), or "plateau" (ReduceLROnPlateau, reacts to val/loss directly)
-lr_schedule: "none"  # constant LR = reference implementation, see journal/CONFIGS.md
+lr_schedule: "none"  # constant LR = reference implementation, see journal/reference/CONFIGS.md
 warmup_steps: 1000
 
 # Model hyperparameters

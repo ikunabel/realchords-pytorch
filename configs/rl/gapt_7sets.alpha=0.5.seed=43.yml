@@ -2,7 +2,7 @@
 # Policy and offline anchor are this cell's own MLE models (best val/loss). The reward
 # models are shared across all cells and trained at alpha=1: they are fixed apparatus, so
 # only the policy's mixture varies, and a discriminator wants hard negatives rather than a
-# matched output distribution (journal/DATASET_MIX_LOO.md).
+# matched output distribution (journal/experiments/ALPHA_SWEEP.md).
 #
 #
 

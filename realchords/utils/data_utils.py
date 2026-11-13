@@ -7,6 +7,7 @@ This module contains functions for:
 """
 
 import json
+from datetime import date
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -128,11 +129,23 @@ def update_global_chord_names(
     new_chord_names: List[str],
     cache_dir: str,
     augmented: bool = False,
+    allow_vocab_change: bool = False,
 ) -> None:
     """Update global chord names file by merging with new chord names.
 
     This function reads the existing global chord_names.json (or chord_names_augmented.json),
     takes the union with new_chord_names, sorts the result, and saves it back.
+
+    GUARDED (2026-10-15). Token ids are positions in this sorted list, so adding even one name
+    re-sorts it and renumbers every chord token, silently breaking every checkpoint trained on
+    the file -- this happened on 2026-07-26 (5902 -> 6198 tokens, journal/reference/REWARD_MODELS.md).
+    So once the file exists it is never overwritten:
+      - names already present: nothing to do, the file is left untouched;
+      - new names: RuntimeError, unless allow_vocab_change=True, in which case the merged
+        vocabulary is written to a NEW dated file (e.g. chord_names_augmented.2026-10-15.json)
+        and new configs must point their chord_names_path at it explicitly.
+    An unreadable existing file also raises instead of being replaced.
+    See journal/reference/TOKENIZERS.md, "Two chord vocabularies".
 
     Args:
         new_chord_names (List[str]): List of chord names to add
@@ -155,31 +168,43 @@ def update_global_chord_names(
     filename = "chord_names_augmented.json" if augmented else "chord_names.json"
     global_path = cache_path / filename
 
-    # Read existing chord names if file exists
+    # Read existing chord names if file exists. Never "start fresh" over a live vocabulary:
+    # an unreadable file raises (json/TypeError) rather than being replaced.
     existing_chord_names = set()
     if global_path.exists():
-        try:
-            with open(global_path, "r") as f:
-                existing_chord_names = set(json.load(f))
-        except (json.JSONDecodeError, TypeError):
-            print(
-                f"Warning: Could not read existing {filename}, starting fresh"
-            )
-            existing_chord_names = set()
+        with open(global_path, "r") as f:
+            existing_chord_names = set(json.load(f))
+        added = sorted(set(new_chord_names) - existing_chord_names)
+        if not added:
+            print(f"Global {filename} already contains all {len(set(new_chord_names))} "
+                  f"chord names; left unchanged ({global_path}).")
+            return
+        if not allow_vocab_change:
+            raise RuntimeError(
+                f"{len(added)} chord name(s) are not in {global_path} (e.g. {added[:5]}). "
+                "Adding them would re-sort the file and renumber every chord token, silently "
+                "breaking every checkpoint trained on it (as on 2026-07-26: 5902 -> 6198 "
+                "tokens). If a new vocabulary is really intended, call with "
+                "allow_vocab_change=True: the merged list is written to a new dated file and "
+                "this one is left untouched. See journal/reference/TOKENIZERS.md.")
+        global_path = global_path.with_name(
+            f"{global_path.stem}.{date.today().isoformat()}{global_path.suffix}")
+        if global_path.exists():
+            raise RuntimeError(f"{global_path} already exists; refusing to overwrite it.")
 
     # Merge with new chord names
     original_count = len(existing_chord_names)
     merged_chord_names = existing_chord_names.union(set(new_chord_names))
     new_count = len(merged_chord_names) - original_count
 
-    # Sort and save
+    # Sort and save (only ever to a file that did not exist before)
     sorted_chord_names = sorted(list(merged_chord_names))
     with open(global_path, "w") as f:
         json.dump(sorted_chord_names, f, indent=2)
 
     # Print update information
     print(f"\n{'='*60}")
-    print(f"Updated global {filename}:")
+    print(f"Wrote {global_path.name}:")
     print(f"  - Added {new_count} new chord(s)")
     print(f"  - Total unique chords: {len(sorted_chord_names)}")
     print(f"  - File: {global_path}")

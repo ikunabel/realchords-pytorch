@@ -6,7 +6,7 @@
 # (step ~12k, val/loss 0.4396). Our earlier schedule ablation used cosine over
 # 50k steps, which was still at ~90% of peak at the minimum -- it never tested this.
 # Seed-to-seed spread of best val/loss (seed 42 vs seed 1): ~0.0013.
-# See journal/CONFIGS.md.
+# See journal/reference/CONFIGS.md.
 # Trainer hyperparameters, for Trainer and lit_module
 seed: 42
 train_steps: 15000
