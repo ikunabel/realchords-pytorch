@@ -79,7 +79,7 @@ dmypy.json
 
 # Project specific
 notebooks/
-data/
+/data/
 logs/
 wandb/
 soundfonts/
