@@ -1397,19 +1397,43 @@ function scheduleChordPitches(
  * introChordTokens - Per-frame tokens for chords at beginning of session
  * frame - Frame new chords start at
  */
-function processAgentAction(
-  { newChords, newChordTokens, introChordTokens, frame }) {
+function processAgentAction({ newChords, newChordTokens, introChordTokens,
+  frame, chordHoldRange, chordOnsetOffset }) {
   const curFrame = getTransportFrame();
   const targetFrame = frame + curSession.startFrame;
   const silenceFrame = getSilenceFrames() + curSession.startFrame;
 
-  // Fill in new chord tokens and fill possible gaps
+  // Fill in new chord tokens and fill possible gaps. Frames that passed while
+  // the request was in flight keep what actually sounded (the previous plan):
+  // the scheduling below skips them, so writing the new plan there would put
+  // chords that were never heard into the history the next request is
+  // conditioned on (journal/reference/REALJAM_CHORD_TIMING.md, Known gaps 6).
+  const firstOpen = Math.max(frame, curFrame - curSession.startFrame);
   for (let i = Math.min(frame, curSession.chordTokens.length);
     i < frame + newChordTokens.length; i++) {
     if (i < frame) {
       curSession.chordTokens[i] = -1;
+    } else if (i < firstOpen) {
+      if (curSession.chordTokens[i] === undefined) {
+        curSession.chordTokens[i] = -1;
+      }
     } else {
       curSession.chordTokens[i] = newChordTokens[i - frame];
+    }
+  }
+  // Where the new plan starts on top of sounded frames, a hold of a different
+  // chord than the one sounding must become that chord's onset, or the
+  // history is not a valid token sequence
+  if (firstOpen > frame && firstOpen < frame + newChordTokens.length &&
+    chordHoldRange) {
+    const isHold = t => t >= chordHoldRange[0] && t <= chordHoldRange[1];
+    const chordOf = t => isHold(t) ? t :
+      (t - chordOnsetOffset >= chordHoldRange[0] &&
+        t - chordOnsetOffset <= chordHoldRange[1]) ? t - chordOnsetOffset : null;
+    const tok = curSession.chordTokens[firstOpen];
+    const prev = curSession.chordTokens[firstOpen - 1];
+    if (isHold(tok) && chordOf(prev) !== tok) {
+      curSession.chordTokens[firstOpen] = tok + chordOnsetOffset;
     }
   }
 

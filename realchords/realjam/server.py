@@ -235,6 +235,11 @@ def play() -> str:
             "newChordTokens": new_chord_tokens,
             "introChordTokens": intro_chord_tokens,
             "frame": payload["frame"],
+            # lets the browser turn a chord hold into that chord's onset when it
+            # splices a new plan onto chords that already sounded
+            "chordHoldRange": list(agent.tokenizer.chord_hold_token_range),
+            "chordOnsetOffset": (agent.tokenizer.chord_on_token_range[0]
+                                 - agent.tokenizer.chord_hold_token_range[0]),
         }
     )
 
