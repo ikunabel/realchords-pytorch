@@ -1,14 +1,13 @@
 # Project instructions
 
-## `journal/` — two-tier documentation
+## `journal/` — research journal
 
-This repo keeps a research journal in `journal/`. Every substantive finding gets written up in
-**two** parallel forms, not one:
+This repo keeps a research journal in `journal/`: one `journal/<TOPIC>.md` per substantive
+topic — the technical log (bugs, exact configs/checkpoints/job IDs, results tables, reasoning
+trail). Every substantive finding gets written up there.
 
-- `journal/<TOPIC>.md` — technical log (bugs, exact configs/checkpoints/job IDs, reasoning trail).
-- `journal/thesis/<topic>.md` — the same material distilled into thesis-section prose (no bug
-  narrative, no IDs/dates, formal style) that can be adapted directly into thesis paragraphs.
+There is **no** thesis-distilled tier any more: `journal/thesis/` was removed (the thesis is
+written by hand) and must not be recreated. Write each finding once, with numbers and reasoning
+complete enough that a thesis section can be written straight from it.
 
-Full formatting rules and the rationale: **read `journal/README.md` before writing to either.**
-When documenting new work, update both — the thesis-distilled version is a required output of
-the task, not an optional extra.
+Full formatting rules: **read `journal/README.md` before writing to the journal.**
