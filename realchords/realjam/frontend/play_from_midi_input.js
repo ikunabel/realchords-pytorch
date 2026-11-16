@@ -650,8 +650,10 @@ function getSessionCurrentFrame() {
   const softFrame = getTransportFrame();
   const frame = Math.round(softFrame);
 
-  // Set start frame if needed, subtract modulo to always start on the beat
-  if (!curSession.startFrame) {
+  // Set start frame if needed, subtract modulo to always start on the beat.
+  // Compare with undefined: a start frame of 0 is valid, and a falsy test
+  // would re-anchor it on the next call, a beat or more later.
+  if (curSession.startFrame === undefined) {
     curSession.startFrame = frame - (frame % fpb);
   }
 
