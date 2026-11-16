@@ -41,7 +41,6 @@ from realchords.model.sampling import (
     filter_invalid_tokens_generate_unconditional,
     filter_invalid_tokens_generate_online,
     filter_invalid_tokens_generate_single_part,
-    filter_chord_onset_only,
 )
 from functools import partial
 import onnxruntime as ort
@@ -826,82 +825,6 @@ class Agent:
         )
         return prompt, note_token_hist, chord_token_hist
 
-    def advance_chord(
-        self,
-        model_name: str,
-        notes: List[NoteInfo],
-        chord_tokens: List[int],
-        frame: int,
-        temperature: float,
-        use_custom_voicings: bool = False,
-        prev_voicing: Optional[List[int]] = None,
-        vl_weight: Optional[float] = None,
-        reg_weight: Optional[float] = None,
-    ) -> Dict:
-        """Pick the chord that should start *right now*, at `frame`.
-
-        The counterpart to generate_live for manual chord-timing mode: the
-        model chooses *which* chord, but not *when* — sampling is restricted
-        to chord onset tokens, so it can't answer "keep holding" or "rest".
-        Generates exactly one token, since there is no lookahead window to
-        schedule when the performer decides each chord change themselves.
-
-        Args:
-          model_name: model to use, from MODELS keys
-          notes: list of all note events in session
-          chord_tokens: list of all chord tokens in session (history only —
-            manual mode has no committed future to preserve)
-          frame: frame the chord should start at
-          temperature: model sampling temperature
-          use_custom_voicings, prev_voicing, vl_weight, reg_weight:
-            same meaning as in generate_live.
-
-        Returns:
-          dict with the chord symbol, its pitches, and both the onset and
-          hold token ids — the client needs the hold token to keep filling in
-          chord history for as long as it sustains the chord.
-        """
-        model = self.models[model_name]
-
-        note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
-        prompt, _, _ = self._build_interleaved_prompt(
-            note_token_hist, chord_tokens, frame, self.max_frames - 1
-        )
-
-        logging.info("[Advance] Generating chord onset at frame %s", frame)
-        generated = self.gen_online_model(
-            model=model,
-            prompt=prompt,
-            seq_len=1,
-            temperature=temperature,
-            filter_fn=filter_chord_onset_only,
-            filter_kwargs=dict(tokenizer=self.tokenizer),
-        )
-        onset_token = int(generated[0, 0])
-
-        melody_pitch = _active_melody_pitch(notes, frame)
-        if use_custom_voicings and self.voicing_selector is not None:
-            (chord_symbol, pitches, _), _ = (
-                self.decode_chord_token_custom_voicing(
-                    onset_token,
-                    prev_voicing,
-                    vl_weight=vl_weight,
-                    reg_weight=reg_weight,
-                    melody_pitch=melody_pitch,
-                )
-            )
-        else:
-            chord_symbol, pitches, _ = self.decode_chord_token(onset_token)
-
-        result = {
-            "symbol": chord_symbol,
-            "pitches": pitches,
-            "onsetToken": onset_token,
-            "holdToken": self.tokenizer.chord_on_id_to_chord_id(onset_token),
-        }
-        logging.info("[Advance] Chord: %s", result)
-        return result
-
     def _onset_chord_info(self) -> Dict[int, Dict]:
         """Pitch classes and root of every chord onset token, computed once.
 
@@ -934,9 +857,9 @@ class Agent:
     ) -> List[Dict]:
         """The model's most likely chord onsets at `frame`, for chord completion.
 
-        Like advance_chord, the model is asked which chord would start now
-        (onset tokens only), but instead of sampling one, the renormalised
-        onset distribution is returned as a ranked list. The client fetches
+        The model is asked which chord would start now (onset tokens
+        only); instead of sampling one, the renormalised onset distribution
+        is returned as a ranked list. The client fetches
         it ahead of time and, when the performer plays some notes, picks the
         most probable candidate containing them -- so completion needs no
         round trip at press time.
@@ -1072,8 +995,7 @@ class Agent:
             seq_len: Number of new tokens to generate
             temperature: Sampling temperature
             filter_fn: Logit filter to constrain sampling. Defaults to the
-                standard interleaved chord/melody validity filter; overridden
-                by advance_chord to force a chord onset.
+                standard interleaved chord/melody validity filter.
             filter_kwargs: Keyword arguments for `filter_fn`.
 
         Returns:

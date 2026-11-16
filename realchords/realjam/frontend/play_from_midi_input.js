@@ -188,7 +188,7 @@ function toggleLiveSession() {
 }
 
 /**
- * Start a fresh session and the Transport clock. Shared by manual live
+ * Start a fresh session and the Transport clock. Shared by live
  * sessions (toggleLiveSession) and scheduled robot-melody playback
  * (playSongMelody) -- the two differ only in where noteHistory events come
  * from afterward (live MIDI input vs. pre-scheduled playback).
@@ -218,8 +218,8 @@ function startSession(options = {}) {
                              // for voice-leading continuity across polls
                              // regardless of which decode rule produced it
     loopStarted: false,     // If the generation loop has been kicked off
-    manualChord: null,      // Manual mode: chord currently being sustained
-    pendingChord: null,     // Manual mode: chord the next space press fires
+    heldChord: null,        // Complete mode: chord currently sustaining,
+                             // written into chordTokens by fillChordTokens
     triggeredChord: null,   // Triggered mode: chord sustaining since the
                              // last space press
     voicedByFrame: new Map(),  // Auto mode, Voice Around Melody: frame ->
@@ -241,9 +241,9 @@ function startSession(options = {}) {
   silenceInput.disabled = true;
   chordTimingSelect.disabled = true;
 
-  // Manual mode drives chords independently of the melody, so it doesn't wait
-  // for a first note the way the auto loop does (see playNote).
-  if ((isManualChordMode() || isCompleteMode()) && !curSession.referenceOnly) {
+  // Complete mode drives chords independently of the melody, so it doesn't
+  // wait for a first note the way the auto loop does (see playNote).
+  if (isCompleteMode() && !curSession.referenceOnly) {
     startGenerationLoop();
   }
   updateChordTimingInfo();
@@ -302,7 +302,7 @@ function playSongMelody(notes, numBeats) {
  * accompaniment against.
  *
  * Runs as a session so the Stop button and visual teardown work as usual,
- * but flagged referenceOnly so no /play or /advance_chord request is ever
+ * but flagged referenceOnly so no /play or /chord_candidates request is ever
  * made (see startGenerationLoop).
  * @param {Array<{pitch: number, onset: number, offset: number}>} melody
  * @param {Array<{pitches: Array<number>, onset: number, offset: number,
@@ -659,15 +659,6 @@ function getSessionCurrentFrame() {
 }
 
 /**
- * If chords wait for the performer instead of playing on the model's own
- * predicted timing. See advanceChordNow.
- * @return {boolean}
- */
-function isManualChordMode() {
-  return chordTimingSelect.value === 'manual';
-}
-
-/**
  * If chords follow auto mode's schedule but only sound when the performer
  * presses space. The model runs exactly as in auto mode -- same polling,
  * lookahead, commit and chord history, never told about the presses -- so
@@ -697,7 +688,7 @@ function isCompleteMode() {
  * Kick off whichever generation loop the current chord-timing mode uses.
  * Idempotent -- called from several places that can each be the first to
  * happen in a session (first melody note, robot playback, session start in
- * manual mode, or a space press before any of those).
+ * complete mode, or a space press before any of those).
  */
 function startGenerationLoop() {
   if (!curSession || curSession.loopStarted || curSession.referenceOnly) {
@@ -705,9 +696,7 @@ function startGenerationLoop() {
   }
   curSession.loopStarted = true;
   getSessionCurrentFrame();  // Anchor session frame 0 before scheduling
-  if (isManualChordMode()) {
-    pendingChordLoop();
-  } else if (isCompleteMode()) {
+  if (isCompleteMode()) {
     candidateLoop();
   } else {
     syncWithServer();
@@ -764,127 +753,24 @@ async function syncWithServer() {
 }
 
 /**
- * Manual chord timing: the model chooses which chord comes next, the
- * performer chooses when it lands. Nothing is scheduled onto the Transport
- * and nothing is committed -- a chord sustains until the next space press.
- *
- * The next chord is fetched ahead of time and cached in
- * curSession.pendingChord so a press fires instantly rather than waiting on
- * a round trip, and refreshed once per beat so it keeps responding to melody
- * played since the last press.
- */
-
-/**
  * Bring curSession.chordTokens up to the current frame, so the model sees an
  * accurate account of what has been sounding. Frames with no chord are left
  * as -1, which the server fills with SILENCE.
  */
-function fillManualChordTokens() {
+function fillChordTokens() {
   const curFrame = getSessionCurrentFrame();
   for (let i = 0; i <= curFrame; i++) {
     if (curSession.chordTokens[i] === undefined) {
       curSession.chordTokens[i] = -1;
     }
   }
-  const held = curSession.manualChord;
+  const held = curSession.heldChord;
   if (held) {
     // Everything after the onset frame is the same chord still ringing
     for (let i = held.startFrame + 1; i <= curFrame; i++) {
       curSession.chordTokens[i] = held.holdToken;
     }
   }
-}
-
-/** Ask the model which chord it would start right now, and cache it */
-async function fetchPendingChord() {
-  if (!curSession) {
-    return;
-  }
-  fillManualChordTokens();
-  const result = await fetch(`${window.location.origin}/advance_chord`, {
-    'method': 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelSelect.value,
-      notes: curSession.noteHistory,
-      chordTokens: curSession.chordTokens,
-      frame: getSessionCurrentFrame() + 1,
-      temperature: temperatureInput.valueAsNumber,
-      useCustomVoicings: customVoicingsCheck.checked,
-      prevVoicing: curSession.lastVoicing,
-      vlWeight: CUSTOM_VOICING_VL_WEIGHT,
-      regWeight: CUSTOM_VOICING_REG_WEIGHT,
-    })
-  });
-  const chord = await result.json();
-  if (!curSession) {
-    return;
-  }
-  curSession.pendingChord = chord;
-  updateChordTimingInfo();
-}
-
-/** Keep the queued chord fresh while waiting for the performer */
-async function pendingChordLoop() {
-  if (!curSession || !isManualChordMode()) {
-    return;
-  }
-  await fetchPendingChord();
-  if (!curSession || !isManualChordMode()) {
-    return;
-  }
-  setTimeout(pendingChordLoop, 60000 / Tone.Transport.bpm.value);
-}
-
-/**
- * Play the queued chord immediately, releasing whatever is sustaining.
- * Bound to space in manual mode.
- */
-async function advanceChordNow() {
-  startGenerationLoop();
-  if (!curSession.pendingChord) {
-    // Nothing queued yet (session just started, or a fetch is still in
-    // flight) -- fetch one now and take the round-trip hit for this press.
-    await fetchPendingChord();
-    if (!curSession || !curSession.pendingChord) {
-      return;
-    }
-    // Space was let go while waiting: don't start a chord nobody holds
-    if (curSession.spaceHeld === false) {
-      return;
-    }
-  }
-
-  const chord = { ...curSession.pendingChord };
-  chord.pitches = voiceAroundMelody(chord.pitches,
-    curSession.manualChord && curSession.manualChord.pitches);
-  const frame = getSessionCurrentFrame();
-
-  if (curSession.manualChord) {
-    curSession.manualChord.pitches.forEach(pitch => {
-      if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
-      visual.noteOff(pitch);
-    });
-  }
-  chord.pitches.forEach(pitch => {
-    if (!midiChordOut) chordSynth.triggerAttack(pitchToNote[pitch], '+0', chordVelocity);
-    visual.noteOn(pitch, 'blue');
-  });
-  midiPlayNow(chord.pitches);
-
-  curSession.chordTokens[frame] = chord.onsetToken;
-  curSession.manualChord = { ...chord, startFrame: frame };
-  curSession.chordHistory.push(
-    { scheduleFrame: frame, pitches: chord.pitches, symbol: chord.symbol, eventIDs: [] });
-  if (chord.pitches.length) {
-    curSession.lastVoicing = chord.pitches;
-  }
-
-  curSession.pendingChord = null;
-  updateChordTimingInfo();
-  fetchPendingChord();
 }
 
 // Custom-voicing scoring weights; were sliders, fixed at their old defaults
@@ -913,7 +799,7 @@ function currentMelodyPitch() {
 
 /**
  * Voice a chord like a pianist's two hands, just below the melody (auto,
- * triggered and manual mode, Voice Around Melody on):
+ * triggered mode, Voice Around Melody on):
  * - Upper chord: three notes, each pitch class once, in close position, in
  *   whichever inversion fits best -- its top as close under the ceiling
  *   (melody - gap) as possible, and moving as little as possible from
@@ -1095,7 +981,7 @@ const COMPLETION_WINDOW_MS = 50;  // notes this close together form one gesture
 /** Fetch the model's ranked chord onsets for the next frame */
 async function fetchCandidates() {
   if (!curSession) return;
-  fillManualChordTokens();
+  fillChordTokens();
   try {
     const result = await fetch(`${window.location.origin}/chord_candidates`, {
       'method': 'POST',
@@ -1229,9 +1115,9 @@ async function completeHeldNotes() {
   midiStrikeNow(pitches);
 
   const frame = getSessionCurrentFrame();
-  fillManualChordTokens();
+  fillChordTokens();
   curSession.chordTokens[frame] = chord.onsetToken;
-  curSession.manualChord = { ...chord, pitches, startFrame: frame };
+  curSession.heldChord = { ...chord, pitches, startFrame: frame };
   curSession.completion = { pitches };
   curSession.chordHistory.push(
     { scheduleFrame: frame, pitches, symbol: chord.symbol, eventIDs: [] });
@@ -1242,8 +1128,8 @@ async function completeHeldNotes() {
 
 /** All keys released: the completed chord ends */
 function releaseCompletion() {
-  fillManualChordTokens();     // the chord held up to now
-  curSession.manualChord = null;
+  fillChordTokens();     // the chord held up to now
+  curSession.heldChord = null;
   curSession.completion.pitches.forEach(pitch => {
     if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
     visual.noteOff(pitch);
@@ -1267,28 +1153,6 @@ function releaseTriggeredChord() {
   curSession.triggerHistory.push(
     { frame: getSessionCurrentFrame(), symbol: '', pitches: [], release: true });
   updateChordTimingInfo();
-}
-
-/**
- * Space let go in manual mode: the chord stops. Its hold is written into the
- * chord history up to now, and from here on the model hears silence until
- * the next press.
- */
-function releaseManualChord() {
-  const held = curSession.manualChord;
-  if (!held) return;
-  fillManualChordTokens();          // the chord held up to now
-  curSession.manualChord = null;    // later frames stay -1, i.e. SILENCE
-  held.pitches.forEach(pitch => {
-    if (!midiChordOut) chordSynth.triggerRelease(pitchToNote[pitch]);
-    visual.noteOff(pitch);
-  });
-  midiStrikeToken++;  // drop a re-press an earlier strike may have pending
-  midiApplyChord([], Tone.context.currentTime);
-  curSession.chordHistory.push(
-    { scheduleFrame: getSessionCurrentFrame(), pitches: [], symbol: '', eventIDs: [] });
-  updateChordTimingInfo();
-  fetchPendingChord();              // the history changed
 }
 
 /** Show what is sounding and what space will play next */
@@ -1324,21 +1188,8 @@ function updateChordTimingInfo() {
       `Playing: ${last && last.symbol || '--'}   Space plays: ${now && now.symbol || '--'}`;
     return;
   }
-  if (!isManualChordMode()) {
-    chordTimingInfo.textContent =
-      'Chords play on the model\'s own predicted timing';
-    return;
-  }
-  if (!curSession) {
-    chordTimingInfo.textContent =
-      'Start a session, then hold space to play each chord';
-    return;
-  }
-  const playing = curSession.manualChord
-    ? curSession.manualChord.symbol : '--';
-  const next = curSession.pendingChord
-    ? curSession.pendingChord.symbol : 'thinking...';
-  chordTimingInfo.textContent = `Playing: ${playing}   Space plays: ${next}`;
+  chordTimingInfo.textContent =
+    'Chords play on the model\'s own predicted timing';
 }
 
 /**
@@ -2433,7 +2284,7 @@ function midiStrikeNow(pitches) {
 }
 
 /**
- * Sound a chord the performer just triggered (triggered and manual mode)
+ * Sound a chord the performer just triggered (triggered mode)
  * with no re-strike gap: keys it shares with the chord already down are
  * simply held, new keys are pressed and the rest released, all at once.
  * Nothing waits for the action to reset, so a chord is never delayed --
@@ -2636,7 +2487,7 @@ function setKeysToNotes() {
 /**
  * If a keystroke is meant for a form field rather than for playing. Without
  * this, typing a song title into the search box would play melody notes and
- * (in manual chord mode) every space would fire a chord.
+ * (in triggered chord mode) every space would fire a chord.
  * @param {Event!} event
  * @return {boolean}
  */
@@ -2652,16 +2503,8 @@ function enableKeyboardInputs() {
     if (isTypingTarget(event)) {
       return;
     }
-    // Space advances the chord in manual timing mode. Swallow it so it
+    // Space plays the scheduled chord in triggered mode. Swallow it so it
     // doesn't also activate whatever button happens to have focus.
-    if (event.code === 'Space' && curSession && isManualChordMode()) {
-      event.preventDefault();
-      if (!event.repeat) {
-        curSession.spaceHeld = true;
-        advanceChordNow();
-      }
-      return;
-    }
     if (event.code === 'Space' && curSession && isTriggeredChordMode()) {
       event.preventDefault();
       if (!event.repeat) {
@@ -2679,13 +2522,7 @@ function enableKeyboardInputs() {
     if (isTypingTarget(event)) {
       return;
     }
-    // In manual and triggered mode the chord lasts while space is held
-    if (event.code === 'Space' && curSession && isManualChordMode()) {
-      event.preventDefault();
-      curSession.spaceHeld = false;
-      releaseManualChord();
-      return;
-    }
+    // In triggered mode the chord lasts while space is held
     if (event.code === 'Space' && curSession && isTriggeredChordMode()) {
       event.preventDefault();
       releaseTriggeredChord();

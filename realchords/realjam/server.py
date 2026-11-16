@@ -244,31 +244,6 @@ def play() -> str:
     )
 
 
-@app.post("/advance_chord")
-def advance_chord() -> str:
-    """Pick the chord to start right now, for manual chord-timing mode.
-
-    Unlike /play, this generates no lookahead and commits nothing: the
-    performer decides when each chord change happens, so the model is only
-    asked which chord it would play at this instant.
-    """
-    assert agent is not None
-    payload = flask.request.get_json()
-    return json.dumps(
-        agent.advance_chord(
-            payload["model"],
-            payload["notes"],
-            payload["chordTokens"],
-            payload["frame"],
-            float(payload["temperature"]),
-            use_custom_voicings=payload.get("useCustomVoicings", False),
-            prev_voicing=payload.get("prevVoicing"),
-            vl_weight=payload.get("vlWeight"),
-            reg_weight=payload.get("regWeight"),
-        )
-    )
-
-
 @app.post("/chord_candidates")
 def chord_candidates() -> str:
     """Ranked chord onsets the model would start now, for chord-completion
