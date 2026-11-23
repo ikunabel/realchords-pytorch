@@ -1026,17 +1026,24 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
    * @param {string} symbol
    * @param {number} x
    * @param {number} width
+   * @param {boolean=} live - Sounding now, its end not known yet (a chord
+   *   played live): drawn as a short block just above the keys until its
+   *   release is scheduled
+   * @param {string=} labelColor - CSS colour of the symbol (default white)
    */
-  scheduleNoteOn(noteNumber, startFrame, color, alpha, symbol, x, width) {
+  scheduleNoteOn(noteNumber, startFrame, color, alpha, symbol, x, width, live = false,
+    labelColor = 'white') {
     this.notes.push({
       noteNumber,
       symbol,
+      labelColor,
       startFrame,
       x,
       width,
       color: CONSTANTS.COLORS[color],
       alpha,
-      stopFrame: undefined
+      stopFrame: undefined,
+      live,
     });
   }
 
@@ -1092,8 +1099,10 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
     for (let i = 0; i < this.notes.length; i++) {
       const note = this.notes[i];
 
-      const yStartRel = note.stopFrame ?
-        1 - (note.stopFrame - curFrame) / this.visibleFrames :
+      const stop = note.stopFrame ||
+        (note.live ? curFrame + LIVE_NOTE_FRAMES : undefined);
+      const yStartRel = stop ?
+        1 - (stop - curFrame) / this.visibleFrames :
         0;
       const yEndRel = 1 - (note.startFrame - curFrame) / this.visibleFrames;
       const gapSize = 10;  // Helps distinguish between repeated notes
@@ -1104,7 +1113,7 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
       this.context.fillStyle = note.color;
       this.context.fillRect(note.x, y, note.width, height);
       if (note.symbol) {
-        this.context.fillStyle = 'white';
+        this.context.fillStyle = note.labelColor || 'white';
         this.context.font = '36px Arial';
         this.context.fillText(
           note.symbol, note.x - 40,
@@ -1113,6 +1122,9 @@ class VerticalAnticipationNotes extends BaseFloatyNotes {
     }
   }
 }
+
+// Height of a live note's block (in frames) while its end isn't known yet
+const LIVE_NOTE_FRAMES = 1.5;
 
 class HorizontalSequencerNotes extends BaseFloatyNotes {
   /** Construct horizontal cycle notes */
@@ -1626,6 +1638,18 @@ class NoteVisual {
     this.painter.heldButtonToVisualData.delete(noteNumber);
   }
 
+  /**
+   * Change the colour of a held note: its key on the piano and its trail
+   * @param {number} noteNumber
+   * @param {string} color - a CONSTANTS.COLORS key, also a CSS class
+   */
+  recolorNote(noteNumber, color) {
+    const note = this.painter.heldButtonToVisualData.get(noteNumber);
+    if (!note) return;
+    if (note.rect) note.rect.setAttribute('class', color);
+    if (note.noteToPaint) note.noteToPaint.color = CONSTANTS.COLORS[color];
+  }
+
   /** Stop playing all notes that are currently held */
   stopAllNotes() {
     for (const noteNumber of Array.from(
@@ -1641,8 +1665,11 @@ class NoteVisual {
    * @param {string} color
    * @param {number} alpha
    * @param {string=} symbol
+   * @param {boolean=} live - Sounding from now, its end not known yet
+   * @param {string=} labelColor - CSS colour of the symbol (default white)
    */
-  scheduleNoteOn(noteNumber, frame, color, alpha, symbol = '') {
+  scheduleNoteOn(noteNumber, frame, color, alpha, symbol = '', live = false,
+    labelColor = 'white') {
     if (this.animationType !== 'anticipation') {
       throw new Error('Only supported for anticipation');
     }
@@ -1653,7 +1680,7 @@ class NoteVisual {
       rect.getAttribute('x_position');
     this.painter.scheduleNoteOn(
       noteNumber, frame, color, alpha, symbol, pos,
-      rect.getAttribute('noteSize'));
+      rect.getAttribute('noteSize'), live, labelColor);
   }
 
   /**

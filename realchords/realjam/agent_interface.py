@@ -12,6 +12,8 @@ import os
 import time
 import json
 import copy
+
+import argbind
 import wget
 from pathlib import Path
 from realchords.utils.inference_utils import (
@@ -36,7 +38,7 @@ from realchords.constants import (
 )
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.voicing_selector import VoicingSelector
-from realchords.utils.data_utils import to_chord_name
+from realchords.utils.data_utils import chord_symbol_pitches, to_chord_name
 from realchords.model.sampling import (
     filter_invalid_tokens_generate_unconditional,
     filter_invalid_tokens_generate_online,
@@ -59,6 +61,13 @@ class NoteInfo(TypedDict):
     pitch: int
     frame: int
     on: bool
+
+
+# With a walking bass line in the melody lane, chord voicings are picked from
+# the voicing lookup among those lying wholly above this pitch. 99.65% of the
+# WJD + FiloBass bass notes are at or below G3 (journal/reference/
+# REALJAM_CUSTOM_VOICINGS.md, 2026-11-16).
+BASS_LINE_VOICING_FLOOR = 55  # G3
 
 
 def _active_melody_pitch(notes: List[NoteInfo], frame: int) -> Optional[int]:
@@ -96,6 +105,14 @@ OFFLINE_MODEL_PATH = os.path.join(
     "step=20000.ckpt",
 )
 
+# Chord vocabularies (journal/reference/TOKENIZERS.md, section 0). Every model
+# uses the one its checkpoint was trained with, told apart by the checkpoint's
+# token count (the embedding size is the ground truth): the old one (2,821
+# chords, 5,902 tokens) for the downloaded models and everything converted to
+# it, the new one (2,969 chords, 6,198 tokens) for the 7-dataset models.
+# Melody and special token ids are the same in both; every chord id differs.
+GROWN_CHORD_NAMES_PATH = os.path.join("data", "cache", "chord_names_augmented.json")
+
 MODEL_PATHS = {
     "GAPT": os.path.join(
         REALJAM_CHECKPOINT_DIR,
@@ -118,6 +135,15 @@ MODEL_PATHS = {
 # the downloaded bundle). Trained in this repo on the grown chord vocabulary
 # and converted to ReaLJam's with scripts/convert_checkpoint_for_realjam.py.
 OPTIONAL_MODEL_PATHS = {
+    # GAPT trained on the 7-dataset mix (Hooktheory, POP909, Nottingham,
+    # Wikifonia, Chord Melody Dataset, JAZZMUS, EMOPIA+), seed 42, alpha 0.5,
+    # in its own (new) vocabulary of 2,969 chords: the RL actor as trained,
+    # with the run's args.yml (architecture) next to it
+    "GAPT 7 datasets": os.path.join(
+        REALJAM_CHECKPOINT_DIR,
+        "gapt_loo_7sets.alpha=0.5.seed=42",
+        "actor.pth",
+    ),
     # Online MLE trained on WJD + FiloBass only: its "melody" lane is a walking
     # bass line, so it expects a bass line where the other models expect a tune
     "WJD+FiloBass MLE (bass input)": os.path.join(
@@ -339,8 +365,15 @@ class Agent:
         with open(chord_names_path, "r") as f:
             chord_names = json.load(f)
         tokenizer = HooktheoryTokenizer(chord_names=chord_names)
+        # The old vocabulary: the default, and always that of the offline
+        # (intro) model and the melody helpers (melody ids are the same in
+        # both vocabularies)
         self.tokenizer = tokenizer
         self.chord_names = chord_names  # full vocabulary, for the voicing browser
+        self._tokenizers = {tokenizer.num_tokens: tokenizer}  # by token count
+        self.model_tokenizers: Dict[str, HooktheoryTokenizer] = {}
+        self.bass_tokenizers: Dict[str, HooktheoryTokenizer] = {}
+        self._filter_cache: Dict[int, Dict] = {}
 
         # Optional data-driven voicing lookup for the "custom voicings" live
         # toggle. Loaded once at startup and used statelessly per-request
@@ -371,6 +404,23 @@ class Agent:
                 voicings_path,
             )
 
+        # Alternative lookups to compare by ear (2026-11-23), loaded on first
+        # use: the fit-rule mapping (scripts/extract_voicings/
+        # fit_voicings_to_chords.py; journal reference/VOICING_EXTRACTION.md,
+        # "Fit rule"). The page switches with POST /voicing_lookup.
+        self.voicing_lookup_paths: Dict[str, str] = {}
+        if self.voicing_selector is not None:
+            self.voicing_lookup_paths["pitch-class set (current)"] = voicings_path
+            base = os.path.dirname(voicings_path)
+            for label, fname in (("fit rule, strict", "chord_voicings_fit_strict.json"),
+                                 ("fit rule, with tensions", "chord_voicings_fit_tensions.json")):
+                path = os.path.join(base, fname)
+                if os.path.exists(path):
+                    self.voicing_lookup_paths[label] = path
+        self.voicing_lookup_active = next(iter(self.voicing_lookup_paths), None)
+        self._voicing_selectors: Dict[str, VoicingSelector] = (
+            {self.voicing_lookup_active: self.voicing_selector} if self.voicing_lookup_active else {})
+
         # Load non-causal (offline) model
         self.enc_dec_model_path = _resolve_existing_path(
             OFFLINE_MODEL_CANDIDATES
@@ -387,24 +437,35 @@ class Agent:
         self.models = {}
         for model_name, candidates in MODEL_PATH_CANDIDATES.items():
             model_path = _resolve_existing_path(candidates)
+            tk = self._tokenizer_for_checkpoint(model_path)
+            if tk is None:
+                logging.warning("Skipping model %s: no chord vocabulary with its token count", model_name)
+                continue
+            if self.onnx and tk is not self.tokenizer:
+                logging.warning("Skipping model %s: ONNX only supports the old vocabulary", model_name)
+                continue
 
             if ".pth" not in os.path.basename(model_path):
-                model = self._load_online_model(model_path)
+                model = self._load_online_model(model_path, tokenizer=tk)
 
             else:
-                model = self._load_online_model(model_path, is_rl=True)
+                model = self._load_online_model(model_path, is_rl=True, tokenizer=tk)
 
             model = self._prepare_model(model)
 
             if self.onnx:
                 model = self._prepare_onnx_model(provider, model_path)
             self.models[model_name] = model
+            self.model_tokenizers[model_name] = tk
+            logging.info("Loaded model %s (%d tokens)", model_name, tk.num_tokens)
 
         self.bass_models = {}
         for model_name, model_path in OPTIONAL_BASS_MODEL_PATHS.items():
             if os.path.exists(model_path):
+                tk = self._tokenizer_for_checkpoint(model_path) or self.tokenizer
                 self.bass_models[model_name] = self._prepare_model(
-                    self._load_online_model(model_path))
+                    self._load_online_model(model_path, tokenizer=tk))
+                self.bass_tokenizers[model_name] = tk
 
         # Prepare MLE model after all models are loaded because
         # loading RL model needs un-compiled MLE model
@@ -448,23 +509,67 @@ class Agent:
         logging.info(f"===========Created ONNX model===========")
         return onnx_init, onnx_step
 
+    def _tokenizer_for_checkpoint(self, path: str) -> Optional[HooktheoryTokenizer]:
+        """The tokenizer whose token count matches the checkpoint's embedding
+        (5,902 = the old vocabulary, 6,198 = the new one); None if neither."""
+        state = torch.load(path, map_location="cpu", weights_only=False)
+        state = state.get("state_dict", state) if isinstance(state, dict) else state
+        rows = next((v.shape[0] for k, v in state.items() if k.endswith("token_emb.emb.weight")), None)
+        if rows is None:
+            return None
+        if rows not in self._tokenizers and os.path.exists(GROWN_CHORD_NAMES_PATH):
+            with open(GROWN_CHORD_NAMES_PATH, "r") as f:
+                grown = HooktheoryTokenizer(chord_names=json.load(f))
+            self._tokenizers.setdefault(grown.num_tokens, grown)
+        return self._tokenizers.get(rows)
+
+    def tokenizer_for(self, model_name: Optional[str]) -> HooktheoryTokenizer:
+        """The tokenizer (chord vocabulary) of a chord model or a bass model;
+        the old one for None or an unknown name."""
+        return (self.model_tokenizers.get(model_name) or self.bass_tokenizers.get(model_name)
+                or self.tokenizer)
+
+    def remap_chord_tokens(self, tokens: List[int], src: HooktheoryTokenizer,
+                           dst: HooktheoryTokenizer) -> List[int]:
+        """Chord tokens of one vocabulary in another, by name (melody and
+        special ids are the same in both; -1 stays -1). A chord `dst` lacks
+        becomes SILENCE."""
+        if src is dst:
+            return list(tokens)
+        silence = dst.name_to_id["SILENCE"]
+        return [t if t < 0 else dst.name_to_id.get(src.id_to_name[t], silence) for t in tokens]
+
+    def _filters(self, tk: HooktheoryTokenizer) -> Dict:
+        """The generation filters for a vocabulary (they read its token ranges)."""
+        if tk is self.tokenizer:
+            return {"online": self.online_model_filter_fn, "commit": self.online_model_commit_filter_fn}
+        if tk.num_tokens not in self._filter_cache:
+            self._filter_cache[tk.num_tokens] = {
+                "online": partial(filter_invalid_tokens_generate_unconditional, model_part="chord",
+                                  tokenizer=tk, filter_opposite_part=True),
+                "commit": partial(filter_invalid_tokens_generate_online, model_part="melody", tokenizer=tk),
+            }
+        return self._filter_cache[tk.num_tokens]
+
     def get_models(self) -> List[str]:
         return list(self.models.keys())
 
     def get_bass_models(self) -> List[str]:
         return list(self.bass_models.keys())
 
-    def song_chord_frames(self, harmony: List[Dict], num_frames: int) -> List[int]:
-        """A song's chord annotation as one chord token per frame, in ReaLJam's
-        vocabulary. Like HooktheoryTokenizer.chord_to_frames, but a chord the
-        vocabulary lacks becomes silence instead of an error."""
-        silence = self.tokenizer.name_to_id["SILENCE"]
+    def song_chord_frames(self, harmony: List[Dict], num_frames: int,
+                          tokenizer: Optional[HooktheoryTokenizer] = None) -> List[int]:
+        """A song's chord annotation as one chord token per frame, in the given
+        vocabulary (default the old one). Like HooktheoryTokenizer.chord_to_frames,
+        but a chord the vocabulary lacks becomes silence instead of an error."""
+        tk = tokenizer or self.tokenizer
+        silence = tk.name_to_id["SILENCE"]
         frames = [silence] * num_frames
         for c in harmony:
             try:
                 name = to_chord_name(c["root_pitch_class"], c["root_position_intervals"])
-                hold = self.tokenizer.name_to_id[f"CHORD_{name}"]
-                onset = self.tokenizer.name_to_id[f"CHORD_ON_{name}"]
+                hold = tk.name_to_id[f"CHORD_{name}"]
+                onset = tk.name_to_id[f"CHORD_ON_{name}"]
             except Exception:  # unparsable, or not in this vocabulary
                 continue
             start = int(c["onset"] * FRAME_PER_BEAT)
@@ -505,7 +610,7 @@ class Agent:
           the new bass tokens, one per frame
         """
         model = self.bass_models[model_name]
-        tk = self.tokenizer
+        tk = self.tokenizer_for(model_name)  # song_chords must be in this vocabulary
         chord_at = lambda f: song_chords[f % len(song_chords)]
         bass_hist = list(bass_tokens[:frame])
         bass_hist += [tk.silence_token] * (frame - len(bass_hist))
@@ -612,21 +717,24 @@ class Agent:
         tokens = self.tokenizer.melody_to_frames(notes, duration)
         return tokens
 
-    def decode_chord_token(self, chord_token: int) -> ChordInfo:
+    def decode_chord_token(self, chord_token: int,
+                           tokenizer: Optional[HooktheoryTokenizer] = None) -> ChordInfo:
         """Extract the underlying information from a given chord token.
 
         Args:
           chord_token: the chord token to decode
+          tokenizer: the vocabulary it is in (default the old one)
 
         Returns:
           chord_symbol: string symbolic representation of chord
           chord_pitches: list of pitches for chord
           is_onset: if the chord is a hit or a hold
         """
-        if self.tokenizer.is_silence(chord_token):
+        tk = tokenizer or self.tokenizer
+        if tk.is_silence(chord_token):
             return "", [], True
-        is_onset = self.tokenizer.is_chord_on(chord_token)
-        token_name = self.tokenizer.id_to_name[chord_token]
+        is_onset = tk.is_chord_on(chord_token)
+        token_name = tk.id_to_name[chord_token]
         if is_onset:
             chord_symbol = token_name.replace("CHORD_ON_", "")
         else:
@@ -646,7 +754,7 @@ class Agent:
         Returns None if `chord_symbol` doesn't parse as a real chord.
         """
         try:
-            chord_pitches = note_seq.chord_symbol_pitches(chord_symbol)
+            chord_pitches = chord_symbol_pitches(chord_symbol)  # add7 = major 7th (note_seq bug A)
             bass_pitch = note_seq.chord_symbol_bass(chord_symbol)
             return [
                 *[CHORD_OCTAVE * 12 + pitch for pitch in chord_pitches],
@@ -691,6 +799,28 @@ class Agent:
                 voicings.append(voicing)
         return voicings
 
+    def select_voicing_above_bass_line(
+        self, chord_symbol: str, prev_voicing: Optional[List[int]], **weights
+    ) -> Optional[List[int]]:
+        """A voicing from the lookup that lies wholly above a walking bass
+        line (every note above BASS_LINE_VOICING_FLOOR), voice-led from
+        `prev_voicing`. A slash chord the lookup doesn't cover is voiced as
+        its chord without the slash: the bass line plays the bass.
+
+        Returns None without a selector or if neither symbol is covered.
+        """
+        if self.voicing_selector is None or not chord_symbol:
+            return None
+        for symbol in dict.fromkeys([chord_symbol, chord_symbol.split("/")[0]]):
+            pitches = self.voicing_selector.select(
+                symbol, prev_voicing=prev_voicing, update_state=False,
+                melody_pitch=BASS_LINE_VOICING_FLOOR, melody_role="bass",
+                **weights,
+            )
+            if pitches is not None:
+                return pitches
+        return None
+
     def decode_chord_token_custom_voicing(
         self,
         chord_token: int,
@@ -702,6 +832,8 @@ class Agent:
         target_mid: Optional[float] = None,
         density_target: Optional[float] = None,
         melody_pitch: Optional[int] = None,
+        bass_line: bool = False,
+        tokenizer: Optional[HooktheoryTokenizer] = None,
     ) -> Tuple[ChordInfo, Optional[List[int]]]:
         """Like decode_chord_token, but voices the chord using
         self.voicing_selector (data-driven, voice-leading-aware) instead of
@@ -728,6 +860,9 @@ class Agent:
           melody_pitch: MIDI pitch currently sounding in the melody, if any
             (see _active_melody_pitch) — passed as a hard ceiling constraint
             so chord voicings can never climb above/collide with the melody.
+          bass_line: the melody lane is a walking bass line: pick a voicing
+            above it instead (select_voicing_above_bass_line); melody_pitch
+            is then unused.
 
         Returns:
           chord_info: same (chord_symbol, chord_pitches, is_onset) as
@@ -737,17 +872,25 @@ class Agent:
             Carries the previous value forward on silence/failure so a
             single missed frame doesn't reset voice-leading context.
         """
-        if self.tokenizer.is_silence(chord_token):
+        tk = tokenizer or self.tokenizer  # the vocabulary chord_token is in
+        if tk.is_silence(chord_token):
             return ("", [], True), prev_voicing
 
-        is_onset = self.tokenizer.is_chord_on(chord_token)
-        token_name = self.tokenizer.id_to_name[chord_token]
+        is_onset = tk.is_chord_on(chord_token)
+        token_name = tk.id_to_name[chord_token]
         chord_symbol = token_name.replace(
             "CHORD_ON_" if is_onset else "CHORD_", ""
         )
 
         pitches: Optional[List[int]] = None
-        if self.voicing_selector is not None and chord_symbol:
+        if bass_line:
+            pitches = self.select_voicing_above_bass_line(
+                chord_symbol, prev_voicing,
+                vl_weight=vl_weight, reg_weight=reg_weight,
+                note_count_weight=note_count_weight, density_weight=density_weight,
+                target_mid=target_mid, density_target=density_target,
+            )
+        elif self.voicing_selector is not None and chord_symbol:
             pitches = self.voicing_selector.select(
                 chord_symbol, prev_voicing=prev_voicing, update_state=False,
                 vl_weight=vl_weight, reg_weight=reg_weight,
@@ -760,7 +903,7 @@ class Agent:
             return (chord_symbol, pitches, is_onset), pitches
 
         # Fallback: no selector, chord not covered, or empty symbol.
-        chord_info = self.decode_chord_token(chord_token)
+        chord_info = self.decode_chord_token(chord_token, tk)
         fallback_pitches = chord_info[1] if chord_info[1] else prev_voicing
         return chord_info, fallback_pitches
 
@@ -770,9 +913,11 @@ class Agent:
         chord_tokens: List[int],
         frame: int,
         max_context_len: int,
+        tokenizer: Optional[HooktheoryTokenizer] = None,
     ) -> Tuple[torch.Tensor, List[int], List[int]]:
         """Build the `[BOS, chord_0, note_0, chord_1, note_1, ...]` prompt the
         online model expects, covering history up to (not including) `frame`.
+        `chord_tokens` must be in `tokenizer`'s vocabulary (default the old one).
 
         Mutates `chord_tokens` in place, filling -1 gaps with SILENCE and
         padding up to `frame` — callers rely on that (generate_live reads
@@ -781,15 +926,16 @@ class Agent:
         Returns the prompt tensor plus the trimmed note/chord histories that
         went into it.
         """
+        tk = tokenizer or self.tokenizer
         # Fill any gaps in chord tokens with rests
         # If there are -1 values in chord_tokens, fill them with SILENCE
         # If chord_tokens length is less than frame, pad with SILENCE
         for i in range(len(chord_tokens)):
             if chord_tokens[i] == -1:
-                chord_tokens[i] = self.tokenizer.name_to_id["SILENCE"]
+                chord_tokens[i] = tk.name_to_id["SILENCE"]
         if len(chord_tokens) < frame:
             chord_tokens.extend(
-                [self.tokenizer.name_to_id["SILENCE"]]
+                [tk.name_to_id["SILENCE"]]
                 * (frame - len(chord_tokens))
             )
 
@@ -803,20 +949,20 @@ class Agent:
 
         # The first frame of context can't be a "hold" of something the model
         # can't see, so rewrite it to the equivalent non-hold token.
-        if note_token_hist and self.tokenizer.is_note_hold(note_token_hist[0]):
-            note_token_hist[0] = self.tokenizer.note_hold_id_to_note_id(
+        if note_token_hist and tk.is_note_hold(note_token_hist[0]):
+            note_token_hist[0] = tk.note_hold_id_to_note_id(
                 note_token_hist[0]
             )
 
-        if chord_token_hist and self.tokenizer.is_chord_hold(
+        if chord_token_hist and tk.is_chord_hold(
             chord_token_hist[0]
         ):
-            chord_token_hist[0] = self.tokenizer.chord_hold_id_to_chord_id(
+            chord_token_hist[0] = tk.chord_hold_id_to_chord_id(
                 chord_token_hist[0]
             )
 
         # Create interleaved sequence with BOS at start, EOS at end
-        interleaved_tokens = [self.tokenizer.bos_token]
+        interleaved_tokens = [tk.bos_token]
         for i in range(min(len(chord_token_hist), len(note_token_hist))):
             interleaved_tokens.extend([chord_token_hist[i], note_token_hist[i]])
 
@@ -825,27 +971,31 @@ class Agent:
         )
         return prompt, note_token_hist, chord_token_hist
 
-    def _onset_chord_info(self) -> Dict[int, Dict]:
-        """Pitch classes and root of every chord onset token, computed once.
+    def _onset_chord_info(self, tokenizer: Optional[HooktheoryTokenizer] = None) -> Dict[int, Dict]:
+        """Pitch classes and root of every chord onset token of a vocabulary
+        (default the old one), computed once per vocabulary.
 
         Tokens whose symbol note_seq can't parse are left out -- they could
         never be completed into sounding pitches anyway.
         """
-        if getattr(self, "_onset_info_cache", None) is None:
+        tk = tokenizer or self.tokenizer
+        if not hasattr(self, "_onset_info_caches"):
+            self._onset_info_caches = {}
+        if tk.num_tokens not in self._onset_info_caches:
             info = {}
-            lo, hi = self.tokenizer.chord_on_token_range
+            lo, hi = tk.chord_on_token_range
             for token in range(lo, hi + 1):
-                symbol = self.tokenizer.id_to_name[token].replace("CHORD_ON_", "")
+                symbol = tk.id_to_name[token].replace("CHORD_ON_", "")
                 try:
-                    pcs = {p % 12 for p in note_seq.chord_symbol_pitches(symbol)}
+                    pcs = {p % 12 for p in chord_symbol_pitches(symbol)}
                     pcs.add(note_seq.chord_symbol_bass(symbol) % 12)
                     root = note_seq.chord_symbol_root(symbol) % 12
                 except (note_seq.ChordSymbolError, TypeError):
                     continue
                 info[token] = {"symbol": symbol, "pitchClasses": sorted(pcs),
                                "root": root}
-            self._onset_info_cache = info
-        return self._onset_info_cache
+            self._onset_info_caches[tk.num_tokens] = info
+        return self._onset_info_caches[tk.num_tokens]
 
     def chord_candidates(
         self,
@@ -869,24 +1019,10 @@ class Agent:
           onset and hold token ids, renormalised probability, pitch classes
           and root pitch class.
         """
-        if self.onnx:
-            raise NotImplementedError(
-                "chord_candidates needs the PyTorch or MLX backend (it reads "
-                "logits from a single forward pass)")
-        model = self.models[model_name]
-        note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
-        prompt, _, _ = self._build_interleaved_prompt(
-            note_token_hist, chord_tokens, frame, self.max_frames - 1
-        )
-        if self.mlx:
-            logits = model(prompt)  # MLX model: full-sequence logits as torch
-        else:
-            with torch.no_grad():
-                logits, _ = model.net(prompt, return_intermediates=True)
-        lo, hi = self.tokenizer.chord_on_token_range
-        probs = torch.softmax(logits[0, -1, lo:hi + 1].float(), dim=-1)
-
-        info = self._onset_chord_info()
+        probs = self._onset_probs(model_name, notes, chord_tokens, frame)
+        tk = self.tokenizer_for(model_name)
+        lo, _ = tk.chord_on_token_range
+        info = self._onset_chord_info(tk)
         result = []
         for idx in torch.argsort(probs, descending=True).tolist():
             token = lo + idx
@@ -895,12 +1031,86 @@ class Agent:
             result.append({
                 **info[token],
                 "onsetToken": token,
-                "holdToken": self.tokenizer.chord_on_id_to_chord_id(token),
+                "holdToken": tk.chord_on_id_to_chord_id(token),
                 "prob": float(probs[idx]),
             })
             if len(result) >= top_k:
                 break
         return result
+
+    def _onset_probs(self, model_name, notes, chord_tokens, frame) -> torch.Tensor:
+        """The renormalised distribution over chord onsets at `frame` (one
+        forward pass), indexed from the model's chord_on_token_range[0].
+        `chord_tokens` must be in the model's vocabulary."""
+        if self.onnx:
+            raise NotImplementedError(
+                "chord candidates need the PyTorch or MLX backend (they read "
+                "logits from a single forward pass)")
+        model = self.models[model_name]
+        tk = self.tokenizer_for(model_name)
+        note_token_hist = self.melody_to_frame_tokens(notes, frame).tolist()
+        prompt, _, _ = self._build_interleaved_prompt(
+            note_token_hist, chord_tokens, frame, self.max_frames - 1, tokenizer=tk
+        )
+        if self.mlx:
+            logits = model(prompt)  # MLX model: full-sequence logits as torch
+        else:
+            with torch.no_grad():
+                logits, _ = model.net(prompt, return_intermediates=True)
+        lo, hi = tk.chord_on_token_range
+        return torch.softmax(logits[0, -1, lo:hi + 1].float(), dim=-1)
+
+    def chord_vocab_entries(self, model_name: Optional[str] = None) -> List[Dict]:
+        """Every chord onset a model (default: the old vocabulary) can be
+        offered, in a fixed order (by token id): symbol, pitch classes, root,
+        onset and hold token ids. The order of chord_candidate_probs."""
+        tk = self.tokenizer_for(model_name)
+        info = self._onset_chord_info(tk)
+        return [{**info[token], "onsetToken": token,
+                 "holdToken": tk.chord_on_id_to_chord_id(token)}
+                for token in sorted(info)]
+
+    def set_voicing_lookup(self, label: str) -> None:
+        """Make `label` (a key of voicing_lookup_paths) the active voicing
+        lookup for everything that voices chords; loads it on first use and
+        drops complete mode's fit indexes, which are built from the lookup."""
+        if label not in self.voicing_lookup_paths:
+            raise KeyError(label)
+        if label not in self._voicing_selectors:
+            self._voicing_selectors[label] = VoicingSelector(self.voicing_lookup_paths[label])
+            logging.info("Loaded voicing lookup %r from %s", label, self.voicing_lookup_paths[label])
+        self.voicing_selector = self._voicing_selectors[label]
+        self.voicing_lookup_active = label
+        self._voicing_fit_indexes = {}
+
+    def voicing_fit(self, keys: List[int], held: List[int], ceiling: Optional[int],
+                    model_name: Optional[str] = None) -> List[float]:
+        """For every chord of chord_vocab_entries(model_name), in that order:
+        the share of its stored voicings (by count) the completion could play
+        around `keys` (realjam/voicing_fit.py). All zero without a voicing
+        lookup. One index per vocabulary, built on its first call (about a
+        second; server.py warms them up)."""
+        entries = self.chord_vocab_entries(model_name)
+        if self.voicing_selector is None:
+            return [0.0] * len(entries)
+        tk = self.tokenizer_for(model_name)
+        if not hasattr(self, "_voicing_fit_indexes"):
+            self._voicing_fit_indexes = {}
+        if tk.num_tokens not in self._voicing_fit_indexes:
+            from realchords.realjam.voicing_fit import VoicingFitIndex
+            self._voicing_fit_indexes[tk.num_tokens] = VoicingFitIndex(
+                [c["symbol"] for c in entries], self.voicing_selector._lookup)
+        return self._voicing_fit_indexes[tk.num_tokens].fit(keys, held, ceiling)
+
+    def chord_candidate_probs(self, model_name, notes, chord_tokens, frame) -> List[float]:
+        """The model's probability for every chord of chord_vocab_entries, in
+        that order (2026-11-17: the client gets all of them, not just a top
+        200 -- the top 200 cover a median 88% of the probability, and for 6% of
+        typical hand positions they hold no chord containing all held notes)."""
+        probs = self._onset_probs(model_name, notes, chord_tokens, frame)
+        tk = self.tokenizer_for(model_name)
+        lo, _ = tk.chord_on_token_range
+        return [round(float(probs[token - lo]), 6) for token in sorted(self._onset_chord_info(tk))]
 
     def _prepare_model(self, model):
         """Prepare model for inference.
@@ -916,10 +1126,16 @@ class Agent:
             model = torch.compile(model)
         return model
 
-    def _load_online_model(self, model_path: str, is_rl: bool = False):
+    def _load_online_model(self, model_path: str, is_rl: bool = False,
+                           tokenizer: Optional[HooktheoryTokenizer] = None):
+        """An online (decoder-only) model in `tokenizer`'s vocabulary (default
+        the old one). An RL actor (.pth) is loaded into a copy of the MLE
+        model in the old vocabulary; in another vocabulary into a model built
+        from the args.yml next to it (its architecture config)."""
+        tk = tokenizer or self.tokenizer
         override_args = {
-            "DecoderTransformer.num_tokens": self.tokenizer.num_tokens,
-            "DecoderTransformer.pad_value": self.tokenizer.pad_token,
+            "DecoderTransformer.num_tokens": tk.num_tokens,
+            "DecoderTransformer.pad_value": tk.pad_token,
         }
 
         if self.mlx:
@@ -930,19 +1146,27 @@ class Agent:
             if is_rl:
                 return MLXDecoderTransformer.from_rl_checkpoint(
                     model_path,
-                    self.tokenizer,
+                    tk,
                     override_args=override_args,
                 )
             return MLXDecoderTransformer.from_checkpoint(
                 model_path,
-                self.tokenizer,
+                tk,
                 override_args=override_args,
             )
 
         if is_rl:
+            if tk is self.tokenizer:
+                skeleton = copy.deepcopy(self.mle_model)
+            else:
+                model_cls = argbind.bind(DecoderTransformer)
+                args = argbind.load_args(os.path.join(os.path.dirname(model_path), "args.yml"))
+                args.update(override_args)
+                with argbind.scope(args):
+                    skeleton = model_cls()
             return load_rl_model(
                 model_path,
-                copy.deepcopy(self.mle_model),
+                skeleton,
                 compile=False,
             )
 
@@ -1114,6 +1338,7 @@ class Agent:
         commit_frames: int,
         frame: int,
         temperature: float,
+        tokenizer: Optional[HooktheoryTokenizer] = None,
     ) -> torch.Tensor:
         """Generate melody frames for committed period using the online model.
         We implement this by *teacher-forcing* the committed chord tokens.
@@ -1173,7 +1398,7 @@ class Agent:
                 conditions,
                 n_new=commit_frames * 2,
                 temperature=temperature,
-                filter_logits_fn=self.online_model_commit_filter_fn,
+                filter_logits_fn=self._filters(tokenizer or self.tokenizer)["commit"],
                 filter_kwargs=self.online_model_commit_filter_kwargs,
                 reverse_condition_order=True,
             )
@@ -1188,7 +1413,7 @@ class Agent:
                 seq_len=commit_frames * 2,
                 temperature=temperature,
                 cache_kv=True,
-                filter_logits_fn=self.online_model_commit_filter_fn,
+                filter_logits_fn=self._filters(tokenizer or self.tokenizer)["commit"],
                 filter_kwargs=self.online_model_commit_filter_kwargs,
                 reverse_condition_order=True,
             )
@@ -1231,6 +1456,7 @@ class Agent:
         density_weight: Optional[float] = None,
         target_mid: Optional[float] = None,
         density_target: Optional[float] = None,
+        bass_line: bool = False,
     ) -> Tuple[List[ChordInfo], List[int], Optional[List[int]]]:
         """Generate chords for a given frame.
 
@@ -1290,6 +1516,7 @@ class Agent:
         logging.info("[Request] Silence till: %s", silence_till)
 
         model = self.models[model_name]
+        tk = self.tokenizer_for(model_name)  # chord_tokens are in its vocabulary
 
         # Convert notes to frame token format
         note_token_hist = self.melody_to_frame_tokens(notes, frame)
@@ -1329,6 +1556,8 @@ class Agent:
             intro_chord_tokens = (
                 intro_chord_tokens.squeeze(0).detach().cpu().tolist()
             )
+            # The offline model writes the old vocabulary: into the model's
+            intro_chord_tokens = self.remap_chord_tokens(intro_chord_tokens, self.tokenizer, tk)
 
             chord_tokens[:frame] = intro_chord_tokens
             logging.info("[Offline model] Input: %s", enc_inputs)
@@ -1338,7 +1567,8 @@ class Agent:
             )
         prompt, note_token_hist, chord_token_hist = (
             self._build_interleaved_prompt(
-                note_token_hist, chord_tokens, frame, self.max_frames - lookahead
+                note_token_hist, chord_tokens, frame, self.max_frames - lookahead,
+                tokenizer=tk,
             )
         )
 
@@ -1370,6 +1600,7 @@ class Agent:
                     commit_frames,
                     frame,
                     temperature,
+                    tokenizer=tk,
                 )
             # -1 because we don't need to generate the last melody token
             # So here we are saving some time by not generating the last token
@@ -1391,6 +1622,8 @@ class Agent:
                 prompt=prompt,
                 seq_len=seq_len,
                 temperature=temperature,
+                filter_fn=self._filters(tk)["online"],
+                filter_kwargs=self.online_model_filter_kwargs,
             )
             end_time = time.time()
             logging.info(f"{prefix} Time taken: %s", end_time - start_time)
@@ -1410,8 +1643,9 @@ class Agent:
                     all_chord_tokens[0, start_idx::2].cpu().numpy()
                 )
 
-        # Decode and return new chord tokens
-        if use_custom_voicings and self.voicing_selector is not None:
+        # Decode and return new chord tokens. Above a walking bass line the
+        # voicing always comes from the lookup (a voicing clear of the line)
+        if (use_custom_voicings or bass_line) and self.voicing_selector is not None:
             new_chords = []
             voicing_state = prev_voicing
             for i, chord_tok in enumerate(new_chord_tokens):
@@ -1424,12 +1658,12 @@ class Agent:
                     vl_weight=vl_weight, reg_weight=reg_weight,
                     note_count_weight=note_count_weight, density_weight=density_weight,
                     target_mid=target_mid, density_target=density_target,
-                    melody_pitch=melody_pitch,
+                    melody_pitch=melody_pitch, bass_line=bass_line, tokenizer=tk,
                 )
                 new_chords.append(chord_info)
         else:
             new_chords = [
-                self.decode_chord_token(chord_tok) for chord_tok in new_chord_tokens
+                self.decode_chord_token(chord_tok, tk) for chord_tok in new_chord_tokens
             ]
 
         logging.info("[Response] Chords: %s", new_chords)

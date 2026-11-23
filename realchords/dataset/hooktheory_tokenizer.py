@@ -19,7 +19,7 @@ from realchords.constants import (
     PAD_TOKEN,
     ZERO_OCTAVE,
 )
-from realchords.utils.data_utils import to_chord_name
+from realchords.utils.data_utils import chord_symbol_pitches, to_chord_name
 
 
 def to_midi_pitch(octave: int, pitch_class: int) -> int:
@@ -643,7 +643,7 @@ class HooktheoryTokenizer:
             chord_name = chord["chord_name"]
 
             # Get the chord pitches and bass using note_seq.chord_symbols_lib
-            chord_pitches = chord_symbols_lib.chord_symbol_pitches(chord_name)
+            chord_pitches = chord_symbol_pitches(chord_name)
             chord_bass = chord_symbols_lib.chord_symbol_bass(chord_name)
 
             # Add chord notes to the chord instrument

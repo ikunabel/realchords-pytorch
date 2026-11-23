@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterator, List, Sequence, Tuple
 
 from note_seq import chord_symbols_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 
 DEFAULT_PITCH_CLASS_CHORD_MAP_PATH = (
     Path(__file__).resolve().parent / "pitch_class_chord_map.jsonl"
@@ -596,7 +597,7 @@ def chord_quality_to_pitch_classes(quality: str) -> PitchClassSet:
     """Map a chord quality to pitch classes using ``C`` as the reference root."""
     chord_symbol = f"C{quality}"
     return frozenset(
-        pitch % 12 for pitch in chord_symbols_lib.chord_symbol_pitches(chord_symbol)
+        pitch % 12 for pitch in chord_symbol_pitches(chord_symbol)
     )
 
 

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import note_seq.chord_symbols_lib as _chord_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 import pretty_midi
 
 from realchords.constants import (
@@ -93,7 +94,7 @@ def _naive_pitches(
 ) -> List[int]:
     pitches = [
         p % 12 + chord_octave * 12
-        for p in _chord_lib.chord_symbol_pitches(chord_name)
+        for p in chord_symbol_pitches(chord_name)
     ]
     if include_bass:
         pitches.append(

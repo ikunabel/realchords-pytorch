@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Build a chord → voicings lookup table from extracted PIJAMA voicings.
 
-For each voicing (a set of MIDI pitches), find the **most specific** chord in
-our vocabulary whose pitch-class set is a subset of the voicing's pitch classes.
-"Most specific" = the matching chord with the most required pitch classes (e.g.
-a Cmaj9 voicing maps to Cmaj9, not to C or Cmaj7).
+For each voicing (a set of MIDI pitches), find every chord in our vocabulary
+whose pitch-class set equals the voicing's pitch classes, and store the voicing
+under each of them. Several names can spell the same notes (Gm7 = Bb6,
+F6 = Dm7, C/E = C): until 2026-11-16 only the alphabetically first name got
+the voicing, so Gm7, Fm7, F6, Gmaj7, Eb6, ... had none. A slash chord X/Y
+counts its bass Y among its pitch classes and only takes voicings whose lowest
+note is Y.
 
 Output
 ------
@@ -195,6 +198,25 @@ def load_chord_vocab(chord_names_path: Path) -> Tuple[np.ndarray, List[str], int
     return np.array(chord_masks, dtype=np.int32), valid_names, len(chord_names), parse_errors
 
 
+def chord_name_bass_pc(name: str) -> int:
+    """Pitch class of a slash chord's bass (the part after "/"), else -1."""
+    if "/" not in name:
+        return -1
+    bass = name.rsplit("/", 1)[1]
+    names = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+    if not bass or bass[0] not in names:
+        return -1
+    pc = names[bass[0]]
+    for accidental in bass[1:]:
+        if accidental == "#":
+            pc += 1
+        elif accidental == "b":
+            pc -= 1
+        else:
+            return -1
+    return pc % 12
+
+
 def build_chord_lookup(
     all_voicings: List[dict],
     chord_masks_np: np.ndarray,
@@ -245,28 +267,35 @@ def build_chord_lookup(
         and min_notes <= len(pitches) <= max_notes
     ]
 
+    # A slash chord's bass is one of its pitch classes and must be the lowest
+    # note of the voicing
+    bass_np = np.array([chord_name_bass_pc(n) for n in valid_names], dtype=np.int32)
+    match_masks = np.where(
+        bass_np >= 0, chord_masks_np | (1 << np.maximum(bass_np, 0)), chord_masks_np)
+
     lookup: Dict[str, List[dict]] = defaultdict(list)
     unmatched = 0
+    assignments = 0
     iterator = tqdm(filtered, desc="Matching") if show_progress else filtered
     for v in iterator:
         pitches = v["pitches"]
         voicing_mask = pitches_to_pcs_mask(pitches)
 
         # A chord matches if its pitch-class set is EXACTLY the voicing's
-        # pitch-class set (after collapsing octave doublings via mod 12).
-        matches = chord_masks_np == voicing_mask
+        # pitch-class set (after collapsing octave doublings via mod 12); a
+        # slash chord also needs its bass as the voicing's lowest note.
+        lowest_pc = min(pitches) % 12
+        matches = (match_masks == voicing_mask) & ((bass_np < 0) | (bass_np == lowest_pc))
         if not matches.any():
             unmatched += 1
             continue
 
-        # Multiple chord names can share the same pitch-class set (e.g. slash
-        # chords like "C/E" have the same PCs as "C"). Take the first match
-        # (alphabetical order within the vocab).
-        best_idx = int(np.where(matches)[0][0])
-        best_name = valid_names[best_idx]
-        lookup[best_name].append({
-            "pitches": pitches, "count": v["count"], "num_songs": v["num_songs"],
-        })
+        # Every name that spells these notes gets the voicing (Gm7 and Bb6,
+        # F6 and Dm7, ...), not just the alphabetically first one
+        entry = {"pitches": pitches, "count": v["count"], "num_songs": v["num_songs"]}
+        for idx in np.where(matches)[0]:
+            lookup[valid_names[int(idx)]].append(entry)
+            assignments += 1
 
     result: Dict[str, List[dict]] = {}
     for chord_name in sorted(lookup.keys()):
@@ -280,6 +309,7 @@ def build_chord_lookup(
         "after_filtering": len(filtered),
         "matched": len(filtered) - unmatched,
         "unmatched": unmatched,
+        "assignments": assignments,  # (voicing, chord name) pairs; >= matched
         "distinct_chords": len(result),
         "total_voicing_entries": sum(len(v) for v in result.values()),
         "total_occurrences": sum(e["count"] for v in result.values() for e in v),

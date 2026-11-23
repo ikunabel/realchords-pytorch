@@ -136,9 +136,11 @@ def _check_tokenizers_agree(model_tokenizer, dataset_tokenizer) -> None:
             "line up:\n  " + "\n  ".join(mismatches))
 
 
-def build_loader(args, agent):
+def build_loader(args, agent, model_label):
     """Dataloader over ground-truth songs, tokenised with the *model's* chord
-    vocabulary and cropped on bar lines.
+    vocabulary and cropped on bar lines. Models differ (2026-11-19): the old
+    ones use the checkpoints' list (--chord_names_path, 2,821 chords), the
+    7-dataset ones the data cache's (2,969 chords); the Agent knows which.
 
     Not using ``create_dataset_dataloaders`` because it resolves the chord
     vocabulary from the data cache, which doesn't match what the ReaLJam
@@ -152,9 +154,36 @@ def build_loader(args, agent):
         max_len=args.max_len,
         data_augmentation=False,
         load_augmented_chord_names=True,
-        chord_names_path=args.chord_names_path,
+        chord_names_path=(args.chord_names_path
+                          if agent.tokenizer_for(model_label) is agent.tokenizer
+                          else agent_interface.GROWN_CHORD_NAMES_PATH),
     )
-    _check_tokenizers_agree(agent.tokenizer, dataset.tokenizer)
+    _check_tokenizers_agree(agent.tokenizer_for(model_label), dataset.tokenizer)
+
+    # Optional song filters (2026-11-19, for the other corpora): only songs
+    # entirely in 4/4 (the bar positions assume 16 frames per bar), and only
+    # songs whose chords all exist in the old vocabulary -- so models in either
+    # vocabulary are measured on exactly the same songs
+    if args.only_4_4 or args.common_vocab:
+        from realchords.utils.data_utils import to_chord_name
+        old_names = set(agent.chord_names)
+        kept, dropped = [], {"not_4_4": 0, "chord_not_in_old_vocab": 0}
+        for i in range(len(dataset.data)):
+            item = dataset.data[i]
+            ann = item["annotations"]
+            meters = {(m.get("beats_per_bar"), m.get("beat_unit")) for m in ann.get("meters") or []}
+            if args.only_4_4 and meters != {(4, 4)}:
+                dropped["not_4_4"] += 1
+                continue
+            if args.common_vocab and any(
+                    to_chord_name(h["root_pitch_class"], h["root_position_intervals"]) not in old_names
+                    for h in ann.get("harmony") or []):
+                dropped["chord_not_in_old_vocab"] += 1
+                continue
+            kept.append(item)
+        dataset.data = kept
+        args.songs_dropped = dropped
+        print(f"Song filters: kept {len(kept)}, dropped {dropped}")
 
     dataset._frames_per_bar = args.frames_per_bar
     dataset.random_crop = types.MethodType(_crop_on_bar_line, dataset)
@@ -171,6 +200,7 @@ def chord_frame_distributions(
     model: torch.nn.Module,
     seq: torch.Tensor,
     tokenizer,
+    keep_onset_dist: bool = False,
 ) -> Dict[str, torch.Tensor]:
     """Next-chord-token distribution at every frame, in one forward pass.
 
@@ -201,7 +231,9 @@ def chord_frame_distributions(
         renormalised = onset / p_onset.clamp_min(1e-30).unsqueeze(-1)
         entropy = -(renormalised * (renormalised + 1e-30).log()).sum(-1)
 
+        out = {"onset_dist": renormalised} if keep_onset_dist else {}
         return {
+            **out,
             "p_onset": p_onset,
             "p_hold": probs[:, :, hold_lo:hold_hi + 1].sum(-1),
             "p_silence": probs[:, :, tokenizer.silence_token],
@@ -226,6 +258,129 @@ def frames_since_previous_onset(
             if is_onset[b, k]:
                 last = k
     return out
+
+
+# ---------------------------------------------------------------------------
+# Quality of the forced choice (2026-11-19)
+# ---------------------------------------------------------------------------
+
+FORCED_FIELDS = ("surprisal", "m_current", "m_next", "m_other", "note_in_chord", "in_key", "n_key")
+
+
+class ForcedQuality:
+    """Is the chord forced at a frame musically reasonable? Per frame, for one
+    draw from the renormalised onset distribution at temperature T (as ReaLJam
+    plays a forced chord):
+
+      surprisal     -log P(change): how much forcing a change now goes against
+                    the model's own timing (nats)
+      m_current     chance the draw re-strikes the chord sounding at the frame before
+      m_next        chance it is the song's next real chord (the next onset at or
+                    after this frame, if different from the current one): the
+                    model just changes earlier than the song
+      m_other       anything else
+      note_in_chord expected share of the melody frames of the next beat (frames
+                    k..k+3 with a note) whose pitch class is in the drawn chord
+      in_key        chance all its pitch classes are in the song's key (single-key
+                    songs with a key annotation only; Hooktheory has real keys)
+    """
+
+    def __init__(self, tokenizer, onset_info: Dict[int, dict], temperature: float):
+        on_lo, on_hi = tokenizer.chord_on_token_range
+        hold_lo, _ = tokenizer.chord_hold_token_range
+        self.on_lo, self.on_hi, self.hold_lo = on_lo, on_hi, hold_lo
+        self.offset = on_lo - hold_lo          # hold id + offset = onset id
+        self.T = temperature
+        n_on = on_hi - on_lo + 1
+        self.pc_mask = torch.zeros(n_on, 12)   # chord onset -> its pitch classes
+        for tok, info in onset_info.items():
+            self.pc_mask[tok - on_lo, info["pitchClasses"]] = 1.0
+        self.n_pcs = self.pc_mask.sum(-1)
+        self.parsed = self.n_pcs > 0           # unparsable chords: never "fit"
+        self.melody_pc = torch.full((tokenizer.num_tokens,), -1, dtype=torch.long)
+        for tid, name in tokenizer.id_to_name.items():
+            if name.startswith("NOTE_ON_") or (name.startswith("NOTE_") and name[5:].isdigit()):
+                self.melody_pc[tid] = int(name.rsplit("_", 1)[1]) % 12
+        self.sums: Dict[str, Dict[int, List[float]]] = {}
+
+    def chord_onset_id(self, token: int) -> int:
+        """The onset id of the chord a chord token (onset or hold) belongs to, else -1."""
+        if self.on_lo <= token <= self.on_hi:
+            return token
+        if self.hold_lo <= token < self.on_lo:
+            return token + self.offset
+        return -1
+
+    def add_song(self, onset_dist, p_onset, chord_tokens, melody_tokens, frames_keep,
+                 bar_pos, gt_onset, scale_pcs) -> None:
+        """One song's frames. onset_dist [F, n_on], p_onset [F], chord_tokens /
+        melody_tokens [F] (ground truth), frames_keep [F] bool, bar_pos [F],
+        gt_onset [F] bool, scale_pcs: set of the key's pitch classes or None."""
+        F_ = chord_tokens.size(0)
+        ids = [self.chord_onset_id(int(t)) for t in chord_tokens]
+        nxt, upcoming = [-1] * F_, -1
+        for k in range(F_ - 1, -1, -1):        # next onset at or after k
+            if self.on_lo <= int(chord_tokens[k]) <= self.on_hi:
+                upcoming = int(chord_tokens[k])
+            nxt[k] = upcoming
+        w = onset_dist.clamp_min(1e-30) ** (1.0 / self.T)
+        w = w / w.sum(-1, keepdim=True)
+        mel = self.melody_pc[melody_tokens]                     # [F] pc or -1
+        hist = torch.zeros(F_, 12)
+        L = mel.size(0)                        # the melody lane can be one frame shorter
+        for k in range(F_):
+            for j in range(k, min(k + 4, F_, L)):
+                if mel[j] >= 0 and frames_keep[j]:
+                    hist[k, mel[j]] += 1
+        fit = (w @ self.pc_mask)                                 # [F, 12] P(pc in the drawn chord)
+        n_mel = hist.sum(-1)
+        nic = (fit * hist).sum(-1) / n_mel.clamp_min(1)
+        if scale_pcs is not None:
+            outside = torch.ones(12)
+            outside[list(scale_pcs)] = 0
+            chord_in_key = ((self.pc_mask @ outside) == 0) & self.parsed
+            in_key = (w * chord_in_key.float()).sum(-1)
+        for k in range(F_):
+            if not frames_keep[k]:
+                continue
+            cur = ids[k - 1] if k > 0 else -1
+            m_cur = float(w[k, cur - self.on_lo]) if cur >= 0 else 0.0
+            n = nxt[k]
+            m_next = float(w[k, n - self.on_lo]) if (n >= 0 and n != cur) else 0.0
+            vals = [-math.log(max(float(p_onset[k]), 1e-30)), m_cur, m_next, 1.0 - m_cur - m_next,
+                    float(nic[k]) if n_mel[k] > 0 else float("nan"),
+                    float(in_key[k]) if scale_pcs is not None else float("nan")]
+            for group, bucket in (("bar_position", int(bar_pos[k])),) + (
+                    (("real_change", int(bar_pos[k])),) if gt_onset[k] else ()):
+                row = self.sums.setdefault(group, {}).setdefault(bucket, [0.0] * 9)
+                row[0] += vals[0]; row[1] += vals[1]; row[2] += vals[2]; row[3] += vals[3]
+                if not math.isnan(vals[4]):
+                    row[4] += vals[4]; row[7] += 1
+                if not math.isnan(vals[5]):
+                    row[5] += vals[5]; row[8] += 1
+                row[6] += 1
+
+    def table(self, group: str) -> List[dict]:
+        out = []
+        for bucket, r in sorted(self.sums.get(group, {}).items()):
+            n = r[6]
+            out.append({"bucket": bucket, "n_frames": int(n), "surprisal": r[0] / n,
+                        "m_current": r[1] / n, "m_next": r[2] / n, "m_other": r[3] / n,
+                        "note_in_chord": r[4] / r[7] if r[7] else None,
+                        "in_key": r[5] / r[8] if r[8] else None, "n_key_frames": int(r[8])})
+        return out
+
+
+def song_scale_pcs(item: dict):
+    """The key's pitch classes of a single-key song, or None (no key / key changes)."""
+    keys = item["annotations"].get("keys") or []
+    if len(keys) != 1 or "scale_degree_intervals" not in keys[0]:
+        return None
+    pcs, pc = {keys[0]["tonic_pitch_class"] % 12}, keys[0]["tonic_pitch_class"]
+    for step in keys[0]["scale_degree_intervals"]:
+        pc += step
+        pcs.add(pc % 12)
+    return pcs
 
 
 # ---------------------------------------------------------------------------
@@ -282,9 +437,12 @@ def print_table(title: str, rows: List[dict], bucket_label: str,
 
 def run_real(args, agent, model, model_label: str) -> dict:
     """Teacher-force ground-truth songs and bucket every frame."""
-    loader = build_loader(args, agent)
-    tokenizer = agent.tokenizer
+    loader = build_loader(args, agent, model_label)
+    tokenizer = agent.tokenizer_for(model_label)
     acc = Accumulator()
+    forced = (ForcedQuality(tokenizer, agent._onset_chord_info(tokenizer), args.forced_temperature)
+              if args.forced_quality else None)
+    use_keys = args.dataset_name.lower() == "hooktheory"   # the others have placeholder keys
     songs_done = 0
     n_batches = (len(loader) if args.num_songs < 0
                  else math.ceil(args.num_songs / args.batch_size))
@@ -295,7 +453,7 @@ def run_real(args, agent, model, model_label: str) -> dict:
             break
 
         seq = batch["targets"]
-        dist = chord_frame_distributions(model, seq, tokenizer)
+        dist = chord_frame_distributions(model, seq, tokenizer, keep_onset_dist=forced is not None)
 
         # Ground-truth chord lane: chord_k sits at sequence position 2k+1
         chord_tokens = seq[:, 1::2][:, :dist["p_onset"].size(1)]
@@ -319,6 +477,14 @@ def run_real(args, agent, model, model_label: str) -> dict:
             acc.add_many("bar_position",
                          (frames % args.frames_per_bar).tolist(),
                          p.tolist(), e.tolist(), g.tolist())
+            if forced is not None:
+                n_frames = dist["p_onset"].size(1)
+                melody_tokens = seq[b, 2::2][:n_frames]
+                item = loader.dataset.data[batch_idx * args.batch_size + b]
+                forced.add_song(
+                    dist["onset_dist"][b], dist["p_onset"][b], chord_tokens[b], melody_tokens,
+                    keep, torch.arange(n_frames) % args.frames_per_bar, gt_onset[b],
+                    song_scale_pcs(item) if use_keys else None)
             acc.add_many("beat_position",
                          (frames % FRAME_PER_BEAT).tolist(),
                          p.tolist(), e.tolist(), g.tolist())
@@ -346,7 +512,20 @@ def run_real(args, agent, model, model_label: str) -> dict:
         "Frames since the previous chord change", since_rows, "since",
         lambda b: f"{b} ({b / FRAME_PER_BEAT:.2f} bt)")
 
+    extra = {}
+    if forced is not None:
+        extra["forced_quality"] = {"temperature": args.forced_temperature,
+                                   "bar_position": forced.table("bar_position"),
+                                   "real_change": forced.table("real_change")}
+        print("\nForced-choice quality (one draw at T %.2f), by position in the bar" % args.forced_temperature)
+        print("  pos  frames  -logP  current   next   other  note-in-chord  in-key")
+        for r in forced.table("bar_position"):
+            nic = "-" if r["note_in_chord"] is None else f"{r['note_in_chord']:.3f}"
+            ik = "-" if r["in_key"] is None else f"{r['in_key']:.3f}"
+            print(f"  {r['bucket']:>3} {r['n_frames']:>7,} {r['surprisal']:6.2f} {r['m_current']:8.3f} "
+                  f"{r['m_next']:6.3f} {r['m_other']:7.3f} {nic:>14} {ik:>7}")
     return {
+        **extra,
         "mode": "real",
         "model": model_label,
         "songs": songs_done,
@@ -385,6 +564,16 @@ def parse_args() -> argparse.Namespace:
               "checkpoints' own copy, which is what the ReaLJam models were "
               "trained on -- the data cache's copy has ~150 extra chords and "
               "would shift every chord token id."))
+    p.add_argument("--only_4_4", action="store_true",
+                   help="Only songs entirely in 4/4 (e.g. Nottingham has 6/8 and 3/4 tunes).")
+    p.add_argument("--common_vocab", action="store_true",
+                   help="Only songs whose chords all exist in the old vocabulary, so old- and "
+                        "new-vocabulary models are measured on the same songs.")
+    p.add_argument("--forced_quality", action="store_true",
+                   help="Also measure the forced choice's quality (ForcedQuality): surprisal, "
+                        "re-strike / next real chord / other, note-in-chord, in-key.")
+    p.add_argument("--forced_temperature", type=float, default=0.8,
+                   help="Temperature of the forced draw (ReaLJam's default 0.8).")
     p.add_argument("--output_dir", default="logs/eval/chord_onset_timing")
     return p.parse_args()
 

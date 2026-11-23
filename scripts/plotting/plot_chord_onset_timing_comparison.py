@@ -46,6 +46,10 @@ def main() -> None:
                         help="Result JSONs; models are gathered from all of them.")
     parser.add_argument("--models", nargs="+",
                         default=["Online MLE", "GAPT", "ReaLchords"])
+    parser.add_argument("--uniform_chords", type=int, default=2821,
+                        help="Chord count for the 'uniform' reference line (2,969 for the 7-dataset models).")
+    parser.add_argument("--uniform_label", default=None,
+                        help="Label of that line (default: 'uniform over all N chords').")
     parser.add_argument("--output",
                         default="scripts/plotting/chord_onset_timing_comparison.pdf")
     args = parser.parse_args()
@@ -64,7 +68,7 @@ def main() -> None:
             for m in args.models}
     frames = [r["bucket"] for r in rows[args.models[0]]]
     gt_rate = [r["gt_onset_rate"] for r in rows[args.models[0]]]
-    max_entropy = math.log(2821)
+    max_entropy = math.log(args.uniform_chords)
 
     plt.rcParams["font.family"] = "sans-serif"
     fig, (ax_p, ax_h) = plt.subplots(
@@ -95,7 +99,7 @@ def main() -> None:
                    loc="left", color=INK, fontsize=10, pad=8)
 
     ax_h.axhline(max_entropy, color=INK_MUTED, linewidth=1, linestyle=(0, (4, 3)))
-    ax_h.text(15.55, max_entropy + 0.12, "uniform over all 2,821 chords",
+    ax_h.text(15.55, max_entropy + 0.12, args.uniform_label or f"uniform over all {args.uniform_chords:,} chords",
               ha="right", va="bottom", fontsize=7.5, color=INK_MUTED)
     ax_h.set_ylim(0, 8.6)
     ax_h.set_ylabel("Entropy of chord choice\n(nats)", color=INK_SECONDARY, fontsize=9)

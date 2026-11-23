@@ -37,13 +37,29 @@ for offline experimentation:
        octaves and inverted so 1.0 = maximally clustered, 0.0 = maximally
        spread. Scored as squared distance from ``density_target``, in [0, 1].
 
-All four raw weights are re-normalised to sum to 1 before scoring (see
+  5. **Frequency** (weight: ``freq_weight``, default 0.3; added 2026-11-16) -- not
+     exposed in the UI
+       Prefer voicings pianists actually play often. ``1 - log(count) /
+       log(max count among the chord's candidates)``: 0 for the chord's most
+       frequent voicing, rising towards 1 for one seen once. Log scale, since
+       counts run from 3 to ~10^5. Without it the stored counts only decided
+       which 500 voicings were kept, and a voicing seen 3 times won as easily
+       as one seen 100,000 times.
+
+All raw weights are re-normalised to sum to 1 before scoring (see
 ``select``), so setting any subset of sliders to the *same* value -- whether
 that's all at maximum or any other equal point -- always means "weight these
 terms equally," regardless of the absolute values chosen. With note-count and
 density weights defaulted to 0, the live UI's two sliders (voice leading,
 register) are the only terms that actually influence scoring unless a caller
 explicitly overrides the other two.
+
+Voicings are used at the pitches they were played at. Only if no stored
+voicing satisfies the hard constraints below are octave-shifted copies
+(±``max_octave_shift`` octaves) considered (``shift_as_fallback``, default
+True since 2026-11-16; before that every voicing was tried at every shift, so
+transposed copies the corpus never contained competed with real ones, and
+one shape stored in several octaves filled several of the 500 slots).
 
 Hard constraints applied before scoring (violating candidates are dropped):
 
@@ -68,6 +84,8 @@ Usage::
     pitches = sel.select("Am7",  melody_pitch=72)    # melody ceiling at C5
 """
 from __future__ import annotations
+
+import math
 
 import gzip
 import json
@@ -147,6 +165,8 @@ class VoicingSelector:
         note_count_weight: float = 0.0,
         density_weight: float = 0.0,
         density_target: float = 0.5,
+        freq_weight: float = 0.3,
+        shift_as_fallback: bool = True,
     ) -> None:
         opener = gzip.open if str(voicings_path).endswith(".gz") else open
         with opener(voicings_path, "rt", encoding="utf-8") as f:
@@ -162,6 +182,8 @@ class VoicingSelector:
         self.note_count_weight = note_count_weight
         self.density_weight = density_weight
         self.density_target = density_target
+        self.freq_weight = freq_weight
+        self.shift_as_fallback = shift_as_fallback
 
         self._prev_voicing: Optional[List[int]] = None
 
@@ -197,6 +219,7 @@ class VoicingSelector:
         density_weight: Optional[float] = None,
         target_mid: Optional[float] = None,
         density_target: Optional[float] = None,
+        freq_weight: Optional[float] = None,
     ) -> Optional[List[int]]:
         """Select the best voicing for *chord_name* given the current context.
 
@@ -242,12 +265,13 @@ class VoicingSelector:
                 self.note_count_weight if note_count_weight is None else note_count_weight
             ),
             "density": self.density_weight if density_weight is None else density_weight,
+            "freq": self.freq_weight if freq_weight is None else freq_weight,
         }
         total = sum(weights.values())
         if total > 0:
             weights = {k: v / total for k, v in weights.items()}
         else:
-            weights = {k: 0.25 for k in weights}
+            weights = {k: 1 / len(weights) for k in weights}
 
         prev = prev_voicing if prev_voicing is not None else self._prev_voicing
         result = self._pick(
@@ -256,6 +280,7 @@ class VoicingSelector:
             reg_weight=weights["reg"],
             note_count_weight=weights["note_count"],
             density_weight=weights["density"],
+            freq_weight=weights["freq"],
             target_mid=self.target_mid if target_mid is None else target_mid,
             density_target=self.density_target if density_target is None else density_target,
         )
@@ -301,6 +326,9 @@ class VoicingSelector:
         density_weight: float,
         target_mid: float,
         density_target: float,
+        freq_weight: float = 0.0,
+        count: int = 1,
+        log_max_count: float = 1.0,
     ) -> float:
         """Lower score = better candidate. Every term is clamped to [0, 1]
         so that (post weight-normalisation) equal weights mean equal
@@ -322,11 +350,16 @@ class VoicingSelector:
         # 4. Density: squared distance from density_target, already in [0, 1]
         density = (_density(pitches) - density_target) ** 2
 
+        # 5. Frequency: 0 for the chord's most frequent voicing, -> 1 for rare
+        freq = 1.0 - math.log(max(count, 1)) / log_max_count
+        freq = min(max(freq, 0.0), 1.0)
+
         return (
             vl_weight * vl
             + reg_weight * reg
             + note_count_weight * note_count
             + density_weight * density
+            + freq_weight * freq
         )
 
     def _pick(
@@ -340,6 +373,7 @@ class VoicingSelector:
         reg_weight: float,
         note_count_weight: float,
         density_weight: float,
+        freq_weight: float,
         target_mid: float,
         density_target: float,
     ) -> Optional[List[int]]:
@@ -348,6 +382,8 @@ class VoicingSelector:
             return None
 
         max_notes = max(len(p) for p, _, _ in all_shifted)
+        max_count = max(count for _, _, count in all_shifted)
+        log_max_count = math.log(max_count) if max_count > 1 else 1.0
 
         def _melody_ok(pitches: List[int]) -> bool:
             if melody_pitch is None:
@@ -361,8 +397,16 @@ class VoicingSelector:
         # First pass: apply melody hard constraint
         constrained = [t for t in all_shifted if _melody_ok(t[0])]
 
-        # Fallback: drop melody constraint if nothing passes
-        pool = constrained if constrained else all_shifted
+        if self.shift_as_fallback:
+            # Voicings as played first; octave-shifted copies only if none of
+            # them fits; then the melody constraint is dropped, again
+            # preferring voicings as played
+            unshifted = [t for t in constrained if t[1] == 0]
+            pool = (unshifted or constrained
+                    or [t for t in all_shifted if t[1] == 0] or all_shifted)
+        else:
+            # Fallback: drop melody constraint if nothing passes
+            pool = constrained if constrained else all_shifted
 
         best_pitches, _, _ = min(
             pool,
@@ -371,6 +415,7 @@ class VoicingSelector:
                 vl_weight=vl_weight, reg_weight=reg_weight,
                 note_count_weight=note_count_weight, density_weight=density_weight,
                 target_mid=target_mid, density_target=density_target,
+                freq_weight=freq_weight, count=t[2], log_max_count=log_max_count,
             ),
         )
         return best_pitches

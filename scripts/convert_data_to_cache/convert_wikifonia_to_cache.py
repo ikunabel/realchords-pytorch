@@ -19,6 +19,7 @@ import random
 import numpy as np
 from copy import deepcopy
 import note_seq.chord_symbols_lib as chord_symbols_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 
 from realchords.constants import ZERO_OCTAVE
 from realchords.utils.io_utils import save_jsonl
@@ -195,13 +196,13 @@ def parse_chord_symbol_with_noteseq(
 
     try:
         # Get pitches from note_seq using transformed chord
-        chord_pitches = chord_symbols_lib.chord_symbol_pitches(transformed_chord)
+        chord_pitches = chord_symbol_pitches(transformed_chord)
 
         if not chord_pitches:
             # Try to simplify the chord and parse again
             simplified_chord = simplify_complex_chord(transformed_chord)
             try:
-                chord_pitches = chord_symbols_lib.chord_symbol_pitches(simplified_chord)
+                chord_pitches = chord_symbol_pitches(simplified_chord)
                 if not chord_pitches:
                     # Final fallback to C major
                     return 0, [4, 3], 0
@@ -231,11 +232,11 @@ def parse_chord_symbol_with_noteseq(
 
             try:
                 # Get pitches for base chord (without bass)
-                base_chord_pitches = chord_symbols_lib.chord_symbol_pitches(
+                base_chord_pitches = chord_symbol_pitches(
                     base_chord_name
                 )
                 bass_pitch = (
-                    chord_symbols_lib.chord_symbol_pitches(bass_note_name)[0] % 12
+                    chord_symbol_pitches(bass_note_name)[0] % 12
                 )
 
                 # Find bass note position in chord tones
@@ -254,7 +255,7 @@ def parse_chord_symbol_with_noteseq(
         # Try to simplify the chord and parse again
         try:
             simplified_chord = simplify_complex_chord(transformed_chord)
-            chord_pitches = chord_symbols_lib.chord_symbol_pitches(simplified_chord)
+            chord_pitches = chord_symbol_pitches(simplified_chord)
             if chord_pitches:
                 if _CHORD_SYMBOL_PARSE_VERBOSE:
                     print(

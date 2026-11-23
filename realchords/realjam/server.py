@@ -5,6 +5,7 @@
 
 import json
 import os
+import re
 import flask
 
 from realchords.constants import FRAME_PER_BEAT
@@ -19,6 +20,8 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 frontend_dir = os.path.join(base_dir, "frontend")
 
 app = flask.Flask(__name__, static_url_path="", static_folder=frontend_dir)
+# Session logs: the repo's logs/realjam, whichever directory the server runs from
+SESSION_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(base_dir)), "logs", "realjam")
 
 agent: agent_interface.Agent = None
 
@@ -73,10 +76,12 @@ def generate_bass() -> str:
     # The page's loop length, so the chords the model hears loop exactly like
     # the ones that sound
     num_frames = int(payload["loopFrames"])
-    cache_key = key + (num_frames,)
+    # The song's chords in the bass model's own vocabulary
+    tokenizer = agent.tokenizer_for(payload["model"])
+    cache_key = key + (num_frames, tokenizer.num_tokens)
     if cache_key not in _song_chord_frames_cache:
         _song_chord_frames_cache[cache_key] = agent.song_chord_frames(
-            record["annotations"].get("harmony", []), num_frames)
+            record["annotations"].get("harmony", []), num_frames, tokenizer)
     tokens = agent.generate_bass(
         payload["model"],
         _song_chord_frames_cache[cache_key],
@@ -132,6 +137,9 @@ def get_song_reference(dataset: str, split: str, song_id: str) -> str:
         flask.abort(404, description="Song not found")
 
     use_custom = flask.request.args.get("custom") == "1"
+    # A walking bass line plays with these chords (the song's own, or the
+    # bass model's): voice them from the lookup, above the line
+    bass_line = flask.request.args.get("bassline") == "1"
     selector = agent.voicing_selector if use_custom else None
     melody = song_catalogue.extract_melody_notes(record)
 
@@ -156,6 +164,9 @@ def get_song_reference(dataset: str, split: str, song_id: str) -> str:
     prev_voicing = None
     for chord in song_catalogue.extract_reference_chords(record):
         pitches = chord.get("pitches")  # a demo song's exact keys, if given
+        if pitches is None and bass_line:
+            pitches = agent.select_voicing_above_bass_line(
+                chord["symbol"], prev_voicing)
         if pitches is None and selector is not None:
             pitches = selector.select(
                 chord["symbol"],
@@ -205,6 +216,46 @@ def get_voicings() -> str:
     return json.dumps(agent.get_voicings_for_browser(chord_name))
 
 
+@app.get("/voicing_lookups")
+def get_voicing_lookups() -> str:
+    """The voicing lookups the page can switch between, and the active one."""
+    assert agent is not None
+    return json.dumps({"lookups": list(agent.voicing_lookup_paths), "active": agent.voicing_lookup_active})
+
+
+@app.post("/voicing_lookup")
+def set_voicing_lookup() -> str:
+    """Switch the active voicing lookup (body {"name": ...}), for comparing
+    lookups by ear (2026-11-23). Global for the server, like the lookup itself;
+    complete mode's fit indexes are rebuilt for the new one here."""
+    assert agent is not None
+    name = (flask.request.get_json(silent=True) or {}).get("name", "")
+    if name not in agent.voicing_lookup_paths:
+        return flask.Response(json.dumps({"error": f"unknown lookup {name!r}"}), status=400)
+    agent.set_voicing_lookup(name)
+    for model_name in {agent.tokenizer_for(m).num_tokens: m for m in agent.get_models()}.values():
+        agent.voicing_fit([60], [60], None, model_name)
+    return json.dumps({"active": agent.voicing_lookup_active})
+
+
+@app.post("/session_log")
+def save_session_log() -> str:
+    """Save a finished session's JSON to logs/realjam/ (SESSION_LOG_DIR).
+
+    The browser can't choose where a download goes, so the page sends the
+    session here instead (it falls back to a download if this fails). The
+    file name comes from the page ("GenJam Session - <start> <settings>"),
+    reduced to safe characters so it can't leave the directory.
+    """
+    payload = flask.request.get_json()
+    name = re.sub(r"[^A-Za-z0-9 ._+=-]", "_", str(payload.get("name", ""))).strip(" .")[:200]
+    os.makedirs(SESSION_LOG_DIR, exist_ok=True)
+    path = os.path.join(SESSION_LOG_DIR, name or "GenJam Session")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload["session"], f)
+    return json.dumps({"path": path})
+
+
 @app.post("/play")
 def play() -> str:
     """Generate new chords given context."""
@@ -228,6 +279,7 @@ def play() -> str:
         density_weight=payload.get("densityWeight"),
         target_mid=payload.get("targetMid"),
         density_target=payload.get("densityTarget"),
+        bass_line=payload.get("bassLine", False),
     )
     return json.dumps(
         {
@@ -237,11 +289,62 @@ def play() -> str:
             "frame": payload["frame"],
             # lets the browser turn a chord hold into that chord's onset when it
             # splices a new plan onto chords that already sounded
-            "chordHoldRange": list(agent.tokenizer.chord_hold_token_range),
-            "chordOnsetOffset": (agent.tokenizer.chord_on_token_range[0]
-                                 - agent.tokenizer.chord_hold_token_range[0]),
+            # in the model's own vocabulary, like its chord tokens
+            "chordHoldRange": list(agent.tokenizer_for(payload["model"]).chord_hold_token_range),
+            "chordOnsetOffset": (agent.tokenizer_for(payload["model"]).chord_on_token_range[0]
+                                 - agent.tokenizer_for(payload["model"]).chord_hold_token_range[0]),
         }
     )
+
+
+@app.get("/chord_vocab")
+def chord_vocab() -> str:
+    """Every chord onset the model knows, in a fixed order: symbol, pitch
+    classes (slash bass included), root, onset and hold token ids. Loaded once
+    per session by complete and input mode; /chord_candidates with
+    format "probs" then sends only the probabilities, in this order.
+    `?model=` gives that model's vocabulary (models differ: 2,821 or 2,969
+    chords, different token ids); without it, the old vocabulary."""
+    assert agent is not None
+    return json.dumps(agent.chord_vocab_entries(flask.request.args.get("model")))
+
+
+@app.get("/chord_token_map")
+def chord_token_map() -> str:
+    """Every token id of one model's vocabulary in another's (`?from=` and
+    `?to=` model names), by name: list[i] is token i's id there. A chord the
+    target vocabulary lacks maps to SILENCE; melody and special ids map to
+    themselves. For switching models mid-session: the page remaps its chord
+    history with it (journal/reference/TOKENIZERS.md, section 0)."""
+    assert agent is not None
+    src = agent.tokenizer_for(flask.request.args.get("from"))
+    dst = agent.tokenizer_for(flask.request.args.get("to"))
+    return json.dumps(agent.remap_chord_tokens(list(range(src.num_tokens)), src, dst))
+
+
+@app.post("/voicing_fit")
+def voicing_fit() -> str:
+    """How well the performer's keys fit each chord's stored voicings, in
+    /chord_vocab's order (realjam/voicing_fit.py): complete mode draws the
+    chord from the model's probabilities times this (2026-11-18)."""
+    assert agent is not None
+    payload = flask.request.get_json()
+    ceiling = payload.get("ceiling")
+    return json.dumps({"fit": agent.voicing_fit(
+        [int(p) for p in payload.get("keys", [])], [int(p) for p in payload.get("held", [])],
+        None if ceiling is None else int(ceiling), payload.get("model"))})
+
+
+@app.post("/recognize_chord")
+def recognize_chord() -> str:
+    """music21's reading of played notes, mapped onto the model's chord
+    vocabulary (chord_recognition.recognize) -- for input mode."""
+    assert agent is not None
+    from realchords.realjam.chord_recognition import recognize
+    payload = flask.request.get_json()
+    pitches = [int(p) for p in payload.get("pitches", [])]
+    # a chord of the model's own vocabulary, so it can go into its history
+    return json.dumps(recognize(pitches, agent.chord_vocab_entries(payload.get("model"))))
 
 
 @app.post("/chord_candidates")
@@ -251,6 +354,10 @@ def chord_candidates() -> str:
     performer plays."""
     assert agent is not None
     payload = flask.request.get_json()
+    if payload.get("format") == "probs":
+        # Only the probabilities of all chords, in /chord_vocab's order
+        return json.dumps({"probs": agent.chord_candidate_probs(
+            payload["model"], payload["notes"], payload["chordTokens"], payload["frame"])})
     return json.dumps(
         agent.chord_candidates(
             payload["model"],
@@ -324,6 +431,11 @@ def main() -> None:
             f"Could not build song catalogue ({e}); "
             "robot-melody feature will show an empty list."
         )
+
+    # Build complete mode's voicing index now (one per vocabulary), not at
+    # the first chord gesture
+    for model_name in {agent.tokenizer_for(m).num_tokens: m for m in agent.get_models()}.values():
+        agent.voicing_fit([60], [60], None, model_name)
 
     ssl_context = "adhoc" if args.ssl else None
     app.run(

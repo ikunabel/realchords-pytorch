@@ -2,6 +2,7 @@
 
 import torch
 from note_seq import chord_symbols_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 from rapidfuzz import process, fuzz
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
@@ -31,7 +32,7 @@ def transpose_chord_name(
     original_transposed_chord_name = transposed_chord_name
 
     if transposed_chord_name not in chord_names:
-        transposed_chord_pitches = chord_symbols_lib.chord_symbol_pitches(
+        transposed_chord_pitches = chord_symbol_pitches(
             transposed_chord_name
         )
         transposed_chord_name = chord_symbols_lib.pitches_to_chord_symbol(

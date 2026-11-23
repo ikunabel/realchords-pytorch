@@ -26,6 +26,7 @@ from collections import Counter
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 from realchords.utils.eval_utils import chord_symbols_lib, _parse_chord_symbol
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 
 ChordEvent = Tuple[int, str]          # (root pitch class, quality class)
 OTHER = "other"
@@ -71,7 +72,7 @@ def chord_symbol_to_event(symbol: str, quality: str = "function") -> ChordEvent 
     """
     try:
         root = chord_symbols_lib.chord_symbol_root(symbol)
-        pitches = chord_symbols_lib.chord_symbol_pitches(symbol)
+        pitches = chord_symbol_pitches(symbol)
     except Exception:
         return None
     intervals = frozenset((p - root) % 12 for p in pitches)

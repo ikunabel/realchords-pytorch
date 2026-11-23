@@ -13,6 +13,7 @@ import bisect
 import numpy as np
 import torch
 import note_seq.chord_symbols_lib as chord_symbols_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 from scipy import sparse
 from scipy.optimize import linprog
 from scipy.stats import entropy as _scipy_entropy
@@ -454,7 +455,7 @@ def _note_in_chord_pair(
     else:
         return False, False
 
-    chord_pitches = chord_symbols_lib.chord_symbol_pitches(chord_str)
+    chord_pitches = chord_symbol_pitches(chord_str)
     in_chord = note_pitch % 12 in [p % 12 for p in chord_pitches]
     return True, in_chord
 
@@ -603,7 +604,7 @@ def chord_type_distribution(
 def _chord_pitch_class_set(symbol: str) -> FrozenSet[int] | None:
     """Pitch classes (0-11) of a chord symbol, or None if it can't be parsed."""
     try:
-        pitches = chord_symbols_lib.chord_symbol_pitches(symbol)
+        pitches = chord_symbol_pitches(symbol)
     except Exception:
         return None
     return frozenset(p % 12 for p in pitches) or None
@@ -1203,7 +1204,7 @@ def _chord_pitch_counts(
         if chord_symbol is None:
             continue
         try:
-            pitches = chord_symbols_lib.chord_symbol_pitches(chord_symbol)
+            pitches = chord_symbol_pitches(chord_symbol)
         except Exception:
             continue
         counts.append(len(set(p % 12 for p in pitches)))

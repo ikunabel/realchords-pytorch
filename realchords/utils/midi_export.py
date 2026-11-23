@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import note_seq.chord_symbols_lib as _chord_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 import pretty_midi
 import torch
 from tqdm import tqdm
@@ -52,7 +53,7 @@ def _naive_pitches(
     include_bass: bool = True,
     chord_octave: int = CHORD_OCTAVE,
 ) -> List[int]:
-    chord_pcs = _chord_lib.chord_symbol_pitches(chord_name)
+    chord_pcs = chord_symbol_pitches(chord_name)
     pitches = [p % 12 + chord_octave * 12 for p in chord_pcs]
     if include_bass:
         bass_pc = _chord_lib.chord_symbol_bass(chord_name) % 12

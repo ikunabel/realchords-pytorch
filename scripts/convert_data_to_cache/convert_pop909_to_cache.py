@@ -16,6 +16,7 @@ import pretty_midi
 import numpy as np
 from copy import deepcopy
 import note_seq.chord_symbols_lib as chord_symbols_lib
+from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 import random
 import openpyxl
 
@@ -53,7 +54,7 @@ def parse_chord_symbol(chord_symbol: str) -> Tuple[int, List[int], int]:
 
     try:
         # Get pitches from note_seq
-        chord_pitches = chord_symbols_lib.chord_symbol_pitches(standard_chord)
+        chord_pitches = chord_symbol_pitches(standard_chord)
 
         if not chord_pitches:
             # Fallback to C major
@@ -63,7 +64,7 @@ def parse_chord_symbol(chord_symbol: str) -> Tuple[int, List[int], int]:
         if "/" in standard_chord:
             # Remove bass note from pitches and use base chord root
             base_chord_name = standard_chord.split("/")[0]
-            base_chord_pitches = chord_symbols_lib.chord_symbol_pitches(base_chord_name)
+            base_chord_pitches = chord_symbol_pitches(base_chord_name)
             chord_pitches = base_chord_pitches
 
         # Extract root pitch class (first pitch)
@@ -84,11 +85,11 @@ def parse_chord_symbol(chord_symbol: str) -> Tuple[int, List[int], int]:
 
             try:
                 # Get pitches for base chord (without bass)
-                base_chord_pitches = chord_symbols_lib.chord_symbol_pitches(
+                base_chord_pitches = chord_symbol_pitches(
                     base_chord_name
                 )
                 bass_pitch = (
-                    chord_symbols_lib.chord_symbol_pitches(bass_note_name)[0] % 12
+                    chord_symbol_pitches(bass_note_name)[0] % 12
                 )
 
                 # Find bass note position in chord tones

@@ -47,6 +47,10 @@
           <div class="ctl"><input id="time-sig-input" type="number" min="1" max="16" step="1" /></div>
         </div>
         <div class="row">
+          <label for="input-lag-input" title="Taken off the time of every key you play before it is placed on the 16th grid: keys played to the click arrive this late (the click's sound delay plus the piano's MIDI delay). 0 = off.">Input lag (ms)</label>
+          <div class="ctl"><input id="input-lag-input" type="number" min="0" max="150" step="5" /></div>
+        </div>
+        <div class="row">
           <label>Metronome</label>
           <div class="ctl">
             <button id="metronome-button" class="footer-button"><span>Enable Metronome</span></button>
@@ -58,7 +62,7 @@
           <div class="ctl"><input id="metronome-check" type="checkbox" checked="checked" /></div>
         </div>
         <div class="row">
-          <label for="download-session-check">Download sessions</label>
+          <label for="download-session-check" title="When a session stops, save its log (notes, chords, settings) to logs/realjam/ in the repository, via the server; falls back to a browser download.">Save sessions (logs/realjam)</label>
           <div class="ctl"><input id="download-session-check" type="checkbox" /></div>
         </div>
       </fieldset>
@@ -91,9 +95,13 @@
         <legend>Chords</legend>
         <div class="row">
           <label for="chord-timing-select">Chord timing</label>
-          <div class="ctl"><select id="chord-timing-select"> <option value="auto">Auto (model decides when)</option> <option value="triggered">Triggered (hold space to play the scheduled chord)</option> <option value="complete">Complete (play notes, the model completes the chord)</option> </select></div>
+          <div class="ctl"><select id="chord-timing-select"> <option value="auto">Auto (model decides when)</option> <option value="triggered">Triggered (hold space or the left pedal to play the scheduled chord)</option> <option value="triggered-history">Triggered, model hears what sounds (space / left pedal)</option> <option value="complete">Complete (play notes, the model completes the chord; left pedal lets it in, space plays now)</option> <option value="input">Input (test: how your playing is read, the agent stays silent)</option> </select></div>
         </div>
         <div class="row wide info"><span id="chord-timing-info">Press space during a session to play the next chord</span></div>
+        <div class="row">
+          <label for="agent-gate-check" title="Complete mode: the agent plays only while the left pedal is held: it completes your next chord, or, while you hold space, plays at once. Chords you play with the pedal up are still recognised and remembered, silently. Off: the agent is always in.">Agent waits for left pedal</label>
+          <div class="ctl"><input id="agent-gate-check" type="checkbox" checked="checked" /></div>
+        </div>
         <div class="row">
           <label for="show-chords-check">Show incoming chords</label>
           <div class="ctl"><input id="show-chords-check" type="checkbox" checked="checked" /></div>
@@ -103,24 +111,32 @@
       <fieldset class="group">
         <legend>Voicing</legend>
         <div class="row">
-          <label for="voice-around-melody-check" title="Auto and triggered mode: voice each chord as a 3-note chord in the inversion that sits best just below the melody note you're playing and moves least from the previous chord, plus an optional bass note, so it follows your melody's register. In auto mode a chord is voiced when it first appears in the plan, around the melody at that moment. Ground-truth playback and complete mode keep their own voicing.">Voice around melody</label>
-          <div class="ctl"><input id="voice-around-melody-check" type="checkbox" checked="checked" /></div>
+          <label for="custom-voicings-check" title="Auto and triggered mode: each chord gets a voicing pianists actually played (voicing database, at the recorded pitches), drawn among those spanning at least an octave (and, below C3, with notes at least a fifth apart) whose top is at least 3 semitones below your melody of the last two beats (or whose notes are all above G3 under a walking bass line), more often the more often pianists played it (see Voicing temperature); if none fits, the block chord. Re-decided while the chord is still ahead if your melody drops below it; the waterfall shows the current choice. Off: the ReaLchords block chord.">Database voicings (sampled)</label>
+          <div class="ctl"><input id="custom-voicings-check" type="checkbox" checked="checked" /></div>
         </div>
         <div class="row">
-          <label for="voice-bass-check" title="Voice Around Melody: add the root (or a slash chord's bass) as a bass note a fourth or more below the 3-note chord, like a pianist's left hand.">Bass note</label>
-          <div class="ctl"><input id="voice-bass-check" type="checkbox" checked="checked" /></div>
+          <label for="voicing-temperature-input" title="Database voicings: how a voicing is drawn, probability proportional to count^(1/T) with count = how often pianists played it. 0 = always the most common that fits, 1 = as often as in the corpus, higher = more varied, rarer voicings.">Voicing temperature</label>
+          <div class="ctl"><input id="voicing-temperature-input" type="number" min="0" max="5" step="0.1" value="1" /></div>
         </div>
         <div class="row">
-          <label for="melody-gap-input" title="How many semitones below your melody note the chord's highest note sits, at least (3 = a minor third).">Chord top below melody (semitones)</label>
-          <div class="ctl"><input id="melody-gap-input" type="number" min="0" max="24" step="1" value="3" /></div>
-        </div>
-        <div class="row">
-          <label for="custom-voicings-check">Custom voicings (database)</label>
-          <div class="ctl"><input id="custom-voicings-check" type="checkbox" /></div>
+          <label for="voicing-lookup-select" title="Which voicing database chords are voiced from (2026-11-23, for comparing by ear). Pitch-class set: every voicing filed under each chord name with exactly its notes, any bass (F A C D under F6 and Dm7 alike). Fit rule: a voicing is filed under a name only if its lowest note is the name's bass and it holds the chord's defining notes and nothing outside the chord (strict), or also the usual tensions; voicings from all 12 keys pooled (moved by at most half an octave).">Voicing lookup</label>
+          <div class="ctl"><select id="voicing-lookup-select"></select></div>
         </div>
         <div class="row">
           <label for="voicing-browser-chord-select">Voicing browser</label>
           <div class="ctl"><select id="voicing-browser-chord-select"><option value="">-- choose chord --</option></select></div>
+        </div>
+        <div class="row">
+          <label for="voicing-browser-notes-select" title="Voicing browser: only voicings with this many notes">Notes in voicing</label>
+          <div class="ctl"><select id="voicing-browser-notes-select"><option value="">any</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div>
+        </div>
+        <div class="row">
+          <label for="voicing-browser-low-input" title="Voicing browser: only voicings whose lowest note is at least this">Lowest note at least</label>
+          <div class="ctl"><input id="voicing-browser-low-input" type="range" min="21" max="108" step="1" value="21" /><span id="voicing-browser-low-value" class="slider-value">A0</span></div>
+        </div>
+        <div class="row">
+          <label for="voicing-browser-high-input" title="Voicing browser: only voicings whose highest note is at most this">Highest note at most</label>
+          <div class="ctl"><input id="voicing-browser-high-input" type="range" min="21" max="108" step="1" value="108" /><span id="voicing-browser-high-value" class="slider-value">C8</span></div>
         </div>
         <div class="row wide info"><span id="voicing-browser-info">Select a chord, then use &#8592;/&#8594; to browse its stored voicings (plays outside any session)</span></div>
       </fieldset>
@@ -137,16 +153,24 @@
         </div>
         <div class="row wide"><span title="What the song itself plays; the model plays the rest.">Play from the song</span></div>
         <div class="row">
-          <label for="gt-mode-melody" title="The song's melody (or walking bass line); the selected chord model plays the chords.">Ground-truth melody</label>
+          <label for="gt-mode-melody" title="The song's melody (or walking bass line); the selected chord model plays the chords.">Song melody + model chords</label>
           <div class="ctl"><input id="gt-mode-melody" type="radio" name="gt-mode" value="melody" checked="checked" /></div>
         </div>
         <div class="row">
-          <label for="gt-mode-chords" title="The song's chords; the selected bass model plays the melody lane (a walking bass line). The model menu then lists bass models.">Ground-truth chords</label>
+          <label for="gt-mode-chords" title="The song's chords; the selected bass model plays the melody lane (a walking bass line). The model menu then lists bass models.">Song chords + model bass</label>
           <div class="ctl"><input id="gt-mode-chords" type="radio" name="gt-mode" value="chords" /></div>
         </div>
         <div class="row">
-          <label for="gt-mode-both" title="The song's melody and chords, no model.">Both (no model)</label>
+          <label for="gt-mode-both" title="The song's melody and chords, no model.">Song melody + chords (no model)</label>
           <div class="ctl"><input id="gt-mode-both" type="radio" name="gt-mode" value="both" /></div>
+        </div>
+        <div class="row">
+          <label for="gt-mode-melody-only" title="Only the song's melody (or walking bass line), no chords, no model.">Song melody only</label>
+          <div class="ctl"><input id="gt-mode-melody-only" type="radio" name="gt-mode" value="melody-only" /></div>
+        </div>
+        <div class="row">
+          <label for="gt-mode-chords-only" title="Only the song's chords, no melody, no model.">Song chords only</label>
+          <div class="ctl"><input id="gt-mode-chords-only" type="radio" name="gt-mode" value="chords-only" /></div>
         </div>
         <div id="song-search-results" class="search-results"></div>
       </fieldset>

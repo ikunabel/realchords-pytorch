@@ -10,7 +10,7 @@ import json
 from datetime import date
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 
 from note_seq import chord_symbols_lib
@@ -54,6 +54,59 @@ def to_chord_name(
         while pitches[0] > 11:
             pitches = [pitch - 12 for pitch in pitches]
     return pitch_name
+
+
+def chord_symbol_pitches(figure: str) -> List[int]:
+    """Pitch classes of a chord name, as note_seq's ``chord_symbol_pitches``
+    but reading "add7" as the major 7th.
+
+    note_seq's reader flattens every added 7th (``_add_scale_degree``:
+    ``if degree == 7: alter -= 1``), while its writer
+    ``pitches_to_chord_symbol`` -- which made every chord token -- counts
+    degrees on the major scale of the root: it writes "(add7)" for the major
+    7th and "(addb7)" for the minor 7th. So note_seq reads its own
+    "Asus(add7)" (A D E G#) back as A D E G. This reads them as written.
+    Identical to note_seq for every name without an added 7th. Use it for
+    names made by ``to_chord_name`` (the token names), not for dataset
+    labels (see journal/reference/CHORD_CONVERSION_DB.md, bug 1, bug A).
+
+    Raises note_seq's ChordSymbolError like the original.
+    """
+    root_pc, degrees, _ = chord_symbol_degrees(figure)
+    return [
+        (root_pc + chord_symbols_lib._DEGREE_OFFSETS[(degree - 1) % 7 + 1] + alter) % 12
+        for degree, alter in degrees.items()
+    ]
+
+
+def chord_symbol_degrees(figure: str) -> Tuple[int, Dict[int, int], int]:
+    """A chord name as (root pitch class, {degree: alteration}, bass pitch class).
+
+    The same as note_seq's private ``_parse_chord_symbol`` (degrees counted on
+    the major scale of the root: 3 = major third, alteration -1 = flat), but
+    with added 7ths read as written (see ``chord_symbol_pitches``): "C7" ->
+    (0, {1: 0, 3: 0, 5: 0, 7: -1}, 0); "Asus(add7)" -> (9, {1: 0, 4: 0, 5: 0,
+    7: 0}, 9); "C9/E" -> (0, {1: 0, 3: 0, 5: 0, 7: -1, 9: 0}, 4). Degrees
+    above 7 are kept as written (9, 11, 13), so tensions stay recognisable.
+
+    Raises note_seq's ChordSymbolError for names it cannot parse.
+    """
+    csl = chord_symbols_lib
+    root_str, kind_str, modifications_str, bass_str = csl._split_chord_symbol(figure)
+    root_pc = csl._pitch_class_to_midi(*csl._parse_root(root_str))
+    degrees = csl._parse_kind(kind_str)
+    for mod_fn, degree, alter in csl._parse_modifications(modifications_str):
+        if mod_fn is csl._add_scale_degree:
+            if degree in degrees:
+                raise csl.ChordSymbolError(
+                    "Scale degree already in chord: %d" % degree
+                )
+            degrees[degree] = alter
+        else:
+            mod_fn(degrees, degree, alter)
+    bass = csl._parse_bass(bass_str)
+    bass_pc = csl._pitch_class_to_midi(*bass) if bass else root_pc
+    return root_pc, degrees, bass_pc
 
 
 # ============================================================================
