@@ -16,7 +16,8 @@ let playBtn, metronomeBtn, bpmInput, timeSigInput, metronomeFreqBtn,
   melodyInstSelect, showChordsCheck, downloadSessionCheck, metronomeCheck,
   customVoicingsCheck, songSearchInput,
   songSearchResults, voicingBrowserChordSelect, voicingBrowserInfo,
-  chordTimingSelect, chordTimingInfo, agentGateCheck, voicingTemperatureInput, inputLagInput;
+  chordTimingSelect, chordTimingInfo, agentGateCheck, voicingTemperatureInput, inputLagInput,
+  queryOnPressCheck;
 let songCatalogue = [];   // [{dataset, split, id, title, artist, kind}, ...]
 let bassSongsOnlyCheck;
 let songSearchMatches = [];  // Current fuzzy hits, best first (capped)
@@ -181,7 +182,7 @@ async function saveSessionRecording() {
 function toggleLiveSession() {
   if (curSession) {
     lastSession = curSession;
-    lastSession.description = `sic${showChordsCheck.checked}_bpm${bpmInput.value}_met${metronomeStatus}_la${lookaheadInput.value}_com${commitaheadInput.value}_sil${silenceInput.value}_temp${temperatureInput.value}_voic${customVoicingsCheck.checked ? 'db' + voicingTemperatureInput.value : 'block'}_lag${lastSession.inputLagMs}_timing${chordTimingSelect.value}_${lastSession.model || modelSelect.value}`;
+    lastSession.description = `sic${showChordsCheck.checked}_bpm${bpmInput.value}_met${metronomeStatus}_la${lookaheadInput.value}_com${commitaheadInput.value}_sil${silenceInput.value}_temp${temperatureInput.value}_voic${customVoicingsCheck.checked ? 'db' + voicingTemperatureInput.value : 'block'}_lag${lastSession.inputLagMs}_timing${chordTimingSelect.value}${lastSession.queryOnPress ? '_onpress' : ''}_${lastSession.model || modelSelect.value}`;
     const lookupSelect = document.getElementById('voicing-lookup-select');
     lastSession.voicingLookup = lookupSelect && lookupSelect.value ? lookupSelect.value : null;
     curSession = undefined;
@@ -266,6 +267,7 @@ function startSession(options = {}) {
     pedalLog: [],           // Every incoming pedal value, see logPedal
     referenceOnly: !!options.referenceOnly,  // Playing ground truth, no model
     inputLagMs: inputLagMs(),  // taken off the performer's key times, see performerFrame
+    queryOnPress: queryOnPress(),  // complete mode: model asked only at presses
     audioLatency: audioLatencyInfo(),  // {base, output} in s, as the browser reports them
   };
   liveSessionBtn.textContent = 'Stop Live Session';
@@ -1021,6 +1023,14 @@ async function syncWithServer() {
   const curFrame = getSessionCurrentFrame();
   if (isTriggeredHistoryMode()) rewriteTriggeredHistory();
   const model = sessionModel();
+  // Timing log (saved with the session): how stale is the melody a played
+  // chord was chosen from? (scripts/eval/live_response_gap.py)
+  const sync = {
+    reqFrame: curFrame, askFrame: curFrame + 1,
+    nTokens: curSession.chordTokens.length,
+    lookahead: getLookaheadFrames(), commitahead: getCommitaheadFrames(),
+    t0: performance.now(),
+  };
   const result = await fetch(`${window.location.origin}/play`, {
     'method': 'POST',
     headers: {
@@ -1054,7 +1064,13 @@ async function syncWithServer() {
 
   // Schedule chords based on agent response -- unless the model was switched
   // meanwhile: its tokens are in the old vocabulary
+  sync.fetchMs = performance.now() - sync.t0;
+  sync.appliedFrame = getSessionCurrentFrame();
+  sync.nNew = (json.newChordTokens || []).length;
   if (model === sessionModel()) processAgentAction(json);
+  sync.totalMs = performance.now() - sync.t0;
+  delete sync.t0;
+  (curSession.syncLog = curSession.syncLog || []).push(sync);
 
   // Send next request to server, wait until next frame if haven't advanced yet
   if (curFrame === getSessionCurrentFrame()) {
@@ -1458,6 +1474,9 @@ function triggerScheduledChord(source = 'space') {
 }
 
 const COMPLETION_WINDOW_MS = 50;  // notes this close together form one gesture
+// Frames before the requested one that a candidate request also returns (one
+// forward pass, each with P(onset)); 0 = just the requested frame, with its P(onset)
+const CANDIDATE_BACK = 0;
 const CANDIDATE_LISTS_KEPT = 4;  // candidate lists kept by frame, for a gesture's own frame
 const MIN_CHORD_NOTES = 2;        // a gesture with fewer notes is melody
 // A chord gesture whose top note is at or above middle C also plays that
@@ -1502,7 +1521,7 @@ function isAgentIn() {
   return agentGateHeld || !(agentGateCheck && agentGateCheck.checked);
 }
 
-/** Open or close the gate (pedal crossing a threshold, space down/up) */
+/** Open or close the gate (left pedal crossing a threshold, or the V key) */
 function setAgentGate(held) {
   if (held === agentGateHeld) return;
   const wasIn = isAgentIn();
@@ -1537,7 +1556,9 @@ function agentGateChanged() {
  */
 function spaceDown() {
   const session = curSession;
-  session.gateHistory.push({ frame: getSessionCurrentFrame(), space: true });
+  // t on the same clock as playedChords, so press -> sound is exact
+  const t = Math.round(transportSecondsAt() * 1000) / 1000;
+  session.gateHistory.push({ frame: getSessionCurrentFrame(), space: true, t });
   if (!isAgentIn() || session.completion) return;
   session.spaceChord = true;
   if (session.chordKeys.size) startChord([...session.chordKeys]);
@@ -1546,7 +1567,8 @@ function spaceDown() {
 
 function spaceUp() {
   const session = curSession;
-  session.gateHistory.push({ frame: getSessionCurrentFrame(), space: false });
+  const t = Math.round(transportSecondsAt() * 1000) / 1000;
+  session.gateHistory.push({ frame: getSessionCurrentFrame(), space: false, t });
   if (!session.spaceChord) return;
   session.spaceChord = false;
   if (session.heldChord && session.heldChord.free) endChord();
@@ -1565,7 +1587,10 @@ async function playAgentChord() {
   // model's list for that frame (2026-11-18; was the latest list, usually for
   // the next 16th -- see candidatesForFrame)
   const frame = getSessionCurrentFrame();
-  const { candidates: list, refetched } = await candidatesForFrame(session, frame);
+  const waitT0 = performance.now();
+  const { candidates: list, refetched, distFrame, pOnset, pOnsetPress } =
+    await candidatesForFrame(session, frame);
+  const waitMs = performance.now() - waitT0;  // logged, as in startChord
   const stillWanted = () => curSession === session && session.spaceChord && isAgentIn() &&
     !session.heldChord && !session.chordKeys.size;
   if (!list || !stillWanted()) return;
@@ -1578,7 +1603,8 @@ async function playAgentChord() {
     blockChordInRegister([...chord.pitchClasses.map(pc => 48 + pc), 36 + chord.root]);  // the block chord
   fillChordTokens();
   session.chordTokens[frame] = chord.onsetToken;
-  session.completionHistory.push({ frame, readAt: getSessionCurrentFrame(), refetched,
+  session.completionHistory.push({ frame, readAt: getSessionCurrentFrame(), refetched, waitMs,
+    distFrame, pOnset, pOnsetPress,
     held: [], symbol: chord.symbol, prob: chord.prob, rank, share, choices, match: 'agent' });
   session.heldChord = { ...chord, rank, share, choices, startFrame: frame, free: true, drawn: [],
     match: 'agent', entry: session.completionHistory.length - 1 };
@@ -1607,6 +1633,24 @@ async function playAgentChord() {
 let leftPedalDown = false;
 
 /**
+ * Complete mode without a pedal (2026-11-25): holding the V key holds the
+ * gate like the left pedal. Either one keeps it open. Physical key (code),
+ * so Shift or Caps Lock don't matter; V is no note key.
+ */
+const AGENT_GATE_KEY_CODE = 'KeyV';
+let gateKeyHeld = false;
+
+function gateKeyDown() {
+  gateKeyHeld = true;
+  setAgentGate(true);
+}
+
+function gateKeyUp() {
+  gateKeyHeld = false;
+  setAgentGate(leftPedalDown);
+}
+
+/**
  * Left-pedal value 0-127 from MIDI, with hysteresis. Triggered mode: like
  * space, down plays the scheduled chord and up stops it. Otherwise it is the
  * complete-mode agent gate.
@@ -1621,7 +1665,16 @@ function onAgentPedal(value) {
     if (down) triggerScheduledChord('pedal'); else releaseTriggeredChord('pedal');
     return;
   }
-  setAgentGate(down);
+  setAgentGate(down || gateKeyHeld);
+}
+
+/**
+ * Complete mode, test setting (2026-11-25): ask the model only at a press
+ * (space or a chord gesture), no background requests -- so each press waits
+ * exactly one round trip, never queued behind a background request.
+ */
+function queryOnPress() {
+  return !!(queryOnPressCheck && queryOnPressCheck.checked) && isCompleteMode();
 }
 
 /** Fetch the model's ranked chord onsets for the next frame. One request at
@@ -1644,9 +1697,14 @@ function fetchCandidates() {
   return session.candidatePromise;
 }
 
-async function requestCandidates(session, frame = getSessionCurrentFrame() + 1) {
+async function requestCandidates(session, frame = getSessionCurrentFrame() + 1, source = 'loop') {
   fillChordTokens();
-  const notesBefore = melodyEventsBefore(session, frame);
+  // What each frame's distribution saw of the melody, at send time
+  const notesBeforeAt = new Map();
+  for (let k = frame - CANDIDATE_BACK; k <= frame; k++) notesBeforeAt.set(k, melodyEventsBefore(session, k));
+  // Timing log (saved with the session): which frames get their own list, and
+  // when it arrives (scripts/eval/live_session_timing.py --logs)
+  const timing = { askFrame: frame, sentFrame: getSessionCurrentFrame(), source, t0: performance.now() };
   try {
     // All chords: the vocabulary once per session, then only the model's
     // probabilities in its order (format "probs") -- 2026-11-17, was the top
@@ -1659,23 +1717,39 @@ async function requestCandidates(session, frame = getSessionCurrentFrame() + 1) 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        notes: session.noteHistory,  // melody notes only, see classifyOnsetGroup
+        // melody notes only (see classifyOnsetGroup), and only those before
+        // `frame`: the server uses no others, and a later one breaks its melody
+        // conversion
+        notes: session.noteHistory.filter(e => e.frame < frame),
         chordTokens: session.chordTokens,
         frame,
         format: 'probs',
+        back: CANDIDATE_BACK,  // the server answers {frames: [{frame, pOnset, probs}]}
       })
     });
     if (!result.ok) throw new Error(`server answered ${result.status}`);
     const answer = await result.json();
     if (model !== sessionModel()) return null;  // switched meanwhile: the old model's
-    const candidates = Array.isArray(answer) ? answer  // an older server: the ranked top 200
-      : candidatesFromProbs(vocab, answer.probs);
+    // One entry per frame: the requested one, plus (server with P(onset),
+    // 2026-11-25) the CANDIDATE_BACK frames before it
+    const entries = Array.isArray(answer) ? [{ frame, candidates: answer }]  // an older server: top 200
+      : answer.frames ? answer.frames.map(e => ({
+        frame: e.frame, pOnset: e.pOnset, candidates: candidatesFromProbs(vocab, e.probs) }))
+      : [{ frame, candidates: candidatesFromProbs(vocab, answer.probs) }];
+    const candidates = (entries.find(e => e.frame === frame) || entries[entries.length - 1]).candidates;
+    timing.frames = entries.length;
+    timing.arrivedFrame = getSessionCurrentFrame();
+    timing.ms = performance.now() - timing.t0;
+    delete timing.t0;
+    (session.candLog = session.candLog || []).push(timing);
     session.candidates = candidates;
     session.certainty = onsetCertainty(candidates);
     // Kept by the frame they predict, for a gesture on that frame
     // (candidatesForFrame); only the last few frames are needed
     if (!session.candidateLists) session.candidateLists = new Map();
-    session.candidateLists.set(frame, { candidates, notesBefore });
+    entries.forEach(e => session.candidateLists.set(e.frame, {
+      candidates: e.candidates, pOnset: e.pOnset,
+      notesBefore: notesBeforeAt.has(e.frame) ? notesBeforeAt.get(e.frame) : melodyEventsBefore(session, e.frame) }));
     for (const f of session.candidateLists.keys()) {
       if (f < frame - CANDIDATE_LISTS_KEPT) session.candidateLists.delete(f);
     }
@@ -1711,12 +1785,19 @@ function melodyEventsBefore(session, frame) {
  * @return {{candidates: Array|null, refetched: boolean}}
  */
 async function candidatesForFrame(session, frame) {
+  // The press frame's own distribution, never a neighbour's (2026-11-25:
+  // choosing the neighbour with the most P(onset) was tried and taken out;
+  // options in journal/reference/REALJAM_CHORD_TIMING.md, Part 7). P(onset)
+  // at the press is passed on for the log.
   const kept = session.candidateLists && session.candidateLists.get(frame);
   if (kept && kept.notesBefore === melodyEventsBefore(session, frame)) {
-    return { candidates: kept.candidates, refetched: false };
+    return { candidates: kept.candidates, refetched: false, distFrame: frame,
+      pOnset: kept.pOnset, pOnsetPress: kept.pOnset };
   }
-  const fresh = await requestCandidates(session, frame);
-  return { candidates: fresh || session.candidates, refetched: true };
+  const fresh = await requestCandidates(session, frame, 'gesture');
+  const got = session.candidateLists && session.candidateLists.get(frame);
+  return { candidates: fresh || session.candidates, refetched: true, distFrame: frame,
+    pOnset: got ? got.pOnset : undefined, pOnsetPress: got ? got.pOnset : undefined };
 }
 
 /**
@@ -1727,7 +1808,7 @@ async function candidatesForFrame(session, frame) {
  */
 async function candidateLoop() {
   if (!curSession || !isCompleteMode()) return;
-  await fetchCandidates();
+  if (!queryOnPress()) await fetchCandidates();
   if (!curSession || !isCompleteMode()) return;
   setTimeout(candidateLoop, 60000 / Tone.Transport.bpm.value / fpb);
 }
@@ -1889,8 +1970,12 @@ async function startChord(held, { voiceMove = false, frame: onsetFrame } = {}) {
   // With the agent in, the chord is also weighted by how well the keys fit
   // its playable stored voicings (pickCandidate), fetched alongside
   const wantFit = isAgentIn() && !isInputMode() && !voiceMove;
-  const [{ candidates, refetched }, fit] = await Promise.all([
+  const waitT0 = performance.now();
+  const [{ candidates, refetched, distFrame, pOnset, pOnsetPress }, fit] = await Promise.all([
     candidatesForFrame(session, frame), wantFit ? voicingFitFor(held) : Promise.resolve(null)]);
+  // How long the chord waited for the model (and voicing fit), after the
+  // gesture window; logged per gesture (journal/reference/REALJAM_CHORD_TIMING.md)
+  const waitMs = performance.now() - waitT0;
   if (curSession !== session || !candidates) return;
   held = held.filter(p => session.heldKeys.has(p));  // released while waiting
   if (!held.length) return;
@@ -1904,7 +1989,8 @@ async function startChord(held, { voiceMove = false, frame: onsetFrame } = {}) {
 
   fillChordTokens();
   session.chordTokens[frame] = chord.onsetToken;
-  session.completionHistory.push({ frame, readAt: getSessionCurrentFrame(), refetched,
+  session.completionHistory.push({ frame, readAt: getSessionCurrentFrame(), refetched, waitMs,
+    distFrame, pOnset, pOnsetPress,
     held, symbol: chord.symbol, prob: chord.prob, rank, share, choices,
     fit: picked.fit, fitAsked: !!fit });
   session.heldChord = { ...chord, rank, share, choices, startFrame: frame,
@@ -2065,15 +2151,46 @@ async function completionVoicing(symbol) {
     candidates = await loadVoicingCandidates(symbol.split('/')[0]);  // as databaseVoicing
   }
   const { keys, held, ceiling } = completionContext([...session.chordKeys]);
-  const pool = candidates.filter(v => {
-    if (!keys.every(k => v.pitches.includes(k)) || !voicingRegisterOk(v.pitches, keys)) return false;
-    const added = v.pitches.filter(p => !keys.includes(p));
-    return added.every(p => !held.has(p) && (ceiling === null || p <= ceiling));
-  });
+  const pool = candidates.filter(v => completionAdded(v.pitches, keys, held, ceiling) !== null);
   const pitches = drawVoicing(pool, Math.random());
   if (!pitches) return null;
-  return { pitches, added: pitches.filter(p => !keys.includes(p)).sort((a, b) => a - b),
-    fitting: pool.length };
+  return { pitches, added: completionAdded(pitches, keys, held, ceiling), fitting: pool.length };
+}
+
+/**
+ * The notes the agent adds to the performer's keys from a stored voicing, or
+ * null if the voicing can't complete them. Keys from C3 up must be in the
+ * voicing at their pitches. Keys below C3 (2026-11-23) only by pitch class:
+ * the performer plays the bass part, the voicing's lowest note must be the
+ * lowest key's pitch class, and the agent adds only the voicing's notes at
+ * least a fifth above the highest low key and from C3 up -- so C2 E2 is
+ * completed by any C voicing, played higher, not only by the rare stored
+ * voicings that contain C2 and E2. Added notes may not lie on another held
+ * key or above the ceiling. Must match realjam/voicing_fit.py
+ * (completion_added).
+ * @param {Array<number>} pitches - the stored voicing
+ * @param {Array<number>} keys - the performer's chord keys
+ * @param {Set<number>} held - every key held now
+ * @param {?number} ceiling - highest pitch an added note may have
+ * @return {?Array<number>}
+ */
+function completionAdded(pitches, keys, held, ceiling) {
+  const low = keys.filter(k => k < VOICING_LOW_REGISTER);
+  let added;
+  if (!low.length) {
+    if (!keys.every(k => pitches.includes(k)) || !voicingRegisterOk(pitches, keys)) return null;
+    added = pitches.filter(p => !keys.includes(p));
+  } else {
+    const pcs = new Set(pitches.map(p => p % 12));
+    if (Math.min(...pitches) % 12 !== Math.min(...low) % 12) return null;
+    if (!low.every(k => pcs.has(k % 12))) return null;
+    if (!keys.filter(k => k >= VOICING_LOW_REGISTER).every(k => pitches.includes(k))) return null;
+    const floor = Math.max(VOICING_LOW_REGISTER, Math.max(...low) + VOICING_LOW_MIN_INTERVAL);
+    added = pitches.filter(p => p >= floor && !keys.includes(p));
+    if (!added.length) return null;
+  }
+  if (!added.every(p => !held.has(p) && (ceiling === null || p <= ceiling))) return null;
+  return added.sort((a, b) => a - b);
 }
 
 /**
@@ -2137,7 +2254,7 @@ function endChord(refetch = true) {
   curSession.heldChord = null;
   curSession.chordKeys.clear();
   silenceCompletion();
-  if (refetch) fetchCandidates();
+  if (refetch && !queryOnPress()) fetchCandidates();
   updateChordTimingInfo();
 }
 
@@ -3770,6 +3887,12 @@ function enableKeyboardInputs() {
       if (!event.repeat && !isInputMode()) spaceDown();
       return;
     }
+    // Complete mode: V held = the left pedal held (lets the agent in)
+    if (event.code === AGENT_GATE_KEY_CODE && curSession && isCompleteMode()) {
+      event.preventDefault();
+      if (!event.repeat) gateKeyDown();
+      return;
+    }
     const note = keysToNotes[event.key];
     if (note && !heldNotes[note]) {
       heldNotes[note] = true;
@@ -3789,6 +3912,12 @@ function enableKeyboardInputs() {
     if (event.code === 'Space' && curSession && isCompleteMode()) {
       event.preventDefault();
       if (!isInputMode()) spaceUp();
+      return;
+    }
+    // Released even if the session or mode changed meanwhile, so the gate never sticks
+    if (event.code === AGENT_GATE_KEY_CODE && gateKeyHeld) {
+      event.preventDefault();
+      gateKeyUp();
       return;
     }
     const note = keysToNotes[event.key];
@@ -4144,6 +4273,7 @@ async function initializeMIDIReader(visual_arg) {
     }));
   chordTimingSelect = document.getElementById('chord-timing-select');
   chordTimingInfo = document.getElementById('chord-timing-info');
+  queryOnPressCheck = document.getElementById('query-on-press-check');
   agentGateCheck = document.getElementById('agent-gate-check');
   agentGateCheck.addEventListener('change', () => {
     // Switching the gate on or off mid-session lets the agent in or out now

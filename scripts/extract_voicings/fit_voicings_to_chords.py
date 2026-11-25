@@ -10,7 +10,8 @@ voicing fits the name if
   1. bass:      its lowest note is the name's bass (the root, or the slash note);
   2. required:  it contains the chord's defining degrees: the third (or the sus 2nd/4th), the 7th (else the 6th),
                 an altered 5th, the highest extension (9, 11, 13), and every degree the name adds or alters;
-  3. optional:  the root, an unaltered 5th and lower extensions may be missing;
+  3. optional:  an unaltered 5th and lower extensions may be missing, but only if the remaining notes are not
+                another plain chord over the same bass (F A D is Dm/F, so not F6);
   4. extras:    "strict": nothing outside the chord's degrees; "tensions": also the tensions usual for the chord's
                 quality (dominant 9 b9 #9 #11 13 b13; major 9 #11 13; minor 9 11 13; (half-)diminished 9 11 b13;
                 sus 9 13; augmented 9).
@@ -106,13 +107,37 @@ def chord_rule(name: str) -> Optional[dict]:
     }
 
 
+_PLAIN_CACHE: Dict[int, bool] = {}
+
+
+def is_plain_chord(voicing_pcs: Set[int], lowest_pc: int) -> bool:
+    """Do these notes (lowest_pc in the bass) form a plain chord of their own: one of note_seq's chord types,
+    possibly over a bass, with no added/altered degrees? (F A D -> "Dm/F": yes; C E Bb -> "Cped(addb7)(add3)": no.)
+    Transposition-invariant, so cached by the shape above the bass."""
+    mask = sum(1 << ((p - lowest_pc) % 12) for p in voicing_pcs)
+    if mask not in _PLAIN_CACHE:
+        pitches = [48] + [60 + i for i in range(1, 12) if mask >> i & 1]
+        try:
+            name = csl.pitches_to_chord_symbol(pitches)
+            _PLAIN_CACHE[mask] = "(" not in name and "ped" not in name
+        except Exception:  # noqa: BLE001
+            _PLAIN_CACHE[mask] = False
+    return _PLAIN_CACHE[mask]
+
+
 def fits(voicing_pcs: Set[int], lowest_pc: int, rule: dict, tensions: bool) -> bool:
     if len(voicing_pcs) < MIN_DISTINCT_PCS and len(rule["chord"]) >= MIN_DISTINCT_PCS:
         return False
     if lowest_pc != rule["bass"] or not rule["required"] <= voicing_pcs:
         return False
     allowed = rule["chord"] | (rule["tensions"] if tensions else set())
-    return voicing_pcs <= allowed
+    if not voicing_pcs <= allowed:
+        return False
+    # A note may be left out only if what remains is not another plain chord over the same bass (user, 2026-11-23:
+    # F A D is Dm/F, not F6; C E Bb for C7 or D C F B for Dm13 stay)
+    if not rule["chord"] <= voicing_pcs and is_plain_chord(voicing_pcs, lowest_pc):
+        return False
+    return True
 
 
 def load_voicings(path: Path, min_count: int, min_notes: int, max_notes: int):

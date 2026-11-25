@@ -1042,6 +1042,18 @@ class Agent:
         """The renormalised distribution over chord onsets at `frame` (one
         forward pass), indexed from the model's chord_on_token_range[0].
         `chord_tokens` must be in the model's vocabulary."""
+        return self._onset_window(model_name, notes, chord_tokens, frame, back=0)[-1][2]
+
+    def _onset_window(self, model_name, notes, chord_tokens, frame, back: int = 0):
+        """[(k, P(onset at k), renormalised onset distribution at k)] for
+        k = frame - back .. frame, from ONE forward pass over the prompt up to
+        `frame`: the logits after the melody token of frame k - 1 are the
+        model's next-chord prediction for frame k (causal, so each only sees
+        the history before its frame). P(onset) is the probability mass on any
+        chord starting there, before renormalising (2026-11-25: at odd 16ths it
+        is ~0 and the renormalised distribution is noise; see
+        journal/reference/REALJAM_CHORD_TIMING.md, Part 7). Frames before the
+        prompt's context are left out."""
         if self.onnx:
             raise NotImplementedError(
                 "chord candidates need the PyTorch or MLX backend (they read "
@@ -1058,7 +1070,15 @@ class Agent:
             with torch.no_grad():
                 logits, _ = model.net(prompt, return_intermediates=True)
         lo, hi = tk.chord_on_token_range
-        return torch.softmax(logits[0, -1, lo:hi + 1].float(), dim=-1)
+        out = []
+        for j in range(back, -1, -1):  # oldest first
+            pos = logits.shape[1] - 1 - 2 * j
+            if pos < 0:
+                continue
+            p = torch.softmax(logits[0, pos].float(), dim=-1)
+            p_onset = float(p[lo:hi + 1].sum())
+            out.append((frame - j, p_onset, torch.softmax(logits[0, pos, lo:hi + 1].float(), dim=-1)))
+        return out
 
     def chord_vocab_entries(self, model_name: Optional[str] = None) -> List[Dict]:
         """Every chord onset a model (default: the old vocabulary) can be
@@ -1101,6 +1121,17 @@ class Agent:
             self._voicing_fit_indexes[tk.num_tokens] = VoicingFitIndex(
                 [c["symbol"] for c in entries], self.voicing_selector._lookup)
         return self._voicing_fit_indexes[tk.num_tokens].fit(keys, held, ceiling)
+
+    def chord_candidate_window(self, model_name, notes, chord_tokens, frame, back: int) -> List[Dict]:
+        """chord_candidate_probs for `frame` and the `back` frames before it, each
+        with its P(onset), from one forward pass: [{frame, pOnset, probs}],
+        oldest first."""
+        tk = self.tokenizer_for(model_name)
+        lo, _ = tk.chord_on_token_range
+        order = [token - lo for token in sorted(self._onset_chord_info(tk))]
+        return [{"frame": k, "pOnset": round(p_onset, 8),
+                 "probs": [round(float(probs[i]), 6) for i in order]}
+                for k, p_onset, probs in self._onset_window(model_name, notes, chord_tokens, frame, back)]
 
     def chord_candidate_probs(self, model_name, notes, chord_tokens, frame) -> List[float]:
         """The model's probability for every chord of chord_vocab_entries, in

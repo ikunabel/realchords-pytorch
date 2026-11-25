@@ -13,6 +13,7 @@ const ctx = {
   console, Math, JSON, Promise, Map, Set, Date, Number, String, Array, Object, Error, URLSearchParams,
   setTimeout: (fn, ms) => { timers.push({ at: nowMs + (ms || 0), fn }); return timers.length; },
   clearTimeout: () => {},
+  performance: { now: () => nowMs },  // the simulated clock (timing logs)
   window: { location: { search: '', hostname: 'x', origin: 'http://test' }, isSecureContext: true },
   document: { getElementById: () => ({}), createElement: () => ({ style: {} }), body: { appendChild() {} },
               addEventListener() {}, querySelector: () => null },
@@ -34,6 +35,8 @@ const CANDS = [
 const requests = [];
 // The list the fake server returns for a requested frame (a test can make one frame's differ)
 let candsFor = () => CANDS;
+let windowMode = false;  // fake server answers with frames + P(onset)
+let pOnsetFor = () => 0.5;
 const AM_FIRST = CANDS.map(c => ({ ...c, prob: c.symbol === 'Am' ? 0.9 : c.prob / 10 }))
   .sort((a, b) => b.prob - a.prob);
 // Stored voicings (/voicings): for each chord, its tones in every octave
@@ -94,7 +97,17 @@ ctx.fetch = async (url, opts) => {
           omitted: ['5'], display: 'A7 (omit 5)', onsetToken: 4321, holdToken: 321 } : null };
   }
   const body = JSON.parse(opts.body);
-  requests.push(body); return { ok: true, json: async () => candsFor(body.frame) };
+  requests.push(body);
+  // A server with P(onset) (2026-11-25): the frame and the `back` frames before it
+  if (windowMode && body.back != null) {
+    const frames = [];
+    for (let k = body.frame - body.back; k <= body.frame; k++) {
+      frames.push({ frame: k, pOnset: pOnsetFor(k),
+        probs: VOCAB.map(v => (candsFor(k).find(c => c.symbol === v.symbol) || { prob: 0 }).prob) });
+    }
+    return { ok: true, json: async () => ({ frames }) };
+  }
+  return { ok: true, json: async () => candsFor(body.frame) };
 };
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
@@ -255,6 +268,13 @@ const check = (name, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + name); 
   run('onAgentPedal(25)'); const c = run('agentGateHeld');
   run('onAgentPedal(15)'); const d = run('agentGateHeld');
   check('pedal hysteresis (30 off, 45 on, 25 still on, 15 off)', !a && b && c && !d);
+  // 7b. The V key holds the gate like the pedal; either one keeps it open
+  run('setAgentGate(false); leftPedalDown = false; gateKeyHeld = false');
+  run('gateKeyDown()'); const v1 = run('agentGateHeld');
+  run('onAgentPedal(100)'); run('onAgentPedal(0)'); const v2 = run('agentGateHeld');  // pedal up, V held
+  run('onAgentPedal(100)'); run('gateKeyUp()'); const v3 = run('agentGateHeld');      // V up, pedal down
+  run('onAgentPedal(0)'); const v4 = run('agentGateHeld');
+  check('V key holds the gate; pedal and V combine', v1 && v2 && v3 && !v4);
   // 8. Gate switched off (checkbox unchecked): agent always in
   run('agentGateCheck.checked = false');
   down(60); down(64); await advance(100);
@@ -636,6 +656,38 @@ const check = (name, cond) => { console.log((cond ? 'PASS ' : 'FAIL ') + name); 
   check('format: 63% / 0.4% / ≈2 / ≈37', run(`formatShare(0.634) + ' ' + formatShare(0.004) + ' ' + formatChoices(2.04) + ' ' + formatChoices(36.6)`) === '63% 0.4% ≈2 ≈37');
   run(`chordTimingSelect.value = 'complete'; curSession.certainty = onsetCertainty(curSession.candidates); updateChordTimingInfo()`);
   check('info line shows the model\'s certainty now', /Model now: ≈[\d.]+ likely chords \(top /.test(run('chordTimingInfo.textContent')));
+  // Ask the model only at a press (2026-11-25): no background requests; a press sends exactly one
+  run(`chordTimingSelect.value = 'complete'; queryOnPressCheck = { checked: true }`);
+  if (S().completion || S().heldChord) { run('spaceUp()'); await advance(10); }
+  const reqBeforeOnPress = requests.length;
+  await advance(6 * frameMs);
+  const quiet = requests.length === reqBeforeOnPress;
+  run('setAgentGate(true)'); run('spaceDown()'); await advance(50);
+  const pressed = S().completionHistory.at(-1);
+  check('ask only at a press: no background requests; space sends one and waits for it',
+    quiet && requests.length === reqBeforeOnPress + 1 && pressed.match === 'agent' && pressed.refetched === true &&
+    typeof pressed.waitMs === 'number');
+  run('spaceUp()'); await advance(10); run('setAgentGate(false); queryOnPressCheck = { checked: false }');
+  // P(onset) (2026-11-25): no snapping -- a press uses its own frame's
+  // distribution even where P(onset) is ~0, and logs that P(onset)
+  windowMode = true;
+  run(`chordTimingSelect.value = 'complete'; queryOnPressCheck = { checked: true }`);
+  if (S().completion || S().heldChord) { run('spaceUp()'); await advance(10); }
+  const P = Math.round(nowMs / frameMs) + 3;
+  const NOISE_FIRST = CANDS.map(c => ({ ...c, prob: c.symbol === 'Cmaj7' ? 0.9 : 0.025 }));
+  candsFor = k => (k === P ? NOISE_FIRST : k === P + 1 ? AM_FIRST : CANDS);
+  pOnsetFor = k => (k === P + 1 ? 0.58 : k === P ? 0.00001 : 0.003);
+  nowMs = P * frameMs + 20; await advance(0);
+  const reqBeforeP = requests.length;
+  run('setAgentGate(true)'); run('spaceDown()'); await advance(50);
+  const pe = S().completionHistory.at(-1);
+  const askedP = requests.slice(reqBeforeP);
+  check('no snapping: a press at P(onset) ~0 uses its own frame\'s distribution and logs P(onset)',
+    pe.symbol === 'Cmaj7' && pe.distFrame === P && pe.pOnsetPress === 0.00001 &&
+    askedP.length === 1 && askedP[0].frame === P && askedP[0].back === 0);
+  run('spaceUp()'); await advance(10);
+  run('setAgentGate(false); queryOnPressCheck = { checked: false }');
+  windowMode = false; candsFor = () => CANDS; pOnsetFor = () => 0.5;
   console.log(fails ? `${fails} FAILED` : 'ALL PASSED');
   process.exit(fails ? 1 : 0);
 })();

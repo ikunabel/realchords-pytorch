@@ -63,6 +63,11 @@ const reset = (t, notes = []) => run(`voicingTemperatureInput.valueAsNumber = ${
   check('rule: below C3 at least a fifth apart (C2 E2 G2 C3 out, C2 G2 C4 in)',
     !run(`voicingRegisterOk(${key(MUDDY)})`) && run('voicingRegisterOk([36, 43, 60])'));
   check('rule: nothing below C2 (A1 E2 ... out)', !run('voicingRegisterOk([33, 40, 52, 57])') && run('voicingRegisterOk([36, 43, 52])'));
+  check('complete mode: keys below C3 by pitch class, the voicing played higher (2026-11-23)',
+    run('JSON.stringify(completionAdded([48, 55, 64], [36, 40], new Set([36, 40]), null))') === '[48,55,64]'
+    && run('completionAdded([52, 60, 67], [36, 40], new Set([36, 40]), null)') === null
+    && run('JSON.stringify(completionAdded([36, 43, 52, 60], [36, 40], new Set([36, 40]), null))') === '[52,60]'
+    && run('completionAdded([48, 55, 64], [36, 40], new Set([36, 40]), 60)') === null);
   check('rule: the performer\'s own keys are exempt (2026-11-23)',
     run(`voicingRegisterOk(${key(MUDDY)}, ${key(MUDDY)})`) && !run(`voicingRegisterOk(${key(MUDDY)}, [36, 40, 43])`)
     && run('voicingRegisterOk([60, 64, 67], [60, 64, 67])') && !run('voicingRegisterOk([60, 64, 67], [60, 64])')

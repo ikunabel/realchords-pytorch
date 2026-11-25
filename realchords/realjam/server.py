@@ -354,6 +354,12 @@ def chord_candidates() -> str:
     performer plays."""
     assert agent is not None
     payload = flask.request.get_json()
+    if payload.get("format") == "probs" and payload.get("back") is not None:
+        # The requested frame and the `back` frames before it, each with its
+        # P(onset), from one forward pass (2026-11-25)
+        return json.dumps({"frames": agent.chord_candidate_window(
+            payload["model"], payload["notes"], payload["chordTokens"], payload["frame"],
+            int(payload["back"]))})
     if payload.get("format") == "probs":
         # Only the probabilities of all chords, in /chord_vocab's order
         return json.dumps({"probs": agent.chord_candidate_probs(

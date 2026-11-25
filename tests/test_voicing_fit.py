@@ -5,20 +5,15 @@ Run: python -m pytest tests/test_voicing_fit.py
 """
 import random
 
-from realchords.realjam.voicing_fit import VoicingFitIndex, register_ok
+from realchords.realjam.voicing_fit import VoicingFitIndex, completion_added, register_ok
 
 
 def brute_fit(voicings, keys, held, ceiling):
     total = sum(v["count"] for v in voicings if v["count"] > 0)
     if not total:
         return 0.0
-    good = 0
-    for v in voicings:
-        if v["count"] <= 0 or not set(keys) <= set(v["pitches"]) or not register_ok(v["pitches"], keys):
-            continue
-        added = [p for p in v["pitches"] if p not in keys]
-        if all(p not in held and (ceiling is None or p <= ceiling) for p in added):
-            good += v["count"]
+    good = sum(v["count"] for v in voicings
+               if v["count"] > 0 and completion_added(v["pitches"], keys, held, ceiling) is not None)
     return good / total
 
 
@@ -91,3 +86,32 @@ def test_index_lets_performer_play_low_close_intervals():
     fit = idx.fit([36, 40, 43, 48], [36, 40, 43, 48], None)
     assert fit[SYMBOLS.index("C")] > 0
     assert abs(fit[SYMBOLS.index("C")] - brute_fit(LOOKUP["C"], [36, 40, 43, 48], [36, 40, 43, 48], None)) < 1e-6
+
+
+def test_low_keys_complete_by_pitch_class():
+    # 2026-11-23: C2 E2 is completed by an ordinary C voicing, played from C3 up
+    assert completion_added([48, 55, 64], [36, 40], [36, 40], None) == [48, 55, 64]
+    assert completion_added([52, 60, 67], [36, 40], [36, 40], None) is None   # bass E, not C
+    assert completion_added([45, 52, 60, 64], [36, 40], [36, 40], None) is None  # Am voicing: bass A, not C
+    assert completion_added([36, 43, 52, 60], [36, 40], [36, 40], None) == [52, 60]  # G2 below the floor dropped
+    assert completion_added([48, 55, 64], [36, 40], [36, 40], 60) is None  # E4 above the ceiling
+    assert completion_added([48, 55, 64], [36, 40, 55], [36, 40, 55], None) == [48, 64]  # G3 is a key
+    idx = VoicingFitIndex(SYMBOLS, LOOKUP)
+    fit = idx.fit([36, 40], [36, 40], None)
+    for i, symbol in enumerate(SYMBOLS):
+        voicings = LOOKUP.get(symbol) or LOOKUP.get(symbol.split("/")[0]) or []
+        assert abs(fit[i] - brute_fit(voicings, [36, 40], [36, 40], None)) < 1e-6, symbol
+    assert fit[SYMBOLS.index("C")] > 0
+
+
+def test_index_matches_brute_force_with_low_keys():
+    rng = random.Random(1)
+    idx = VoicingFitIndex(SYMBOLS, LOOKUP)
+    for _ in range(300):
+        keys = sorted(rng.sample(range(30, 80), rng.randint(1, 3)))
+        held = sorted(set(keys) | set(rng.sample(range(30, 90), rng.randint(0, 2))))
+        ceiling = rng.choice([None, 60, 70, 80])
+        fit = idx.fit(keys, held, ceiling)
+        for i, symbol in enumerate(SYMBOLS):
+            voicings = LOOKUP.get(symbol) or LOOKUP.get(symbol.split("/")[0]) or []
+            assert abs(fit[i] - brute_fit(voicings, keys, held, ceiling)) < 1e-6, (symbol, keys, held, ceiling)
