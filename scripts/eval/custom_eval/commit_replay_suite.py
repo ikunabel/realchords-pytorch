@@ -6,8 +6,8 @@ custom_evaluation.py uses, so every value is defined exactly as in the evaluatio
 (windows, no tail-window drop). Melody-dependent metrics are computed against the REAL melody
 of each window -- the melody the user played -- not the melody the model imagined.
 
-Per <root>/k<k>/<corpus>/models/<label>: note-in-chord (pooled, per song), note-in-mode (pooled,
-per song), chord duration entropy, chord silence ratio, chord complexity, sync EMD vs GT, chord
+Per <root>/k<k>/<corpus>/models/<label>: note-in-chord (pooled, per song), chord duration
+entropy, chord silence ratio, chord complexity, sync EMD vs GT, chord
 distribution distances vs GT (per song; key-relative on Hooktheory). Melody-only metrics (note
 duration entropy, melody silence ratio) are left out: the melody is the same real melody in every
 condition. Vendi needs a contrastive checkpoint and is null in the LOO evaluations too.
@@ -30,11 +30,11 @@ import torch
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.custom_evaluation import (_compare_to_gt, _hooktheory_tonics, _nanmean,
                                                 _paired_chord_metrics, _save_chords_per_frame,
-                                                _save_mean_metrics, _save_mode_per_frame,
+                                                _save_mean_metrics,
                                                 _save_nicr_per_frame)
 
-KEEP = ["note_in_chord_ratio_mean", "note_in_chord_ratio_per_song_mean", "note_in_mode_ratio_mean",
-        "note_in_mode_ratio_per_song_mean", "chord_duration_entropy", "chord_silence_ratio_mean",
+KEEP = ["note_in_chord_ratio_mean", "note_in_chord_ratio_per_song_mean",
+        "chord_duration_entropy", "chord_silence_ratio_mean",
         "chord_complexity_mean", "sync_emd_vs_gt", "chord_dist_wasserstein_per_song_onset_vs_gt",
         "chord_dist_wasserstein_per_song_frame_vs_gt",
         "chord_dist_wasserstein_key_relative_onset_vs_gt",
@@ -49,14 +49,11 @@ def score(tensor, tok, parts: Path, gt=None):
     """means.json entries for one source; gt = (gt_means, gt_chords, tonics) for a model."""
     parts.mkdir(parents=True, exist_ok=True)
     nicr_means, nicr_pooled = _save_nicr_per_frame(tensor, tok, parts / "nicr_per_frame.pt")
-    _, mode_seg, mode_pooled = _save_mode_per_frame(tensor, tok, parts / "mode_per_frame.pt")
     chords = _save_chords_per_frame(tensor, tok, parts / "chords_per_frame.pt")
     means = _save_mean_metrics(tensor, tok, parts, "", chords, reward_wrapper=None,
                                reward_model=None, device=torch.device("cpu"))
     row = {"note_in_chord_ratio_mean": nicr_pooled,
            "note_in_chord_ratio_per_song_mean": _nanmean(nicr_means),
-           "note_in_mode_ratio_mean": mode_pooled,
-           "note_in_mode_ratio_per_song_mean": _nanmean(mode_seg),
            **{k: means[k] for k in ("chord_duration_entropy", "chord_silence_ratio_mean",
                                     "chord_complexity_mean")}}
     if gt is None:

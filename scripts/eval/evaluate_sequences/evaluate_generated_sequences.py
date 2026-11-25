@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified harmony, note-in-mode, and diversity evaluation for generated sequence folders.
+"""Unified harmony and diversity evaluation for generated sequence folders.
 
 This script is the recommended public entry point for reproducing the Figure 4
 evaluation workflow from user-generated checkpoints.
@@ -37,7 +37,6 @@ Outputs:
             "num_sequence_files": 3,
             "num_sequences": 1024,
             "overall_note_in_chord_ratio": 0.48,
-            "overall_mode_fit_ratio": 0.72,
             "overall_vendi_score": 21.7,
             "sources": [{"path": "...", "num_sequences": 256}, ...]
           }
@@ -72,7 +71,6 @@ from realchords.utils.chord_diversity_analysis import (
 )
 from realchords.utils.eval_utils import (
     SPECIAL_TOKENS,
-    evaluate_melody_mode_fit_ratio,
     evaluate_note_in_chord_ratio,
 )
 from realchords.utils.experiment_utils_reward_analysis import (
@@ -109,8 +107,6 @@ _PER_SEQ_FIELDNAMES = [
     "note_in_chord_ratio",
     "valid_melody_frames",
     "correct_melody_frames",
-    "mode_fit_ratio",
-    "mode_fit_segments",
     "melody_silence_ratio",
     "melody_active_frames",
     "num_chord_changes",
@@ -219,7 +215,6 @@ def _print_per_seq_summary(rows: List[Dict]) -> None:
     for label, sys_rows in by_system.items():
         print(f"\n{label}  (n={len(sys_rows)})")
         print(f"  NiCR             {_fmt_stats(_floats(sys_rows, 'note_in_chord_ratio'))}")
-        print(f"  Mode fit         {_fmt_stats(_floats(sys_rows, 'mode_fit_ratio'))}")
         print(f"  Melody silence   {_fmt_stats(_floats(sys_rows, 'melody_silence_ratio'))}")
         print(f"  Chord changes    {_fmt_stats(_floats(sys_rows, 'num_chord_changes'))}")
         print(f"  Unique chords    {_fmt_stats(_floats(sys_rows, 'num_unique_chords'))}")
@@ -285,8 +280,6 @@ def accumulate_harmony_metrics(
     total_sequences = 0
     total_valid_frames = 0
     total_correct_frames = 0
-    weighted_mode_fit_sum = 0.0
-    total_mode_fit_segments = 0
     sources = []
 
     for path in sequence_files:
@@ -303,32 +296,16 @@ def accumulate_harmony_metrics(
             return_count=True,
             sequence_order=sequence_order,
         )
-        mode_fit, _, segment_counts = evaluate_melody_mode_fit_ratio(
-            sequences,
-            tokenizer,
-            model_part=model_part,
-            return_count=True,
-            sequence_order=sequence_order,
-        )
         total_valid_frames += int(valid_counts.sum().item())
         total_correct_frames += int(correct_counts.sum().item())
-        scorable = torch.isfinite(mode_fit) & (segment_counts > 0)
-        if scorable.any():
-            total_mode_fit_segments += int(segment_counts[scorable].sum().item())
-            weighted_mode_fit_sum += float(
-                (mode_fit[scorable] * segment_counts[scorable].float()).sum().item()
-            )
 
         # ---- per-sequence rows (optional) ----
         if per_sequence_rows is not None:
             aux = _aux_stats_batch(sequences, tokenizer, sequence_order)
             vc = valid_counts.tolist()
             cc = correct_counts.tolist()
-            mf = mode_fit.tolist()
-            sc = segment_counts.tolist()
             for i in range(sequences.size(0)):
                 has_melody = vc[i] > 0
-                has_mode = sc[i] > 0 and math.isfinite(mf[i])
                 per_sequence_rows.append({
                     "system": system_label,
                     "source_file": path.name,
@@ -336,8 +313,6 @@ def accumulate_harmony_metrics(
                     "note_in_chord_ratio": f"{cc[i] / max(vc[i], 1):.4f}" if has_melody else "",
                     "valid_melody_frames": int(vc[i]),
                     "correct_melody_frames": int(cc[i]),
-                    "mode_fit_ratio": f"{mf[i]:.4f}" if has_mode else "",
-                    "mode_fit_segments": int(sc[i]),
                     "melody_silence_ratio": (
                         f"{aux['melody_silence_ratio'][i]:.4f}"
                         if math.isfinite(aux["melody_silence_ratio"][i])
@@ -353,18 +328,11 @@ def accumulate_harmony_metrics(
         if total_valid_frames
         else None
     )
-    overall_mode_fit_ratio = (
-        float(weighted_mode_fit_sum / total_mode_fit_segments)
-        if total_mode_fit_segments
-        else None
-    )
     return {
         "num_sequences": total_sequences,
         "total_valid_frames": total_valid_frames,
         "total_correct_frames": total_correct_frames,
         "overall_note_in_chord_ratio": overall_note_in_chord_ratio,
-        "total_mode_fit_segments": total_mode_fit_segments,
-        "overall_mode_fit_ratio": overall_mode_fit_ratio,
         "sources": sources,
     }
 
@@ -486,7 +454,7 @@ def main(
         skip_intermediate_artifacts: If set, compute only the system
             summary and skip writing per-file artifacts.
         per_sequence_csv: If set, write a CSV with one row per sequence
-            (NiCR, mode-fit ratio, melody silence ratio, chord-change
+            (NiCR, melody silence ratio, chord-change
             count, unique-chord count) and print a per-system distribution
             summary (mean/std/percentiles) to stdout.
     """
@@ -602,8 +570,6 @@ def main(
             "overall_note_in_chord_ratio": harmony_metrics[
                 "overall_note_in_chord_ratio"
             ],
-            "overall_mode_fit_ratio": harmony_metrics["overall_mode_fit_ratio"],
-            "total_mode_fit_segments": harmony_metrics["total_mode_fit_segments"],
             "overall_vendi_score": diversity_metrics["overall_vendi_score"],
             "entropy_nats": diversity_metrics["entropy_nats"],
             "normalized_entropy_all_chords": diversity_metrics[

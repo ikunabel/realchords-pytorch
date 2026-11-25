@@ -28,7 +28,7 @@ staging directory, and this script merges the results afterward:
   - means.json: each model's own "models" entry, computed correctly
     in its own sub-run, merged into one file; "gt" row from the first.
   - metadata.jsonl: merged by seq_idx (song_url/provenance identical
-    across sub-runs; nicr/mode_fit combined from every model).
+    across sub-runs; nicr combined from every model).
   - midi/<song>/: song-folder names are identical across sub-runs (same
     seed + same population size => select_midi_indices picks the same
     songs) -- gt.mid copied from the first, <slug>.mid from each.
@@ -158,7 +158,6 @@ def _merge_metadata(experiment_dir: Path, staging_dirs: Dict[str, Path]) -> List
                 "must be identical across every model in the experiment yml."
             )
             entry["nicr"][slug] = other_entry["nicr"][slug]
-            entry["mode_fit"][slug] = other_entry["mode_fit"][slug]
 
     with (experiment_dir / "metadata.jsonl").open("w", encoding="utf-8") as fh:
         for entry in merged:

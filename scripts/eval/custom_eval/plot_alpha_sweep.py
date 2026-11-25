@@ -42,11 +42,9 @@ SEEDS = ["s42", "s43", "s44"]
 # gt key in means.json for each metadata.jsonl metric
 GT_KEY = {
     "nicr": "note_in_chord_ratio_mean",
-    "mode_fit": "note_in_mode_ratio_mean",
 }
 NICE = {
     "nicr": "note-in-chord ratio",
-    "mode_fit": "note-in-mode ratio",
 }
 DISPLAY = {
     "chord_melody_dataset": "CMD",

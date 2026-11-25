@@ -10,9 +10,8 @@ distance to ground truth and the size of the 7sets-vs-no_X gap directly, rather 
 taking a ratio on trust.
 
 Reads means.json only, so --metric is one of its keys: chord_complexity_mean,
-note_in_chord_ratio_mean, chord_duration_entropy, sync_emd_vs_gt. Progression matching,
-root motion, chord placement and the n-gram are scored by their own scripts into their own
-JSON and are not plotted here.
+note_in_chord_ratio_mean, chord_duration_entropy, sync_emd_vs_gt. Root motion and chord
+placement are scored by their own scripts into their own JSON and are not plotted here.
 
 Usage:
     python scripts/eval/custom_eval/plot_loo_raw.py --metric chord_complexity_mean

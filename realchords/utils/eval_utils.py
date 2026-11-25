@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from functools import lru_cache
-from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import bisect
 
 import numpy as np
 import torch
-import note_seq.chord_symbols_lib as chord_symbols_lib
 from realchords.utils.data_utils import chord_symbol_pitches  # note_seq's reader without the add7 flattening
 from scipy import sparse
 from scipy.optimize import linprog
@@ -20,35 +17,8 @@ from scipy.stats import entropy as _scipy_entropy
 from scipy.stats import wasserstein_distance
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
-from realchords.utils.modes import (
-    DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
-    extract_chord_quality,
-    list_scale_modes,
-)
 
 SPECIAL_TOKENS = frozenset({"PAD", "BOS", "EOS", "SILENCE"})
-ModeRef = Tuple[str, int]
-ModePitchClasses = Dict[ModeRef, FrozenSet[int]]
-QualityModeEntry = Dict[str, object]
-
-
-@lru_cache(maxsize=1)
-def _load_quality_mode_lookup(
-    map_path: str = str(DEFAULT_CHORD_QUALITY_MODE_MAP_PATH),
-) -> Tuple[Dict[str, QualityModeEntry], ModePitchClasses]:
-    """Load chord-quality → mode map and C-root pitch-class lookup."""
-    mode_pitch_classes: ModePitchClasses = {}
-    for parent_scale, mode_list in list_scale_modes().items():
-        for mode in mode_list:
-            mode_pitch_classes[(parent_scale, mode["mode_index"])] = frozenset(
-                mode["pitch_classes"]
-            )
-
-    quality_map: Dict[str, QualityModeEntry] = {}
-    for line in Path(map_path).read_text(encoding="utf-8").splitlines():
-        entry = json.loads(line)
-        quality_map[entry["chord_quality"]] = entry
-    return quality_map, mode_pitch_classes
 
 
 def _split_melody_chord_lanes(
@@ -66,91 +36,6 @@ def _parse_chord_symbol(token_name: str) -> str | None:
     if token_name.startswith("CHORD_"):
         return token_name[len("CHORD_") :]
     return None
-
-
-def _parse_note_pitch(token_name: str) -> int | None:
-    if token_name.startswith("NOTE_ON_"):
-        prefix = "NOTE_ON_"
-    elif token_name.startswith("NOTE_"):
-        prefix = "NOTE_"
-    else:
-        return None
-    try:
-        return int(token_name[len(prefix) :])
-    except ValueError:
-        return None
-
-
-def _transpose_pitch_classes(
-    pitch_classes: FrozenSet[int],
-    root_pc: int,
-) -> FrozenSet[int]:
-    return frozenset((pc + root_pc) % 12 for pc in pitch_classes)
-
-
-def _melody_pitch_histogram(
-    melody_tokens: Sequence[int],
-    start: int,
-    end: int,
-    tokenizer: HooktheoryTokenizer,
-) -> Tuple[List[float], float]:
-    histogram = [0.0] * 12
-    total_weight = 0.0
-    for frame in range(start, end):
-        token_name = tokenizer.id_to_name.get(melody_tokens[frame], "")
-        if token_name in SPECIAL_TOKENS:
-            continue
-        pitch = _parse_note_pitch(token_name)
-        if pitch is None:
-            continue
-        pitch_class = pitch % 12
-        histogram[pitch_class] += 1.0
-        total_weight += 1.0
-    return histogram, total_weight
-
-
-def _mode_strict_score(
-    histogram: Sequence[float],
-    total_weight: float,
-    mode_pcs: FrozenSet[int],
-) -> float:
-    if total_weight <= 0:
-        return 0.0
-    for pc, weight in enumerate(histogram):
-        if weight > 0 and pc not in mode_pcs:
-            return 0.0
-    return 1.0
-
-
-def _candidate_mode_pitch_classes(
-    chord_symbol: str,
-    quality_entry: QualityModeEntry,
-    mode_pitch_classes: ModePitchClasses,
-) -> List[FrozenSet[int]]:
-    root_pc = chord_symbols_lib.chord_symbol_root(chord_symbol)
-    candidate_sets: List[FrozenSet[int]] = []
-    for mode in quality_entry["modes"]:  # type: ignore[index]
-        mode_ref = (mode["parent_scale"], mode["mode_index"])
-        pitch_classes = mode_pitch_classes.get(mode_ref)
-        if pitch_classes is None:
-            continue
-        candidate_sets.append(_transpose_pitch_classes(pitch_classes, root_pc))
-    return candidate_sets
-
-
-def _best_mode_fit_score(
-    histogram: Sequence[float],
-    total_weight: float,
-    candidate_mode_pcs: Sequence[FrozenSet[int]],
-) -> float:
-    if total_weight <= 0 or not candidate_mode_pcs:
-        return 0.0
-
-    best_score = 0.0
-    for mode_pcs in candidate_mode_pcs:
-        score = _mode_strict_score(histogram, total_weight, mode_pcs)
-        best_score = max(best_score, score)
-    return best_score
 
 
 def _chord_onset_indices(
@@ -179,245 +64,6 @@ def _note_onset_indices(
         if tokenizer.is_note_on(token):
             onset_indices.append(frame)
     return onset_indices
-
-
-def _sequence_mode_fit_score(
-    melody_tokens: Sequence[int],
-    chord_tokens: Sequence[int],
-    tokenizer: HooktheoryTokenizer,
-    quality_map: Dict[str, QualityModeEntry],
-    mode_pitch_classes: ModePitchClasses,
-    skip_underdetermined: bool,
-    min_melody_weight: float,
-) -> Tuple[float, float, int]:
-    segment_pass_sum = 0.0
-    segment_count = 0
-
-    onset_indices = _chord_onset_indices(chord_tokens, tokenizer)
-    if not onset_indices:
-        return np.nan, 0.0, 0
-
-    for index, start in enumerate(onset_indices):
-        end = (
-            onset_indices[index + 1]
-            if index + 1 < len(onset_indices)
-            else len(chord_tokens)
-        )
-        chord_name = tokenizer.id_to_name.get(chord_tokens[start], "")
-        chord_symbol = _parse_chord_symbol(chord_name)
-        if chord_symbol is None:
-            continue
-
-        quality = extract_chord_quality(chord_symbol)
-        quality_entry = quality_map.get(quality)
-        if quality_entry is None:
-            continue
-        if skip_underdetermined and quality_entry.get("underdetermined"):
-            continue
-
-        histogram, total_weight = _melody_pitch_histogram(
-            melody_tokens,
-            start,
-            end,
-            tokenizer,
-        )
-        if total_weight < min_melody_weight:
-            continue
-
-        candidate_mode_pcs = _candidate_mode_pitch_classes(
-            chord_symbol,
-            quality_entry,
-            mode_pitch_classes,
-        )
-        segment_score = _best_mode_fit_score(
-            histogram,
-            total_weight,
-            candidate_mode_pcs,
-        )
-        segment_count += 1
-        segment_pass_sum += segment_score
-
-    if segment_count <= 0:
-        return np.nan, 0.0, segment_count
-    return segment_pass_sum / segment_count, float(segment_count), segment_count
-
-
-def _frame_mode_fit_score(
-    pitch_class: int,
-    chord_symbol: str,
-    quality_map: Dict[str, QualityModeEntry],
-    mode_pitch_classes: ModePitchClasses,
-    skip_underdetermined: bool,
-) -> Tuple[bool, float]:
-    """Score one melody frame against candidate modes for the active chord."""
-    quality = extract_chord_quality(chord_symbol)
-    quality_entry = quality_map.get(quality)
-    if quality_entry is None:
-        return False, float("nan")
-    if skip_underdetermined and quality_entry.get("underdetermined"):
-        return False, float("nan")
-
-    candidate_mode_pcs = _candidate_mode_pitch_classes(
-        chord_symbol,
-        quality_entry,
-        mode_pitch_classes,
-    )
-    if not candidate_mode_pcs:
-        return False, float("nan")
-
-    histogram = [0.0] * 12
-    histogram[pitch_class] = 1.0
-    score = _best_mode_fit_score(
-        histogram,
-        1.0,
-        candidate_mode_pcs,
-    )
-    return True, score
-
-
-def evaluate_melody_mode_fit_per_frame(
-    sequences: torch.Tensor,
-    tokenizer: HooktheoryTokenizer,
-    sequence_order: str = "chord_first",
-    skip_underdetermined: bool = True,
-    mode_map_path: Path | str = DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
-) -> Dict[str, torch.Tensor]:
-    """Per-frame note-in-mode for interleaved chord-first sequences.
-
-    Each active melody frame is scored against candidate modes for the chord
-    sounding at that frame (same chord-quality lookup as the segment metric).
-    A frame scores 1.0 only if its pitch class is in at least one candidate
-    mode for the active chord, else 0.0 (strict fit).
-
-    Returns a dict with:
-        matches: float tensor [batch, num_frames] — score in [0, 1], NaN if unscorable
-        valid: bool tensor [batch, num_frames]
-        mean: float tensor [batch] — mean over valid frames (NaN if none)
-    """
-    if sequence_order not in {"chord_first", "melody_first"}:
-        raise ValueError(
-            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
-        )
-
-    quality_map, mode_pitch_classes = _load_quality_mode_lookup(str(mode_map_path))
-
-    batch_size = sequences.size(0)
-    num_frames = sequences.size(1) // 2
-    matches = torch.full((batch_size, num_frames), float("nan"))
-    valid = torch.zeros((batch_size, num_frames), dtype=torch.bool)
-    means: List[float] = []
-
-    for row_idx, seq in enumerate(sequences):
-        seq_list = seq.cpu().tolist()
-        melody_tokens, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
-
-        score_sum = 0.0
-        valid_count = 0
-        for frame_idx, (note_token, chord_token) in enumerate(
-            zip(melody_tokens, chord_tokens)
-        ):
-            note_name = tokenizer.id_to_name.get(note_token, "")
-            chord_name = tokenizer.id_to_name.get(chord_token, "")
-            if note_name in SPECIAL_TOKENS or chord_name in SPECIAL_TOKENS:
-                continue
-
-            pitch = _parse_note_pitch(note_name)
-            chord_symbol = _parse_chord_symbol(chord_name)
-            if pitch is None or chord_symbol is None:
-                continue
-
-            is_valid, score = _frame_mode_fit_score(
-                pitch % 12,
-                chord_symbol,
-                quality_map,
-                mode_pitch_classes,
-                skip_underdetermined=skip_underdetermined,
-            )
-            if not is_valid:
-                continue
-            valid[row_idx, frame_idx] = True
-            matches[row_idx, frame_idx] = float(score)
-            score_sum += score
-            valid_count += 1
-        means.append(score_sum / valid_count if valid_count > 0 else float("nan"))
-
-    return {
-        "matches": matches,
-        "valid": valid,
-        "mean": torch.tensor(means, dtype=torch.float32),
-    }
-
-
-def evaluate_melody_mode_fit_ratio(
-    sequences: torch.Tensor,
-    tokenizer: HooktheoryTokenizer,
-    model_part: str,
-    return_count: bool = False,
-    sequence_order: str = "chord_first",
-    skip_underdetermined: bool = True,
-    min_melody_weight: float = 1.0,
-    mode_map_path: Path | str = DEFAULT_CHORD_QUALITY_MODE_MAP_PATH,
-) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Score how well melody notes over each chord region fit a mode.
-
-    Unlike note-in-chord, this metric is segment-based: for each span between
-    consecutive ``CHORD_ON`` events, melody pitch classes are compared against
-    candidate modes from ``chord_quality_mode_map.jsonl``. A segment scores 1.0
-    only if every melody pitch class in that span is in at least one candidate
-    mode for the active chord (strict fit), else 0.0; the sequence score is the
-    unweighted mean over segments.
-
-    Args:
-        sequences: Tensor of shape ``[batch, seq_len]`` with alternating melody and
-            chord tokens.
-        tokenizer: Hooktheory tokenizer with ``id_to_name`` mapping.
-        model_part: ``"melody"`` or ``"chord"`` (validated for API parity).
-        return_count: If True, also return segment counts (twice, for API parity).
-        sequence_order: ``"chord_first"`` or ``"melody_first"``.
-        skip_underdetermined: Skip segments for sparse qualities like ``ped``/``5``.
-        min_melody_weight: Minimum weighted melody mass required to score a segment.
-        mode_map_path: Path to curated chord-quality mode JSONL.
-
-    Returns:
-        Tensor of mode-fit ratios per sequence, or a tuple with segment counts
-        (twice) when ``return_count=True``.
-    """
-    if sequence_order not in {"chord_first", "melody_first"}:
-        raise ValueError(
-            f"Unsupported sequence_order '{sequence_order}'. Expected 'chord_first' or 'melody_first'."
-        )
-    if model_part not in {"melody", "chord"}:
-        raise ValueError(f"Invalid model_part: {model_part}")
-
-    quality_map, mode_pitch_classes = _load_quality_mode_lookup(str(mode_map_path))
-
-    ratios = []
-    melody_weights = []
-    segment_counts = []
-    for seq in sequences:
-        seq_list = seq.cpu().tolist()
-        melody_tokens, chord_tokens = _split_melody_chord_lanes(seq_list, sequence_order)
-        ratio, melody_weight, segment_count = _sequence_mode_fit_score(
-            melody_tokens=melody_tokens,
-            chord_tokens=chord_tokens,
-            tokenizer=tokenizer,
-            quality_map=quality_map,
-            mode_pitch_classes=mode_pitch_classes,
-            skip_underdetermined=skip_underdetermined,
-            min_melody_weight=min_melody_weight,
-        )
-        ratios.append(ratio)
-        melody_weights.append(melody_weight)
-        segment_counts.append(segment_count)
-
-    ratio_tensor = torch.tensor(ratios)
-    if return_count:
-        return (
-            ratio_tensor,
-            torch.tensor(melody_weights),
-            torch.tensor(segment_counts),
-        )
-    return ratio_tensor
 
 
 def _note_in_chord_pair(
@@ -984,20 +630,29 @@ def chord_to_note_onset_interval_histogram(
     return counts
 
 
+def _lane_end(lane_tokens: Sequence[int], tokenizer: HooktheoryTokenizer) -> int:
+    """Index of the first PAD/EOS frame in a lane (the song's end inside the window), else its length."""
+    for frame, token in enumerate(lane_tokens):
+        if tokenizer.id_to_name.get(token, "") in ("PAD", "EOS"):
+            return frame
+    return len(lane_tokens)
+
+
 def _chord_durations(
     chord_tokens: Sequence[int],
     tokenizer: HooktheoryTokenizer,
 ) -> List[int]:
     """Duration (in frames) of each chord segment, onset to next onset.
 
-    The final segment runs to the end of ``chord_tokens`` (i.e. to the end of
-    whatever window was passed in -- a crop boundary, not necessarily the
-    chord's true end, same convention as the mode-fit segment scorer).
+    The final segment runs to the end of the song inside the window: the first
+    PAD/EOS frame, or the window's end (a crop boundary, not necessarily the
+    chord's true end). Before 2026-11-25 it ran through trailing padding.
     """
     onsets = _chord_onset_indices(chord_tokens, tokenizer)
+    song_end = _lane_end(chord_tokens, tokenizer)
     durations: List[int] = []
     for index, start in enumerate(onsets):
-        end = onsets[index + 1] if index + 1 < len(onsets) else len(chord_tokens)
+        end = onsets[index + 1] if index + 1 < len(onsets) else song_end
         durations.append(end - start)
     return durations
 
@@ -1132,16 +787,17 @@ def _note_durations(
     """Duration (in frames) of each melody note, onset to next onset.
 
     Same convention as ``_chord_durations``: the final note runs to the end
-    of ``melody_tokens`` (i.e. to the end of whatever window was passed in).
+    of the song inside the window (first PAD/EOS frame, else the window's end).
     A gap that includes trailing SILENCE before the next onset is still
     counted as part of the note's inter-onset interval, same as real rhythm
     analysis (IOI) -- this isn't distinguishing legato/staccato articulation,
     just "how long until the next note starts."
     """
     onsets = _note_onset_indices(melody_tokens, tokenizer)
+    song_end = _lane_end(melody_tokens, tokenizer)
     durations: List[int] = []
     for index, start in enumerate(onsets):
-        end = onsets[index + 1] if index + 1 < len(onsets) else len(melody_tokens)
+        end = onsets[index + 1] if index + 1 < len(onsets) else song_end
         durations.append(end - start)
     return durations
 

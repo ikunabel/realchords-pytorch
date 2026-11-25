@@ -100,7 +100,7 @@ def _vocab_maps(id_to_name):
         if name == "PAD":
             pads.add(int(tok))
         symbol = _parse_chord_symbol(name)
-        events[int(tok)] = (pm.chord_symbol_to_event(symbol, quality="full")
+        events[int(tok)] = (pm.chord_symbol_to_event(symbol)
                             if symbol is not None else None)
     return events, pads
 

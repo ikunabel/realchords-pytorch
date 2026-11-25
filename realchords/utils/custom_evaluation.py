@@ -59,8 +59,6 @@ Outputs (all in --save_dir):
     {slug}.pt                         model predictions [N, seq_len] for each --model
     gt_nicr_per_frame.pt              per-frame NiCR for GT (matches/valid/mean)
     {slug}_nicr_per_frame.pt          per-frame NiCR for each model
-    gt_mode_per_frame.pt              per-frame note-in-mode for GT
-    {slug}_mode_per_frame.pt          per-frame note-in-mode for each model
     gt_chords_per_frame.pt            per-frame chord symbols for GT
     {slug}_chords_per_frame.pt        per-frame chord symbols for each model
     gt_chord_distribution.json        GT chord counts (onset + frame) for cross-dataset analysis
@@ -78,7 +76,7 @@ Outputs (all in --save_dir):
     {slug}_num_frames.pt              same, per model
     {slug}_sync_intervals.pt          same, per model
     {slug}_chord_complexity.pt        same, per model
-    means.json                        summary: rhythm/silence/note-in-chord/note-in-mode/
+    means.json                        summary: rhythm/silence/note-in-chord/
                                        chord-complexity means per source, plus model-vs-GT
                                        comparisons (sync EMD, per-song and key-relative chord distribution distances) -- see
                                        realchords/utils/eval_utils.py
@@ -124,8 +122,6 @@ from realchords.utils.eval_utils import (
     evaluate_chord_silence_ratio,
     evaluate_chord_symbols_per_frame,
     evaluate_chord_to_note_onset_intervals,
-    evaluate_melody_mode_fit_per_frame,
-    evaluate_melody_mode_fit_ratio,
     evaluate_melody_silence_ratio,
     evaluate_note_durations,
     evaluate_note_in_chord_per_frame,
@@ -185,46 +181,6 @@ def _save_nicr_per_frame(
         else float("nan")
     )
     return nicr["mean"], pooled_ratio
-
-
-def _save_mode_per_frame(
-    tensor: torch.Tensor,
-    tokenizer,
-    path: Path,
-) -> Tuple[torch.Tensor, torch.Tensor, float]:
-    """Compute per-frame note-in-mode, save .pt, return
-    (per-sequence per-frame means [N], per-sequence per-segment ratios [N], pooled ratio).
-
-    The pooled ratio matches ``evaluate_generated_sequences.py``: a
-    segment-weighted average of ``evaluate_melody_mode_fit_ratio``'s
-    per-sequence ratios across the whole batch -- every chord *segment*
-    weighted equally, not every *sequence*. This uses the segment-based
-    mode-fit function, not the per-frame one saved to ``path`` -- the two are
-    different measurements (per-chord-segment histogram fit vs. per-note
-    fit). The per-segment per-sequence ratios are also returned (not just the
-    per-frame ones) so a "mean of per-song ratios" can be reported on the
-    *same* segment-based definition as the pooled number, rather than mixing
-    the two different measurements.
-    """
-    stripped = strip_bos(tensor, tokenizer)
-    mode_fit = evaluate_melody_mode_fit_per_frame(
-        stripped,
-        tokenizer,
-    )
-    torch.save(mode_fit, path)
-
-    seq_ratio, _, segment_counts = evaluate_melody_mode_fit_ratio(
-        stripped, tokenizer, model_part="chord", return_count=True
-    )
-    scorable = torch.isfinite(seq_ratio) & (segment_counts > 0)
-    total_segments = int(segment_counts[scorable].sum().item()) if scorable.any() else 0
-    pooled_ratio = (
-        float((seq_ratio[scorable] * segment_counts[scorable].float()).sum().item())
-        / total_segments
-        if total_segments > 0
-        else float("nan")
-    )
-    return mode_fit["mean"], seq_ratio, pooled_ratio
 
 
 def _save_chords_per_frame(
@@ -927,7 +883,7 @@ def _run_eval(
             print(f"  {model_paths[label].relative_to(save_dir)}  {tuple(tensor.shape)}")
 
     # Raw per-sequence metadata (song_url/batch provenance only, not yet
-    # enriched with nicr/mode_fit) -- persisted now so a crash during metrics
+    # enriched with nicr) -- persisted now so a crash during metrics
     # computation below doesn't lose generation results; enables the resume
     # path above on the next run.
     with metadata_raw_path.open("w", encoding="utf-8") as fh:
@@ -937,13 +893,6 @@ def _run_eval(
         gt_tensor, dataset_tokenizer, gt_out / f"{gt_prefix}nicr_per_frame.pt"
     )
     print(f"  gt/{gt_prefix}nicr_per_frame.pt  pooled={gt_nicr_pooled:.4f}")
-
-    gt_mode_means, gt_mode_seg_ratios, gt_mode_pooled = _save_mode_per_frame(
-        gt_tensor,
-        dataset_tokenizer,
-        gt_out / f"{gt_prefix}mode_per_frame.pt",
-    )
-    print(f"  gt/{gt_prefix}mode_per_frame.pt  pooled={gt_mode_pooled:.4f}")
 
     gt_chords = _save_chords_per_frame(
         gt_tensor, dataset_tokenizer, gt_out / f"{gt_prefix}chords_per_frame.pt"
@@ -992,9 +941,6 @@ def _run_eval(
     model_nicr_means: Dict[str, torch.Tensor] = {}
     model_nicr_pooled: Dict[str, float] = {}
     model_paired_metrics: Dict[str, Dict[str, Optional[float]]] = {}
-    model_mode_means: Dict[str, torch.Tensor] = {}
-    model_mode_seg_ratios: Dict[str, torch.Tensor] = {}
-    model_mode_pooled: Dict[str, float] = {}
     model_means_by_label: Dict[str, Dict[str, object]] = {}
     if not args.gt_only:
         for label, rows in model_rows.items():
@@ -1007,15 +953,6 @@ def _run_eval(
             model_nicr_means[label] = means
             model_nicr_pooled[label] = pooled
             print(f"  models/{slug}/nicr_per_frame.pt  pooled={pooled:.4f}")
-            mode_means, mode_seg_ratios, mode_pooled = _save_mode_per_frame(
-                tensor,
-                model_tokenizer,
-                out_dir / "mode_per_frame.pt",
-            )
-            model_mode_means[label] = mode_means
-            model_mode_seg_ratios[label] = mode_seg_ratios
-            model_mode_pooled[label] = mode_pooled
-            print(f"  models/{slug}/mode_per_frame.pt  pooled={mode_pooled:.4f}")
             model_chords = _save_chords_per_frame(
                 tensor, model_tokenizer, out_dir / "chords_per_frame.pt"
             )
@@ -1086,8 +1023,6 @@ def _run_eval(
             "num_frames_total": _fmt_metric(gt_means["num_frames_total"]),
             "note_in_chord_ratio_mean": _fmt_metric(gt_nicr_pooled),
             "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(gt_nicr_means)),
-            "note_in_mode_ratio_mean": _fmt_metric(gt_mode_pooled),
-            "note_in_mode_ratio_per_song_mean": _fmt_metric(_nanmean(gt_mode_seg_ratios)),
             "chord_complexity_mean": _fmt_metric(gt_means["chord_complexity_mean"]),
             "vendi_score": _fmt_metric(gt_means["vendi_score"]),
             # Always 0.0 by construction (GT compared against itself) -- included
@@ -1113,10 +1048,6 @@ def _run_eval(
             "num_frames_total": _fmt_metric(model_means["num_frames_total"]),
             "note_in_chord_ratio_mean": _fmt_metric(model_nicr_pooled[label]),
             "note_in_chord_ratio_per_song_mean": _fmt_metric(_nanmean(model_nicr_means[label])),
-            "note_in_mode_ratio_mean": _fmt_metric(model_mode_pooled[label]),
-            "note_in_mode_ratio_per_song_mean": _fmt_metric(
-                _nanmean(model_mode_seg_ratios[label])
-            ),
             "chord_complexity_mean": _fmt_metric(model_means["chord_complexity_mean"]),
             "vendi_score": _fmt_metric(model_means["vendi_score"]),
             **{key: _fmt_metric(value) for key, value in model_means.items()
@@ -1132,7 +1063,7 @@ def _run_eval(
         json.dump(means_summary, fh, indent=2, sort_keys=True)
     print(f"  means.json  ({means_path})")
 
-    # Metadata (with per-sequence NiCR / mode-fit means)
+    # Metadata (with per-sequence NiCR means)
     meta_path = save_dir / "metadata.jsonl"
     with meta_path.open("w", encoding="utf-8") as fh:
         for entry in metadata:
@@ -1140,17 +1071,11 @@ def _run_eval(
             entry["nicr"] = {
                 "gt": _fmt_nicr(gt_nicr_means[idx].item()),
             }
-            entry["mode_fit"] = {
-                "gt": _fmt_nicr(gt_mode_means[idx].item()),
-            }
             for label, means in model_nicr_means.items():
                 slug = _slugify(label)
                 entry["nicr"][slug] = _fmt_nicr(means[idx].item())
-            for label, means in model_mode_means.items():
-                slug = _slugify(label)
-                entry["mode_fit"][slug] = _fmt_nicr(means[idx].item())
             fh.write(json.dumps(entry) + "\n")
-    print(f"  metadata.jsonl  ({len(metadata)} rows, with per-sequence NiCR/mode-fit)")
+    print(f"  metadata.jsonl  ({len(metadata)} rows, with per-sequence NiCR)")
 
     # Vocab snapshot so the .pt files can always be decoded correctly: the vocab the
     # tensors are encoded in (the models' own), not the current global file, which

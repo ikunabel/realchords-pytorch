@@ -7,10 +7,8 @@ outputs written for them, and collects, per corpus and condition, every metric p
   from window_values (as commit_ahead_significance.py, tail windows dropped):
       chord changes per bar, share of changes on 8th/16th offbeats
   computed here (as fifths_motion.py): root-motion EMD to GT on the line of fifths
-  suite.json (commit_replay_suite.py): note-in-chord, note-in-mode, chord duration entropy, sync EMD,
+  suite.json (commit_replay_suite.py): note-in-chord, chord duration entropy, sync EMD,
       chord complexity, chord silence, chord-distribution distance per song and key-relative
-  tonal_agreement_{mle,gapt}.json (tonal_agreement.py): global tonal agreement
-  ngram/progression_ngram_order{2,7}.json (score_progression_ngram.py): mean log2-prob shift vs GT
 
 Writes mean, min and max over the 3 seeds per condition, the GT value where the metric has one, and,
 for commit 0 -> 4 beats, in how many of the 6 seed x corpus series the metric moves in the direction
@@ -48,7 +46,7 @@ CONDITIONS = [  # (name, root key, k, stage, label in the metric outputs)
     ("GAPT + MLE melody, 2 beats", "fix", 8, "gapt", "fix8"),
     ("GAPT + MLE melody, 4 beats", "fix", 16, "gapt", "fix16"),
 ]
-SUITE = {"note_in_chord": "note_in_chord_ratio_mean", "note_in_mode": "note_in_mode_ratio_mean",
+SUITE = {"note_in_chord": "note_in_chord_ratio_mean",
          "duration_entropy": "chord_duration_entropy", "sync_emd": "sync_emd_vs_gt",
          "complexity": "chord_complexity_mean", "chord_silence": "chord_silence_ratio_mean",
          "chord_dist_song": "chord_dist_wasserstein_per_song_onset_vs_gt",
@@ -64,8 +62,6 @@ def main() -> None:
     roots = {"all": args.all_root, "fix": args.fix_root}
     A = args.all_root
     suite = json.loads((A / "suite.json").read_text())
-    tonal = {st: json.loads((A / f"tonal_agreement_{st}.json").read_text()) for st in ("mle", "gapt")}
-    ngram = {o: json.loads((A / "ngram" / f"progression_ngram_order{o}.json").read_text()) for o in (2, 7)}
 
     out = {}
     for corpus in CORPORA:
@@ -91,14 +87,10 @@ def main() -> None:
                 v, _ = window_values(roots[rk], k, corpus, model)
                 pred = roots[rk] / f"k{k}" / corpus / "models" / model / "preds.pt"
                 sk = f"{roots[rk].name}/k{k}/{corpus}/{model}"
-                tm = tonal[stage][corpus][lab]
                 r = {"changes_per_bar": float(np.nanmean(v["rate"])),
                      "offbeat_share": float(np.nanmean(v["off"])),
                      "root_motion_emd": float(wasserstein_distance(gt_steps, step_sequence(pred, i2n, n))),
-                     **{m: suite["per_seed"][sk][key] for m, key in SUITE.items()},
-                     "tonal_agreement": tm["per_model_global"][tm["models"].index(model)],
-                     **{f"ngram_shift_order{o}": ngram[o][corpus]["models"][lab][model]["vs_gt"]["mean_shift"]
-                        for o in (2, 7)}}
+                     **{m: suite["per_seed"][sk][key] for m, key in SUITE.items()}}
                 per_seed.append(r)
             rows[name] = {m: {"mean": float(np.mean([r[m] for r in per_seed if r[m] is not None]))
                               if all(r[m] is not None for r in per_seed) else None,
@@ -108,8 +100,7 @@ def main() -> None:
         out[corpus] = {"n_windows": int(n), "conditions": rows,
                        "gt": {"changes_per_bar": float(np.nanmean(gt_rate)),
                               "offbeat_share": float(np.nanmean(gt_off)),
-                              **{m: gt_suite.get(key) for m, key in SUITE.items() if key in gt_suite},
-                              "tonal_agreement": tonal["gapt"][corpus]["gt"]["global"]}}
+                              **{m: gt_suite.get(key) for m, key in SUITE.items() if key in gt_suite}}}
 
     # direction counts, commit 0 -> 4 beats, per stage, over 6 seed x corpus series
     counts = {}

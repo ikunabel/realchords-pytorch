@@ -48,8 +48,6 @@ STAGING_DIR = "_staging"
 METRIC_DIRECTION = {
     "note_in_chord_ratio_mean": "max",
     "note_in_chord_ratio_per_song_mean": "max",
-    "note_in_mode_ratio_mean": "max",
-    "note_in_mode_ratio_per_song_mean": "max",
     "vendi_score": "max",
     # frozen reward models used as metrics: closest to GT is best -- scoring *above* GT means the
     # policy exploits the reward model rather than being better than real data

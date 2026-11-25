@@ -96,7 +96,7 @@ def step_sequence(path: Path, id_to_name, limit: int, signed: bool = False):
     step = fifths_step_signed if signed else fifths_steps
     out = []
     for row in seqs.tolist():
-        events = pm.chord_events(pm.chord_lane(row), id_to_name, quality="full")
+        events = pm.chord_events(pm.chord_lane(row), id_to_name)
         out += [step((b[0] - a[0]) % 12) for a, b in zip(events, events[1:])]
     return out
 

@@ -14,9 +14,9 @@ two corpora (Hooktheory, POP909).
 
 Per window, from the saved replay outputs (`commit_replay_suite.py` parts, `commit_replay.py` preds):
 changes per bar and offbeat share (as `commit_ahead_significance.window_values`, last window of each song
-excluded), note-in-chord (frames pooled), note-in-mode (chord segments pooled, as the evaluation), chord duration entropy and sync EMD (pooled
-over the resampled windows, as in the evaluation), chord complexity, chord distance to the song, tonal
-agreement, root-motion EMD, and the n-gram log-probability shift against ground truth (orders 2 and 7).
+excluded), note-in-chord (frames pooled), chord duration entropy and sync EMD (pooled
+over the resampled windows, as in the evaluation), chord complexity, chord distance to the song and
+root-motion EMD.
 
 Usage:
     python scripts/eval/custom_eval/commit_ahead_ci.py
@@ -36,16 +36,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from chord_placement import keep_rows  # noqa: E402
 from commit_ahead_significance import window_values  # noqa: E402
 from fifths_motion import fifths_steps  # noqa: E402
-from score_progression_ngram import train_events  # noqa: E402
-from tonal_agreement import profiles, window_agreement  # noqa: E402
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils import progression_metrics as pm
-from realchords.utils import progression_ngram as png
 from realchords.utils.eval_utils import (_row_pitch_class_set_weights, duration_entropy,
-                                         evaluate_melody_mode_fit_ratio, pitch_class_set_wasserstein,
+                                         pitch_class_set_wasserstein,
                                          synchronization_emd)
-from realchords.utils.sequence_penalty_analysis import strip_bos
 
 CORPORA = ["hooktheory", "pop909"]
 SEEDS = ["s42", "s43", "s44"]
@@ -57,16 +53,15 @@ COMPARISONS = {"MLE: 4 beats - commit 0": [("mle16", 1), ("mle1", -1)],
                "GAPT change - MLE change": [("gapt16", 1), ("gapt1", -1), ("mle16", -1), ("mle1", 1)],
                "fix - self, 2 beats": [("fix8", 1), ("gapt8", -1)],
                "fix - self, 4 beats": [("fix16", 1), ("gapt16", -1)]}
-METRICS = ["changes_per_bar", "offbeat_share", "note_in_chord", "note_in_mode", "duration_entropy",
-           "sync_emd", "complexity", "chord_distance_to_song", "tonal_agreement", "root_motion_emd",
-           "ngram_shift_order2", "ngram_shift_order7"]
+METRICS = ["changes_per_bar", "offbeat_share", "note_in_chord", "duration_entropy",
+           "sync_emd", "complexity", "chord_distance_to_song", "root_motion_emd"]
 
 
 def _load(p):
     return torch.load(p, map_location="cpu", weights_only=False)
 
 
-def per_window(root: Path, parts: Path, k: int, corpus: str, label: str, tok, ngrams, gt_chords) -> dict:
+def per_window(root: Path, parts: Path, k: int, corpus: str, label: str, tok, gt_chords) -> dict:
     """Per-window ingredients of every metric for one model (or GT if label == 'gt')."""
     base = root / f"k{k}" / corpus
     part = parts / root.name / f"k{k}" / corpus / label
@@ -83,11 +78,6 @@ def per_window(root: Path, parts: Path, k: int, corpus: str, label: str, tok, ng
     d = _load(part / "nicr_per_frame.pt")
     out["nicr_m"] = np.nansum(d["matches"].float().numpy(), axis=1)
     out["nicr_v"] = d["valid"].float().sum(1).numpy()
-    # note-in-mode as the evaluation pools it: per-chord-segment fit, weighted by segment count
-    ratio, _, counts = evaluate_melody_mode_fit_ratio(strip_bos(preds, tok), tok, model_part="chord", return_count=True)
-    ok = torch.isfinite(ratio) & (counts > 0)
-    out["mode_m"] = torch.where(ok, ratio * counts.float(), torch.zeros_like(ratio)).numpy()
-    out["mode_v"] = torch.where(ok, counts.float(), torch.zeros_like(ratio)).numpy()
     out["durations"] = [np.asarray(x, float) for x in _load(part / "chord_durations.pt")["durations"]]
     out["intervals"] = [np.asarray(x, float) for x in _load(part / "sync_intervals.pt")["intervals"]]
     out["complexity"] = _load(part / "chord_complexity.pt")["mean"].float().numpy()
@@ -100,20 +90,11 @@ def per_window(root: Path, parts: Path, k: int, corpus: str, label: str, tok, ng
                 dist[r] = pitch_class_set_wasserstein(wm, wg)
         out["dist"] = dist
     rows_list = preds.tolist()
-    out["tonal"] = np.array([np.nan if (a := window_agreement(p)) is None else a
-                             for p in profiles(rows_list, i2n, local=False)], float)
-    steps, lp = [], {o: np.full(n, np.nan) for o in ngrams}
-    for r, row in enumerate(rows_list):
-        ev_full = pm.chord_events(pm.chord_lane(row), i2n, quality="full")
-        steps.append(np.array([fifths_steps((b[0] - a[0]) % 12) for a, b in zip(ev_full, ev_full[1:])], float))
+    steps = []
+    for row in rows_list:
         ev = pm.chord_events(pm.chord_lane(row), i2n)
-        for o, model in ngrams.items():
-            total, moves = model.logprob(ev)
-            if moves >= 3:
-                lp[o][r] = total / moves
+        steps.append(np.array([fifths_steps((b[0] - a[0]) % 12) for a, b in zip(ev, ev[1:])], float))
     out["steps"] = steps
-    for o in ngrams:
-        out[f"lp{o}"] = lp[o]
     return out, chords
 
 
@@ -123,15 +104,11 @@ def metrics(w: dict, g: dict, idx: np.ndarray) -> dict:
         "changes_per_bar": float(np.nanmean(w["rate"][idx])),
         "offbeat_share": float(np.nanmean(w["off"][idx])),
         "note_in_chord": float(w["nicr_m"][idx].sum() / w["nicr_v"][idx].sum()),
-        "note_in_mode": float(w["mode_m"][idx].sum() / w["mode_v"][idx].sum()),
         "duration_entropy": float(duration_entropy(torch.tensor(cat(w["durations"])))),
         "sync_emd": float(synchronization_emd(torch.tensor(cat(w["intervals"])), torch.tensor(cat(g["intervals"])))),
         "complexity": float(np.nanmean(w["complexity"][idx])),
         "chord_distance_to_song": float(np.nanmean(w["dist"][idx])),
-        "tonal_agreement": float(np.nanmean(w["tonal"][idx])),
         "root_motion_emd": float(wasserstein_distance(cat(w["steps"]), cat(g["steps"]))),
-        "ngram_shift_order2": float(np.nanmean(w["lp2"][idx]) - np.nanmean(g["lp2"][idx])),
-        "ngram_shift_order7": float(np.nanmean(w["lp7"][idx]) - np.nanmean(g["lp7"][idx])),
     }
 
 
@@ -150,13 +127,11 @@ def main() -> None:
     data, n_win = {}, {}
     for c in CORPORA:
         tok = HooktheoryTokenizer(chord_names=json.loads((args.all_root / "k1" / c / "chord_names_augmented.json").read_text()))
-        train = train_events(c)
-        ngrams = {o: png.ProgressionNGram(order=o, alpha=1.0).fit(train) for o in (2, 7)}
-        g, gt_chords = per_window(args.all_root, parts, 1, c, "gt", tok, ngrams, None)
+        g, gt_chords = per_window(args.all_root, parts, 1, c, "gt", tok, None)
         data[(c, "gt")] = g
         for cond, (rk, k, stage) in CONDS.items():
             for s in SEEDS:
-                data[(c, cond, s)], _ = per_window(roots[rk], parts, k, c, f"{stage}_{s}", tok, ngrams, gt_chords)
+                data[(c, cond, s)], _ = per_window(roots[rk], parts, k, c, f"{stage}_{s}", tok, gt_chords)
         n_win[c] = len(g["complexity"])
         print(f"loaded {c}: {n_win[c]} windows", flush=True)
 

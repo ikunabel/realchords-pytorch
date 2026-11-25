@@ -11,7 +11,7 @@ stages are scored on the windows they share (GT checked identical).
 
 Every metric is a distance from ground truth, as in loo_significance.py:
 
-    note-in-chord, tonal agreement, chord complexity, chord duration entropy,
+    note-in-chord, chord complexity, chord duration entropy,
     chord changes per bar                                     |model - GT|
     sync EMD, root-motion EMD                                 already distances to GT
 
@@ -46,7 +46,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from chord_placement import _vocab_maps, keep_rows, profile  # noqa: E402
 from fifths_motion import step_sequence  # noqa: E402
 from loo_significance import holm  # noqa: E402
-from tonal_agreement import check_against_music21, profiles, window_agreement  # noqa: E402
 
 from realchords.dataset.hooktheory_tokenizer import HooktheoryTokenizer
 from realchords.utils.eval_utils import (duration_entropy, evaluate_chord_complexity,
@@ -62,7 +61,6 @@ MLE_DIR, GAPT_DIR = Path("logs/custom_eval/dataset_loo_new"), Path("logs/custom_
 METRICS = [
     ("root-motion EMD", "direct", set()),
     ("note-in-chord", "abs", set()),
-    ("tonal agreement", "abs", set()),
     ("chord complexity", "abs", set()),
     ("chord changes per bar", "abs", set()),
     ("chord duration entropy", "abs", set()),
@@ -89,13 +87,6 @@ def basic_metrics(seqs: torch.Tensor, tok) -> dict:
     }
 
 
-def tonal(seqs: torch.Tensor, i2n) -> float:
-    """Global tonal agreement as tonal_agreement.py computes it: mean over windows."""
-    w = [v for v in (window_agreement(p) for p in profiles(seqs.tolist(), i2n, False))
-         if v is not None]
-    return float(np.mean(w))
-
-
 def corpus_values(corpus: str, check: bool) -> dict:
     """{"gt": {...}, "MLE": {label: {...}}, "GAPT": {label: {...}}} on the shared windows."""
     names = json.loads((GAPT_DIR / corpus / "chord_names_augmented.json").read_text())
@@ -116,8 +107,6 @@ def corpus_values(corpus: str, check: bool) -> dict:
     gt_steps = step_sequence(gt_path, i2n, n)
     out = {"gt": basic_metrics(gt, tok), "n_windows": n}
     out["gt"]["chord changes per bar"] = profile(gt_path, rows, events, pads, False)["rate"]
-    check_against_music21(gt.tolist(), i2n)
-    out["gt"]["tonal agreement"] = tonal(gt, i2n)
 
     labels = sorted(p.name for p in (GAPT_DIR / corpus / "models").iterdir())
     for stage, base in (("MLE", MLE_DIR), ("GAPT", GAPT_DIR)):
@@ -136,7 +125,6 @@ def corpus_values(corpus: str, check: bool) -> dict:
             v["root-motion EMD"] = float(wasserstein_distance(gt_steps,
                                                               step_sequence(path, i2n, n)))
             v["chord changes per bar"] = profile(path, rows, events, pads, False)["rate"]
-            v["tonal agreement"] = tonal(seqs, i2n)
             out[stage][label] = v
     out["gt"].pop("_sync")
     return out
