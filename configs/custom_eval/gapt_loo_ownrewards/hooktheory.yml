@@ -1,0 +1,25 @@
+# GAPT 7sets_no_hooktheory: shared 7-set reward models (as in gapt_loo) vs its own
+# no_hooktheory reward models (journal/experiments/SHARED_REWARD_MODELS.md, Setup step 7).
+# Same protocol and windows as configs/custom_eval/gapt_loo/; both variants in one run so they
+# share the sampling stream regime.
+base_model: /hpcwork/thes2192/realchords/logs/my_logs/decoder_only/decoder.chord.7sets.seed=42.alpha=0.5_9n0268ae/step=9000.ckpt
+model:
+- 7sets_no_hooktheory_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=42/actor.pth
+- 7sets_no_hooktheory_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=43/actor.pth
+- 7sets_no_hooktheory_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_7sets_no_hooktheory.alpha=0.5.seed=44/actor.pth
+- ownrewards_7sets_no_hooktheory_s42=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_ownrewards_7sets_no_hooktheory.alpha=0.5.seed=42/actor.pth
+- ownrewards_7sets_no_hooktheory_s43=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_ownrewards_7sets_no_hooktheory.alpha=0.5.seed=43/actor.pth
+- ownrewards_7sets_no_hooktheory_s44=/hpcwork/thes2192/realchords/logs/my_logs/rl/gapt_loo_ownrewards_7sets_no_hooktheory.alpha=0.5.seed=44/actor.pth
+seed: 42
+dataset_name: hooktheory
+dataset_split: test
+save_dir: logs/custom_eval/gapt_loo_ownrewards/hooktheory
+batch_size: 64
+# 1,024 of hooktheory's 2,785 test windows (16 x batch_size 64). The eval loader is
+# shuffle=False, so this is a deterministic prefix of the window enumeration -- the
+# same rows, in the same order, as dataset_loo_new/hooktheory's first 1,024.
+num_batches: 16
+midi_samples: 0
+clamp2_samples: 0
+cropped_max_len: 512
+all_windows: true
