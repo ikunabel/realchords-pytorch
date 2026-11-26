@@ -98,8 +98,11 @@ def main() -> None:
     press_prompt, _, _ = agent._build_interleaved_prompt(
         note_hist, list(history), frame, agent.max_frames - 1)
     if args.mlx:
+        import mlx.core as mx
+
         def press_call():
-            model._forward_mx(press_prompt, cache=None)
+            # MLX is lazy: without mx.eval this times graph construction only
+            mx.eval(model._forward_mx(press_prompt, cache=None))
     else:
         def press_call():
             with torch.no_grad():
